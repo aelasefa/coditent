@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
+import axios from "axios";
+import { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +23,7 @@ type RegisterValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -35,12 +38,29 @@ export default function RegisterPage() {
   const registerMutation = useMutation({
     mutationFn: register,
     onSuccess: (data) => {
+      setErrorMessage(null);
       saveToken(data.token);
       if (data.user.role === "RECRUITER") {
         router.push("/recruiter");
         return;
       }
       router.push("/dashboard");
+    },
+    onError: (error) => {
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          setErrorMessage(
+            "Cannot reach backend API. Start backend and check NEXT_PUBLIC_API_URL in .env.local"
+          );
+          return;
+        }
+
+        const detail = error.response.data?.detail;
+        setErrorMessage(typeof detail === "string" ? detail : "Registration failed.");
+        return;
+      }
+
+      setErrorMessage("Registration failed.");
     },
   });
 
@@ -54,10 +74,13 @@ export default function RegisterPage() {
       <form
         className="space-y-4 rounded border border-slate-200 bg-white p-4"
         onSubmit={form.handleSubmit((values) =>
-          registerMutation.mutate({
-            ...values,
-            role: values.role === "candidate" ? "CANDIDATE" : "RECRUITER",
-          })
+          {
+            setErrorMessage(null);
+            registerMutation.mutate({
+              ...values,
+              role: values.role === "candidate" ? "CANDIDATE" : "RECRUITER",
+            });
+          }
         )}
       >
         <div className="space-y-1">
@@ -112,9 +135,7 @@ export default function RegisterPage() {
           </select>
         </div>
 
-        {registerMutation.isError ? (
-          <p className="text-sm text-red-600">Registration failed. Try another email.</p>
-        ) : null}
+        {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
 
         <button
           className="w-full rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-60"

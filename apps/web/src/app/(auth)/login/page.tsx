@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
+import axios from "axios";
+import { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,6 +21,7 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -31,12 +34,29 @@ export default function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (data) => {
+      setErrorMessage(null);
       saveToken(data.token);
       if (data.user.role === "RECRUITER") {
         router.push("/recruiter");
         return;
       }
       router.push("/dashboard");
+    },
+    onError: (error) => {
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          setErrorMessage(
+            "Cannot reach backend API. Start backend and check NEXT_PUBLIC_API_URL in .env.local"
+          );
+          return;
+        }
+
+        const detail = error.response.data?.detail;
+        setErrorMessage(typeof detail === "string" ? detail : "Login failed.");
+        return;
+      }
+
+      setErrorMessage("Login failed.");
     },
   });
 
@@ -49,7 +69,10 @@ export default function LoginPage() {
 
       <form
         className="space-y-4 rounded border border-slate-200 bg-white p-4"
-        onSubmit={form.handleSubmit((values) => loginMutation.mutate(values))}
+        onSubmit={form.handleSubmit((values) => {
+          setErrorMessage(null);
+          loginMutation.mutate(values);
+        })}
       >
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="email">
@@ -77,9 +100,7 @@ export default function LoginPage() {
           <p className="text-xs text-red-600">{form.formState.errors.password?.message}</p>
         </div>
 
-        {loginMutation.isError ? (
-          <p className="text-sm text-red-600">Login failed. Check your credentials.</p>
-        ) : null}
+        {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
 
         <button
           className="w-full rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
