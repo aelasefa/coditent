@@ -40,6 +40,11 @@ This file documents the backend setup steps, current progress, and daily command
 3. `alembic upgrade head`
 4. `uvicorn app.main:app --reload --port 3001`
 
+## Frontend Start (web app)
+
+1. `cd /home/ayelasef/Desktop/coditent/apps/web`
+2. `npx pnpm@9.12.3 run dev`
+
 ## Quick Checks
 
 - Health check:
@@ -56,11 +61,3 @@ This file documents the backend setup steps, current progress, and daily command
 5. Recruiter login + create offer
 6. Candidate generate recommendations
 7. Candidate list saved recommendations
-
-## Secrets Notes
-
-- Keep `.env` local and never commit secrets.
-- If any secret was exposed, rotate immediately:
-  - Supabase DB password
-  - `SECRET_KEY`
-  - Gemini API key
