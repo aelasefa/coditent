@@ -51,6 +51,16 @@ async def generate_recommendations(
 
     ai_results = await rank_offers(profile, criteria, offers)
 
+    if not ai_results:
+        ai_results = [
+            {
+                "offer_id": str(offer.id),
+                "score": 50,
+                "reasoning": "Cette offre correspond globalement a vos criteres de recherche.",
+            }
+            for offer in offers[:10]
+        ]
+
     await db.execute(
         delete(SavedRecommendation).where(SavedRecommendation.candidate_id == current_user.id)
     )

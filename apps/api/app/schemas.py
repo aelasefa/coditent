@@ -92,6 +92,6 @@ class RecommendationRequest(APIModel):
 
 class RecommendationOut(APIModel):
     id: uuid.UUID
-    ai_score: int
-    ai_reasoning: str
+    score: int = Field(validation_alias="ai_score", ge=0, le=100)
+    reasoning: str = Field(validation_alias="ai_reasoning", min_length=1)
     offer: OfferOut

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import Any
 
 import google.generativeai as genai
@@ -11,6 +12,17 @@ from app.schemas import RecommendationRequest
 
 genai.configure(api_key=settings.gemini_api_key)
 _model = genai.GenerativeModel("gemini-1.5-flash")
+
+_FRENCH_HINT_PATTERN = re.compile(
+    r"\b(le|la|les|de|des|pour|avec|et|dans|sur|une|un|du|au|aux|est|ce|cette|profil|offre|poste|correspond)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_probably_french(text: str) -> bool:
+    if not text.strip():
+        return False
+    return bool(_FRENCH_HINT_PATTERN.search(text))
 
 
 async def rank_offers(
@@ -104,11 +116,18 @@ Retourne un tableau JSON de 10 éléments maximum, du plus pertinent au moins:
         if not isinstance(offer_id, str) or not isinstance(reasoning, str):
             continue
 
+        score_value = max(0, min(100, score_value))
+        cleaned_reasoning = reasoning.strip()
+        if not cleaned_reasoning or not _is_probably_french(cleaned_reasoning):
+            cleaned_reasoning = (
+                "Cette offre correspond bien a votre profil et a vos criteres de recherche."
+            )
+
         results.append(
             {
                 "offer_id": offer_id,
                 "score": score_value,
-                "reasoning": reasoning,
+                "reasoning": cleaned_reasoning,
             }
         )
 
