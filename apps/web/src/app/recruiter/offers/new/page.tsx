@@ -70,86 +70,81 @@ export default function NewOfferPage() {
   });
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-md-background pb-14">
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="md-glow absolute -left-20 top-8 h-80 w-80 rounded-full bg-md-primary/18 blur-3xl" />
-        <div className="md-glow absolute right-0 top-1/3 h-96 w-96 rounded-full bg-md-tertiary/20 blur-3xl" />
-      </div>
+    <main className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Create Offer</h1>
+        <Link className="text-sm font-medium text-slate-600 hover:text-slate-900" href="/recruiter">
+          Back to recruiter
+        </Link>
+      </header>
 
-      <div className="relative mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="md-fade-up flex flex-wrap items-center justify-between gap-3">
+      <form
+        className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">
-              Recruiter workspace
-            </p>
-            <h1 className="mt-1 text-3xl font-medium tracking-tight sm:text-4xl">Create offer</h1>
-            <p className="mt-2 text-sm text-md-onSurfaceVariant">
-              Publish a new opportunity with all key context in one pass.
-            </p>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Title"
+              {...form.register("title")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.title?.message}</p>
           </div>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Company"
+              {...form.register("company")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.company?.message}</p>
+          </div>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Region"
+              {...form.register("region")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.region?.message}</p>
+          </div>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Field"
+              {...form.register("field")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.field?.message}</p>
+          </div>
+          <div>
+            <select className="w-full rounded-lg border border-slate-300 px-3 py-2" {...form.register("type")}>
+              <option value="JOB">JOB</option>
+              <option value="INTERNSHIP">INTERNSHIP</option>
+            </select>
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.type?.message}</p>
+          </div>
+        </div>
 
-          <Link
-            className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
-            href="/recruiter"
-          >
-            Back to recruiter
-          </Link>
-        </header>
+        <div>
+          <textarea
+            className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Description"
+            {...form.register("description")}
+          />
+          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.description?.message}</p>
+        </div>
 
-        <MdCard className="md-fade-up md-fade-delay-1 mt-6 rounded-md-2xl p-6 sm:p-8">
-          <form
-            className="space-y-5"
-            onSubmit={form.handleSubmit((values) => {
-              setErrorMessage(null);
-              createMutation.mutate(values);
-            })}
-          >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <MdField error={form.formState.errors.title?.message} label="Title">
-                <MdInput placeholder="Frontend Engineer" {...form.register("title")} />
-              </MdField>
+        <div>
+          <textarea
+            className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Requirements"
+            {...form.register("requirements")}
+          />
+          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.requirements?.message}</p>
+        </div>
 
-              <MdField error={form.formState.errors.company?.message} label="Company">
-                <MdInput placeholder="Coditent" {...form.register("company")} />
-              </MdField>
-
-              <MdField error={form.formState.errors.region?.message} label="Region">
-                <MdInput placeholder="Casablanca" {...form.register("region")} />
-              </MdField>
-
-              <MdField error={form.formState.errors.field?.message} label="Field">
-                <MdInput placeholder="Software Engineering" {...form.register("field")} />
-              </MdField>
-
-              <MdField error={form.formState.errors.type?.message} label="Type">
-                <MdSelect {...form.register("type")}>
-                  <option value="JOB">JOB</option>
-                  <option value="INTERNSHIP">INTERNSHIP</option>
-                </MdSelect>
-              </MdField>
-            </div>
-
-            <MdField error={form.formState.errors.description?.message} label="Description">
-              <MdTextArea
-                placeholder="Describe mission, scope, and expected outcomes."
-                rows={5}
-                {...form.register("description")}
-              />
-            </MdField>
-
-            <MdField error={form.formState.errors.requirements?.message} label="Requirements">
-              <MdTextArea
-                placeholder="List skills, seniority, and practical expectations."
-                rows={5}
-                {...form.register("requirements")}
-              />
-            </MdField>
-
-            {errorMessage ? (
-              <div className="rounded-md border border-rose-300 bg-rose-100/60 px-4 py-3 text-sm text-rose-800">
-                {errorMessage}
-              </div>
-            ) : null}
+        {createMutation.isError ? (
+          <p className="text-sm text-red-600">Offer creation failed. Please check your inputs and retry.</p>
+        ) : null}
 
             <MdButton disabled={createMutation.isPending} type="submit" variant="filled">
               {createMutation.isPending ? "Saving..." : "Create offer"}
