@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { OfferCard } from "@/components/offer-card";
-import { LogoutButton } from "@/components/logout-button";
+import { ServiceTeaserCards } from "@/components/service-teaser-cards";
 import { getMe, getOffers, toggleOffer } from "@/lib/api";
 import type { Offer } from "@/lib/types";
 
@@ -48,20 +48,31 @@ export default function RecruiterPage() {
   const offers = offersQuery.data ?? [];
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 p-4">
+    <main className="mx-auto w-full max-w-6xl space-y-8 p-4 sm:p-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Recruiter Offers</h1>
-        <div className="flex items-center gap-2">
-          <Link className="rounded bg-slate-900 px-3 py-1 text-sm text-white" href="/recruiter/offers/new">
-            New Offer
-          </Link>
-          <LogoutButton />
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Recruiter Offers</h1>
+          <p className="mt-1 text-sm text-slate-600">Publish and manage all active job and internship offers.</p>
         </div>
+        <Link className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white" href="/recruiter/offers/new">
+          New Offer
+        </Link>
       </header>
 
-      {offersQuery.isLoading ? <p>Loading offers...</p> : null}
+      {offersQuery.isLoading ? <p className="text-sm text-slate-600">Loading offers...</p> : null}
+      {offersQuery.isError ? (
+        <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          Failed to load offers.
+        </p>
+      ) : null}
 
       <div className="space-y-3">
+        {!offersQuery.isLoading && offers.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-600">
+            No offers published yet.
+          </div>
+        ) : null}
+
         {offers.map((offer) => {
           const canToggle = meQuery.data?.id === offer.recruiter_id;
           return (
@@ -82,6 +93,8 @@ export default function RecruiterPage() {
           );
         })}
       </div>
+
+      <ServiceTeaserCards />
     </main>
   );
 }

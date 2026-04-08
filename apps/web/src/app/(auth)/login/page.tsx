@@ -43,12 +43,12 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-4">
       <div>
-        <h1 className="text-2xl font-semibold">Login</h1>
-        <p className="text-sm text-slate-600">Access your Coditent account</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Login</h1>
+        <p className="mt-1 text-sm text-slate-600">Access your Coditent account</p>
       </div>
 
       <form
-        className="space-y-4 rounded border border-slate-200 bg-white p-4"
+        className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
         onSubmit={form.handleSubmit((values) => loginMutation.mutate(values))}
       >
         <div className="space-y-1">
@@ -61,7 +61,7 @@ export default function LoginPage() {
             type="email"
             {...form.register("email")}
           />
-          <p className="text-xs text-red-600">{form.formState.errors.email?.message}</p>
+          <p className="min-h-5 text-xs text-red-600">{form.formState.errors.email?.message}</p>
         </div>
 
         <div className="space-y-1">
@@ -74,7 +74,7 @@ export default function LoginPage() {
             type="password"
             {...form.register("password")}
           />
-          <p className="text-xs text-red-600">{form.formState.errors.password?.message}</p>
+          <p className="min-h-5 text-xs text-red-600">{form.formState.errors.password?.message}</p>
         </div>
 
         {loginMutation.isError ? (
@@ -82,7 +82,7 @@ export default function LoginPage() {
         ) : null}
 
         <button
-          className="w-full rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
+          className="w-full rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
           disabled={loginMutation.isPending}
           type="submit"
         >

@@ -1,16 +1,15 @@
 import axios from "axios";
 
-import { removeToken } from "@/lib/auth";
-import { AUTH_TOKEN_KEY } from "@/lib/constants";
+import { getToken, removeToken } from "@/lib/auth";
 import type { Offer, Profile, Recommendation, TokenResponse, User } from "@/lib/types";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001",
 });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use((config: any) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -19,14 +18,40 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+function extractApiErrorMessage(error: any): { title: string; description?: string } {
+  if (!axios.isAxiosError(error)) {
+    return { title: "Unexpected error", description: "Something went wrong. Please try again." };
+  }
+
+  const message =
+    (typeof error.response?.data?.detail === "string" && error.response?.data?.detail) ||
+    (typeof error.response?.data?.message === "string" && error.response?.data?.message) ||
+    error.message;
+
+  if (!error.response) {
+    return {
+      title: "Network error",
+      description: "Unable to reach the API. Check your connection and try again.",
+    };
+  }
+
+  return {
+    title: `Request failed (${error.response.status})`,
+    description: message,
+  };
+}
+
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response: any) => response,
+  (error: any) => {
     if (typeof window !== "undefined" && error?.response?.status === 401) {
       removeToken();
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
+    } else if (typeof window !== "undefined") {
+      const detail = extractApiErrorMessage(error);
+      window.dispatchEvent(new CustomEvent("api:error", { detail }));
     }
 
     return Promise.reject(error);

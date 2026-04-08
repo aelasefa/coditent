@@ -2,7 +2,11 @@
   "name": "coditent",
   "private": true,
   "scripts": {
-    "dev:api": "pnpm --filter api dev",
-    "dev:web": "pnpm --filter web dev"
+    "dev": "npm run dev:web",
+    "dev:api": "bash apps/api/start_api.sh",
+    "dev:web": "npm --prefix apps/web run dev"
+  },
+  "dependencies": {
+    "gsap": "^3.14.2"
   }
 }

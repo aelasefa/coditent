@@ -45,47 +45,80 @@ export default function NewOfferPage() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 p-4">
+    <main className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Create Offer</h1>
-        <Link className="text-sm text-slate-600" href="/recruiter">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Create Offer</h1>
+        <Link className="text-sm font-medium text-slate-600 hover:text-slate-900" href="/recruiter">
           Back to recruiter
         </Link>
       </header>
 
       <form
-        className="space-y-4 rounded border border-slate-200 bg-white p-4"
+        className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
         onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <input className="rounded border border-slate-300 px-3 py-2" placeholder="Title" {...form.register("title")} />
-          <input
-            className="rounded border border-slate-300 px-3 py-2"
-            placeholder="Company"
-            {...form.register("company")}
-          />
-          <input className="rounded border border-slate-300 px-3 py-2" placeholder="Region" {...form.register("region")} />
-          <input className="rounded border border-slate-300 px-3 py-2" placeholder="Field" {...form.register("field")} />
-          <select className="rounded border border-slate-300 px-3 py-2" {...form.register("type")}>
-            <option value="JOB">JOB</option>
-            <option value="INTERNSHIP">INTERNSHIP</option>
-          </select>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Title"
+              {...form.register("title")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.title?.message}</p>
+          </div>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Company"
+              {...form.register("company")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.company?.message}</p>
+          </div>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Region"
+              {...form.register("region")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.region?.message}</p>
+          </div>
+          <div>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Field"
+              {...form.register("field")}
+            />
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.field?.message}</p>
+          </div>
+          <div>
+            <select className="w-full rounded-lg border border-slate-300 px-3 py-2" {...form.register("type")}>
+              <option value="JOB">JOB</option>
+              <option value="INTERNSHIP">INTERNSHIP</option>
+            </select>
+            <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.type?.message}</p>
+          </div>
         </div>
 
-        <textarea
-          className="min-h-24 w-full rounded border border-slate-300 px-3 py-2"
-          placeholder="Description"
-          {...form.register("description")}
-        />
+        <div>
+          <textarea
+            className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Description"
+            {...form.register("description")}
+          />
+          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.description?.message}</p>
+        </div>
 
-        <textarea
-          className="min-h-24 w-full rounded border border-slate-300 px-3 py-2"
-          placeholder="Requirements"
-          {...form.register("requirements")}
-        />
+        <div>
+          <textarea
+            className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Requirements"
+            {...form.register("requirements")}
+          />
+          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.requirements?.message}</p>
+        </div>
 
         {createMutation.isError ? (
-          <p className="text-sm text-red-600">Offer creation failed.</p>
+          <p className="text-sm text-red-600">Offer creation failed. Please check your inputs and retry.</p>
         ) : null}
 
         <button
