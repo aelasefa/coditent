@@ -52,6 +52,21 @@ This file documents the backend setup steps, current progress, and daily command
 - Swagger docs:
   - `http://127.0.0.1:3001/docs`
 
+## SSO Setup (Google + LinkedIn)
+
+Add these variables to `apps/api/.env`:
+
+- `FRONTEND_URL=http://127.0.0.1:3000`
+- `GOOGLE_CLIENT_ID=...`
+- `GOOGLE_CLIENT_SECRET=...`
+- `LINKEDIN_CLIENT_ID=...`
+- `LINKEDIN_CLIENT_SECRET=...`
+
+OAuth callback URLs to register in provider dashboards:
+
+- Google callback: `http://127.0.0.1:8000/auth/sso/google/callback`
+- LinkedIn callback: `http://127.0.0.1:8000/auth/sso/linkedin/callback`
+
 ## Recommended Test Order
 
 1. Register candidate

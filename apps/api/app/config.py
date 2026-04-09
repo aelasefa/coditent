@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     database_url: str
     supabase_url: str | None = None
     supabase_service_key: str | None = None
+    frontend_url: str = "http://localhost:3000"
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    linkedin_client_id: str | None = None
+    linkedin_client_secret: str | None = None
     # If JWT_SECRET/SECRET_KEY is not provided, generate a strong random key for local dev.
     secret_key: str | None = Field(
         default=None,
