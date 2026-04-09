@@ -1,0 +1,19 @@
+# Python cache and virtualenv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+
+# Git and editor noise
+.git/
+.gitignore
+.vscode/
+
+# Local env and secrets
+.env
+
+# Runtime artifacts
+*.log
+.pytest_cache/
+.mypy_cache/

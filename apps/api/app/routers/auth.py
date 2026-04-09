@@ -1,28 +1,20 @@
-from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from jose import jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import CandidateProfile, User, UserRole
 from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserMeOut, UserOut
+from app.utils.jwt import create_access_token
 
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def _create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": subject, "exp": expire}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -58,7 +50,13 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    token = _create_access_token(str(user.id))
+    token = create_access_token(
+        {
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role.value,
+        }
+    )
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
@@ -72,7 +70,13 @@ async def login(
     if user is None or not pwd_context.verify(data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    token = _create_access_token(str(user.id))
+    token = create_access_token(
+        {
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role.value,
+        }
+    )
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
