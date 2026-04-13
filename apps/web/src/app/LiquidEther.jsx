@@ -1036,9 +1036,7 @@ export default function LiquidEther({
             Common.renderer.dispose();
             Common.renderer.forceContextLoss();
           }
-        } catch {
-          return;
-        }
+        } catch {}
       }
     }
 
@@ -1115,16 +1113,12 @@ export default function LiquidEther({
       if (resizeObserverRef.current) {
         try {
           resizeObserverRef.current.disconnect();
-        } catch {
-          return;
-        }
+        } catch {}
       }
       if (intersectionObserverRef.current) {
         try {
           intersectionObserverRef.current.disconnect();
-        } catch {
-          return;
-        }
+        } catch {}
       }
       if (webglRef.current) {
         webglRef.current.dispose();
