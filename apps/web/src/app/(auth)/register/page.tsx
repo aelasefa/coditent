@@ -44,7 +44,7 @@ export default function RegisterPage() {
         router.push("/recruiter");
         return;
       }
-      router.push("/dashboard");
+      router.push("/profile");
     },
     onError: (error) => {
       if (axios.isAxiosError(error)) {

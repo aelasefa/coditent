@@ -12,8 +12,8 @@ export default function Home() {
         <Link className="rounded border border-slate-300 px-4 py-2" href="/register">
           Register
         </Link>
-        <Link className="rounded border border-slate-300 px-4 py-2" href="/dashboard">
-          Candidate Dashboard
+        <Link className="rounded border border-slate-300 px-4 py-2" href="/profile">
+          Candidate Profile
         </Link>
         <Link className="rounded border border-slate-300 px-4 py-2" href="/recruiter">
           Recruiter Area

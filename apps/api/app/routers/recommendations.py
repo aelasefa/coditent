@@ -22,6 +22,11 @@ def _fallback_rank_offers(
 ) -> list[dict[str, str | int]]:
     field_hint = (profile.field_of_study or "").strip().lower()
     city_hint = (profile.city or "").strip().lower()
+    skills_hint = {
+        skill.strip().lower()
+        for skill in (profile.skills or "").split(",")
+        if skill.strip()
+    }
 
     ranked_rows: list[dict[str, str | int]] = []
     for offer in offers:
@@ -34,6 +39,15 @@ def _fallback_rank_offers(
             score += 25
         if city_hint and city_hint in offer_region:
             score += 20
+
+        requirements_text = f"{offer.requirements or ''} {offer.description or ''}".lower()
+        skill_hits = sum(
+            1
+            for skill in skills_hint
+            if len(skill) > 2 and skill in requirements_text
+        )
+        if skill_hits:
+            score += min(skill_hits * 6, 18)
 
         ranked_rows.append(
             {

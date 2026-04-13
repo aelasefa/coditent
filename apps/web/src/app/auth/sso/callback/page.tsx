@@ -42,7 +42,7 @@ export default function SsoCallbackPage() {
       return;
     }
 
-    router.replace("/dashboard");
+    router.replace("/profile");
   }, [isParsed, token, role, router]);
 
   if (!isParsed) {

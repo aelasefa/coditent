@@ -23,4 +23,33 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
     "Apple Color Emoji", "Segoe UI Emoji";
 }
+
+@keyframes profile-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-fade-up {
+  animation: profile-fade-up 420ms ease-out both;
+}
+
+.profile-fade-delay-1 {
+  animation-delay: 70ms;
+}
+
+.profile-fade-delay-2 {
+  animation-delay: 140ms;
+}
+
+.profile-fade-delay-3 {
+  animation-delay: 210ms;
+}
+
   

@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
 function isProtectedPath(pathname: string): boolean {
-  return pathname.startsWith("/dashboard") || pathname.startsWith("/recruiter");
+  return pathname.startsWith("/profile") || pathname.startsWith("/dashboard") || pathname.startsWith("/recruiter");
 }
 
 export function middleware(request: NextRequest) {
@@ -16,12 +16,12 @@ export function middleware(request: NextRequest) {
   }
 
   if ((pathname === "/login" || pathname === "/register") && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/profile", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/recruiter/:path*", "/login", "/register"],
+  matcher: ["/profile/:path*", "/dashboard/:path*", "/recruiter/:path*", "/login", "/register"],
 };

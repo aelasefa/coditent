@@ -47,8 +47,8 @@ export default function RecommendationsPage() {
     <main className="mx-auto w-full max-w-4xl space-y-6 p-4">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Recommendations</h1>
-        <Link className="text-sm text-slate-600" href="/dashboard">
-          Back to dashboard
+        <Link className="text-sm text-slate-600" href="/profile">
+          Back to profile
         </Link>
       </header>
 
