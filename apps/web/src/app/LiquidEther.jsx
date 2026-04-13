@@ -88,7 +88,7 @@ export default function LiquidEther({
         this.delta = 0;
         this.container = null;
         this.renderer = null;
-        this.clock = null;
+        this.lastTick = 0;
       }
       init(container) {
         this.container = container;
@@ -102,8 +102,12 @@ export default function LiquidEther({
         this.renderer.domElement.style.width = "100%";
         this.renderer.domElement.style.height = "100%";
         this.renderer.domElement.style.display = "block";
-        this.clock = new THREE.Clock();
-        this.clock.start();
+        // Enable extension explicitly to avoid implicit-extension portability warnings.
+        const gl = this.renderer.getContext();
+        if (gl && typeof gl.getExtension === "function") {
+          gl.getExtension("EXT_float_blend");
+        }
+        this.lastTick = performance.now();
       }
       resize() {
         if (!this.container) return;
@@ -114,7 +118,9 @@ export default function LiquidEther({
         if (this.renderer) this.renderer.setSize(this.width, this.height, false);
       }
       update() {
-        this.delta = this.clock.getDelta();
+        const now = performance.now();
+        this.delta = Math.min(0.05, Math.max(0, (now - this.lastTick) / 1000));
+        this.lastTick = now;
         this.time += this.delta;
       }
     }
@@ -1034,7 +1040,6 @@ export default function LiquidEther({
             const canvas = Common.renderer.domElement;
             if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
             Common.renderer.dispose();
-            Common.renderer.forceContextLoss();
           }
         } catch {}
       }

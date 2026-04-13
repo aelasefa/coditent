@@ -65,7 +65,7 @@ export default function LiquidEtherHero() {
   }, [isCompact]);
 
   return (
-    <div style={{ width: "100%", height: 600, position: "relative" }}>
+    <div className="relative h-full w-full">
       {!mounted || reduceMotion ? (
         <div className="h-full w-full bg-[radial-gradient(circle_at_28%_28%,rgba(82,39,255,0.3),rgba(255,159,252,0.24)_44%,rgba(177,158,239,0.2)_68%,rgba(245,238,229,0.1)_88%)]" />
       ) : (

@@ -94,4 +94,99 @@ body {
   animation: home-orb-float 8.5s ease-in-out infinite;
 }
 
+@keyframes home-glow-pulse {
+  0% {
+    opacity: 0.44;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.78;
+    transform: scale(1.06);
+  }
+
+  100% {
+    opacity: 0.44;
+    transform: scale(1);
+  }
+}
+
+.home-glow {
+  animation: home-glow-pulse 9s ease-in-out infinite;
+}
+
+@keyframes nexus-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes nexus-float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes nexus-glow {
+  0% {
+    opacity: 0.38;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.66;
+    transform: scale(1.08);
+  }
+
+  100% {
+    opacity: 0.38;
+    transform: scale(1);
+  }
+}
+
+.nexus-reveal {
+  animation: nexus-reveal 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.nexus-delay-1 {
+  animation-delay: 130ms;
+}
+
+.nexus-delay-2 {
+  animation-delay: 250ms;
+}
+
+.nexus-float {
+  animation: nexus-float 8.5s ease-in-out infinite;
+}
+
+.nexus-glow {
+  animation: nexus-glow 10s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-reveal,
+  .home-orb,
+  .home-glow,
+  .nexus-reveal,
+  .nexus-float,
+  .nexus-glow {
+    animation: none !important;
+  }
+}
+
   
