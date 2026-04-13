@@ -30,6 +30,7 @@ export default function LiquidEther({
 }) {
   const mountRef = useRef(null);
   const webglRef = useRef(null);
+  const [webglAvailable, setWebglAvailable] = useState(true);
   const resizeObserverRef = useRef(null);
   const rafRef = useRef(null);
   const intersectionObserverRef = useRef(null);
@@ -94,7 +95,12 @@ export default function LiquidEther({
         this.container = container;
         this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         this.resize();
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        try {
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        } catch (error) {
+          this.renderer = null;
+          return false;
+        }
         this.renderer.autoClear = false;
         this.renderer.setClearColor(new THREE.Color(0x000000), 0);
         this.renderer.setPixelRatio(this.pixelRatio);
@@ -108,6 +114,7 @@ export default function LiquidEther({
           gl.getExtension("EXT_float_blend");
         }
         this.lastTick = performance.now();
+        return true;
       }
       resize() {
         if (!this.container) return;
@@ -970,7 +977,8 @@ export default function LiquidEther({
     class WebGLManager {
       constructor(props) {
         this.props = props;
-        Common.init(props.$wrapper);
+        this.isReady = Common.init(props.$wrapper);
+        if (!this.isReady) return;
         Mouse.init(props.$wrapper);
         Mouse.autoIntensity = props.autoIntensity;
         Mouse.takeoverDuration = props.takeoverDuration;
@@ -1001,14 +1009,17 @@ export default function LiquidEther({
         this.running = false;
       }
       init() {
+        if (!Common.renderer) return;
         this.props.$wrapper.prepend(Common.renderer.domElement);
         this.output = new Output();
       }
       resize() {
+        if (!this.output) return;
         Common.resize();
         this.output.resize();
       }
       render() {
+        if (!this.output) return;
         if (this.autoDriver) this.autoDriver.update();
         Mouse.update();
         Common.update();
@@ -1049,15 +1060,27 @@ export default function LiquidEther({
     container.style.position = container.style.position || "relative";
     container.style.overflow = container.style.overflow || "hidden";
 
-    const webgl = new WebGLManager({
-      $wrapper: container,
-      autoDemo,
-      autoSpeed,
-      autoIntensity,
-      takeoverDuration,
-      autoResumeDelay,
-      autoRampDuration,
-    });
+    let webgl = null;
+    try {
+      webgl = new WebGLManager({
+        $wrapper: container,
+        autoDemo,
+        autoSpeed,
+        autoIntensity,
+        takeoverDuration,
+        autoResumeDelay,
+        autoRampDuration,
+      });
+    } catch (error) {
+      setWebglAvailable(false);
+      return undefined;
+    }
+
+    if (!webgl || !webgl.isReady) {
+      setWebglAvailable(false);
+      return undefined;
+    }
+
     webglRef.current = webgl;
 
     const applyOptionsFromProps = () => {
@@ -1202,6 +1225,12 @@ export default function LiquidEther({
     autoResumeDelay,
     autoRampDuration,
   ]);
+
+  if (!webglAvailable || reduceMotion) {
+    return (
+      <div className="h-full w-full bg-[radial-gradient(circle_at_28%_28%,rgba(82,39,255,0.3),rgba(255,159,252,0.24)_44%,rgba(177,158,239,0.2)_68%,rgba(245,238,229,0.1)_88%)]" />
+    );
+  }
 
   return (
     <div
