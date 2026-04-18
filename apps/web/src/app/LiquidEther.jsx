@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import "./LiquidEther.css";
 
@@ -1226,11 +1226,6 @@ export default function LiquidEther({
     autoRampDuration,
   ]);
 
-  if (!webglAvailable || reduceMotion) {
-    return (
-      <div className="h-full w-full bg-[radial-gradient(circle_at_28%_28%,rgba(82,39,255,0.3),rgba(255,159,252,0.24)_44%,rgba(177,158,239,0.2)_68%,rgba(245,238,229,0.1)_88%)]" />
-    );
-  }
 
   return (
     <div
