@@ -3,17 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Poppins } from "next/font/google";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { LogoutButton } from "@/components/logout-button";
+import { MdButton } from "@/components/ui/md-button";
+import { MdCard } from "@/components/ui/md-card";
+import { MdField, MdInput, MdSelect, MdTextArea } from "@/components/ui/md-field";
 import { getProfile, updateProfile } from "@/lib/api";
-
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
 
 const urlField = z.union([z.literal(""), z.string().url("Enter a valid URL")]);
 
@@ -58,8 +56,8 @@ const completionLabels: Record<(typeof completionKeys)[number], string> = {
   study_level: "Study level",
   city: "City",
   phone: "Phone number",
-  linkedin_url: "LinkedIn link",
-  portfolio_url: "Portfolio link",
+  linkedin_url: "LinkedIn URL",
+  portfolio_url: "Portfolio URL",
 };
 
 function toNullable(value: string): string | null {
@@ -127,7 +125,8 @@ export default function ProfilePage() {
       bio: profileQuery.data.bio ?? "",
       skills: profileQuery.data.skills ?? "",
       years_of_experience:
-        profileQuery.data.years_of_experience !== null && profileQuery.data.years_of_experience !== undefined
+        profileQuery.data.years_of_experience !== null &&
+        profileQuery.data.years_of_experience !== undefined
           ? String(profileQuery.data.years_of_experience)
           : "",
       city: profileQuery.data.city ?? "",
@@ -155,84 +154,77 @@ export default function ProfilePage() {
     return new Date(profileQuery.data.updated_at).toLocaleString();
   }, [profileQuery.data?.updated_at]);
 
-  const cardClassName =
-    "rounded-2xl border border-[#D5D7E0] bg-white p-5 shadow-[0_2px_16px_rgba(0,0,0,0.06)] sm:p-6";
-  const labelClassName = "mb-1.5 block text-sm font-medium text-[#263137]";
-  const inputClassName =
-    "w-full rounded-xl border border-[#D5D7E0] bg-white px-3.5 py-2.5 text-sm text-[#263137] placeholder:text-[#8E97A5] transition focus:border-[#12A1C0] focus:outline-none focus:ring-4 focus:ring-[#DFF9FF]";
-  const errorClassName = "mt-1.5 text-xs font-medium text-rose-600";
-
   return (
-    <main className={`${poppins.className} relative min-h-screen overflow-hidden`}>
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -left-20 top-6 h-72 w-72 rounded-full bg-[#DFF9FF] blur-3xl" />
-        <div className="absolute -right-20 top-1/3 h-80 w-80 rounded-full bg-[#F0FCFF] blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 h-60 w-60 rounded-full bg-[#EEF6FA] blur-3xl" />
+    <main className="relative min-h-screen overflow-hidden bg-md-background pb-14">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="md-glow absolute -left-20 top-8 h-80 w-80 rounded-full bg-md-primary/18 blur-3xl" />
+        <div className="md-glow absolute -right-24 top-1/3 h-96 w-96 rounded-full bg-md-tertiary/20 blur-3xl" />
+        <div className="absolute bottom-0 left-1/4 h-72 w-72 rounded-full bg-md-secondaryContainer/50 blur-3xl" />
       </div>
 
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="profile-fade-up flex flex-wrap items-center justify-between gap-4">
+      <div className="relative mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <header className="md-fade-up flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#12A1C0]">
-              Candidate Workspace
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">
+              Candidate workspace
             </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[#263137]">Profile Builder</h1>
-            <p className="mt-2 max-w-2xl text-sm text-[#6B727F]">
-              Build a recruiter-ready profile with the same clean style used in modern hiring platforms.
+            <h1 className="mt-1 text-3xl font-medium tracking-tight sm:text-4xl">Profile builder</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-7 text-md-onSurfaceVariant sm:text-base">
+              Build a recruiter-ready profile with clearer context and stronger recommendations.
             </p>
           </div>
-          <Link
-            className="inline-flex items-center rounded-xl border border-[#D5D7E0] bg-white px-4 py-2 text-sm font-medium text-[#3F525B] transition hover:border-[#12A1C0] hover:text-[#0A88A4]"
-            href="/profile"
-          >
-            Profile home
-          </Link>
+
+          <div className="flex items-center gap-2">
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
+              href="/dashboard/recommendations"
+            >
+              Recommendations
+            </Link>
+            <LogoutButton />
+          </div>
         </header>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="mt-7 grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-            <section className="profile-fade-up profile-fade-delay-1 rounded-2xl border border-[#CCF6FF] bg-gradient-to-b from-[#F8FEFF] to-white p-5 shadow-[0_8px_24px_rgba(18,161,192,0.14)] sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[#0A88A4]">Profile Strength</p>
-              <div className="mt-3 flex items-end justify-between gap-4">
-                <p className="text-4xl font-semibold leading-none text-[#0A88A4]">{completionPercent}%</p>
-                <p className="text-right text-xs text-[#6B727F]">
-                  {completedCount} of {completionKeys.length} sections completed
+            <MdCard className="md-fade-up p-6">
+              <p className="text-xs uppercase tracking-[0.12em] text-md-onSurfaceVariant">Profile strength</p>
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <p className="text-4xl font-medium text-md-primary">{completionPercent}%</p>
+                <p className="text-right text-xs text-md-onSurfaceVariant">
+                  {completedCount}/{completionKeys.length} sections completed
                 </p>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#DFF9FF]">
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-md-secondaryContainer">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#3EC0DD] to-[#0A88A4] transition-all duration-500"
+                  className="h-full rounded-full bg-md-primary transition-all duration-300 ease-md"
                   style={{ width: `${completionPercent}%` }}
                 />
               </div>
-              <p className="mt-3 text-xs text-[#6B727F]">Last updated: {updatedAtLabel}</p>
-            </section>
+              <p className="mt-3 text-xs text-md-onSurfaceVariant">Last updated: {updatedAtLabel}</p>
+            </MdCard>
 
-            <section className="profile-fade-up profile-fade-delay-2 rounded-2xl border border-[#D5D7E0] bg-white p-5 shadow-[0_2px_16px_rgba(0,0,0,0.06)] sm:p-6">
-              <h2 className="text-sm font-semibold text-[#263137]">Profile Checklist</h2>
+            <MdCard className="md-fade-up md-fade-delay-1 p-6">
+              <h2 className="text-sm font-medium">Profile checklist</h2>
               <ul className="mt-3 space-y-2.5">
                 {completionItems.map((item, index) => (
                   <li className="flex items-center gap-2" key={item.key}>
                     <span
-                      className={`inline-flex size-5 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-medium ${
                         item.done
-                          ? "border-[#3EC0DD] bg-[#DFF9FF] text-[#0A88A4]"
-                          : "border-[#D5D7E0] bg-white text-[#8E97A5]"
+                          ? "border-md-primary bg-md-secondaryContainer text-md-primary"
+                          : "border-md-outline/50 bg-md-background text-md-onSurfaceVariant"
                       }`}
                     >
                       {item.done ? "v" : index + 1}
                     </span>
-                    <span
-                      className={`text-sm ${
-                        item.done ? "font-medium text-[#3F525B]" : "text-[#6B727F]"
-                      }`}
-                    >
+                    <span className={`text-sm ${item.done ? "text-md-foreground" : "text-md-onSurfaceVariant"}`}>
                       {item.label}
                     </span>
                   </li>
                 ))}
               </ul>
-            </section>
+            </MdCard>
           </aside>
 
           <form
@@ -254,198 +246,125 @@ export default function ProfilePage() {
               });
             })}
           >
-            <section className={`${cardClassName} profile-fade-up profile-fade-delay-1`}>
-              <div>
-                <h2 className="text-lg font-semibold text-[#263137]">Professional Snapshot</h2>
-                <p className="mt-1 text-sm text-[#6B727F]">
-                  Give recruiters a quick understanding of your role, impact, and strengths.
-                </p>
-              </div>
+            <MdCard className="md-fade-up p-6 sm:p-7">
+              <h2 className="text-xl font-medium">Professional snapshot</h2>
+              <p className="mt-1 text-sm text-md-onSurfaceVariant">
+                Give recruiters a fast view of your role, strengths, and impact.
+              </p>
 
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className={labelClassName}>Headline</label>
-                  <input
-                    className={inputClassName}
-                    placeholder="Example: Junior Data Analyst focused on retail insights"
+              <div className="mt-5 space-y-4">
+                <MdField error={form.formState.errors.headline?.message} label="Headline">
+                  <MdInput
+                    placeholder="Junior Data Analyst focused on retail insights"
                     {...form.register("headline")}
                   />
-                  {form.formState.errors.headline?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.headline.message}</p>
-                  ) : null}
-                </div>
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>Bio</label>
-                  <textarea
-                    className={inputClassName}
-                    placeholder="Summarize your strengths, project context, and what kind of impact you deliver."
+                <MdField error={form.formState.errors.bio?.message} label="Bio">
+                  <MdTextArea
+                    placeholder="Summarize your strengths, project context, and practical impact."
                     rows={5}
                     {...form.register("bio")}
                   />
-                  {form.formState.errors.bio?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.bio.message}</p>
-                  ) : null}
-                </div>
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>Skills</label>
-                  <textarea
-                    className={inputClassName}
-                    placeholder="Comma separated (e.g. Python, SQL, Power BI, Client Communication)"
+                <MdField error={form.formState.errors.skills?.message} label="Skills">
+                  <MdTextArea
+                    placeholder="Comma separated: Python, SQL, Power BI, client communication"
                     rows={3}
                     {...form.register("skills")}
                   />
-                  {form.formState.errors.skills?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.skills.message}</p>
-                  ) : null}
-                </div>
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>Years of experience</label>
-                  <input
-                    className={inputClassName}
-                    min={0}
-                    max={40}
-                    placeholder="0"
-                    type="number"
-                    {...form.register("years_of_experience")}
-                  />
-                  {form.formState.errors.years_of_experience?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.years_of_experience.message}</p>
-                  ) : null}
-                </div>
+                <MdField
+                  error={form.formState.errors.years_of_experience?.message}
+                  label="Years of experience"
+                >
+                  <MdInput min={0} max={40} placeholder="0" type="number" {...form.register("years_of_experience")} />
+                </MdField>
               </div>
-            </section>
+            </MdCard>
 
-            <section className={`${cardClassName} profile-fade-up profile-fade-delay-2`}>
-              <div>
-                <h2 className="text-lg font-semibold text-[#263137]">Education</h2>
-                <p className="mt-1 text-sm text-[#6B727F]">
-                  Add the background that helps recommendation quality and recruiter filtering.
-                </p>
-              </div>
+            <MdCard className="md-fade-up md-fade-delay-1 p-6 sm:p-7">
+              <h2 className="text-xl font-medium">Education</h2>
+              <p className="mt-1 text-sm text-md-onSurfaceVariant">
+                Add background details that improve recommendation quality.
+              </p>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={labelClassName}>Field of study</label>
-                  <input
-                    className={inputClassName}
-                    placeholder="Computer Science"
-                    {...form.register("field_of_study")}
-                  />
-                  {form.formState.errors.field_of_study?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.field_of_study.message}</p>
-                  ) : null}
-                </div>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <MdField error={form.formState.errors.field_of_study?.message} label="Field of study">
+                  <MdInput placeholder="Computer Science" {...form.register("field_of_study")} />
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>University</label>
-                  <input
-                    className={inputClassName}
-                    placeholder="ENSA Casablanca"
-                    {...form.register("university")}
-                  />
-                  {form.formState.errors.university?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.university.message}</p>
-                  ) : null}
-                </div>
+                <MdField error={form.formState.errors.university?.message} label="University">
+                  <MdInput placeholder="ENSA Casablanca" {...form.register("university")} />
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>Study level</label>
-                  <select className={inputClassName} {...form.register("study_level")}>
+                <MdField error={form.formState.errors.study_level?.message} label="Study level">
+                  <MdSelect {...form.register("study_level")}>
                     <option value="">Select level</option>
                     <option value="BAC">BAC</option>
                     <option value="LICENCE">LICENCE</option>
                     <option value="MASTER">MASTER</option>
                     <option value="DOCTORAT">DOCTORAT</option>
-                  </select>
-                </div>
+                  </MdSelect>
+                </MdField>
               </div>
-            </section>
+            </MdCard>
 
-            <section className={`${cardClassName} profile-fade-up profile-fade-delay-3`}>
-              <div>
-                <h2 className="text-lg font-semibold text-[#263137]">Contact and Links</h2>
-                <p className="mt-1 text-sm text-[#6B727F]">
-                  Make it easy for recruiters to reach you and verify your professional presence.
-                </p>
-              </div>
+            <MdCard className="md-fade-up md-fade-delay-2 p-6 sm:p-7">
+              <h2 className="text-xl font-medium">Contact and links</h2>
+              <p className="mt-1 text-sm text-md-onSurfaceVariant">
+                Help recruiters reach you and verify your online profile.
+              </p>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={labelClassName}>City</label>
-                  <input className={inputClassName} placeholder="Rabat" {...form.register("city")} />
-                  {form.formState.errors.city?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.city.message}</p>
-                  ) : null}
-                </div>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <MdField error={form.formState.errors.city?.message} label="City">
+                  <MdInput placeholder="Rabat" {...form.register("city")} />
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>Phone</label>
-                  <input
-                    className={inputClassName}
-                    placeholder="+212 6 00 00 00 00"
-                    {...form.register("phone")}
-                  />
-                  {form.formState.errors.phone?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.phone.message}</p>
-                  ) : null}
-                </div>
+                <MdField error={form.formState.errors.phone?.message} label="Phone">
+                  <MdInput placeholder="+212 6 00 00 00 00" {...form.register("phone")} />
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>LinkedIn URL</label>
-                  <input
-                    className={inputClassName}
+                <MdField error={form.formState.errors.linkedin_url?.message} label="LinkedIn URL">
+                  <MdInput
                     placeholder="https://www.linkedin.com/in/your-profile"
                     {...form.register("linkedin_url")}
                   />
-                  {form.formState.errors.linkedin_url?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.linkedin_url.message}</p>
-                  ) : null}
-                </div>
+                </MdField>
 
-                <div>
-                  <label className={labelClassName}>Portfolio URL</label>
-                  <input
-                    className={inputClassName}
-                    placeholder="https://your-portfolio.com"
-                    {...form.register("portfolio_url")}
-                  />
-                  {form.formState.errors.portfolio_url?.message ? (
-                    <p className={errorClassName}>{form.formState.errors.portfolio_url.message}</p>
-                  ) : null}
-                </div>
+                <MdField error={form.formState.errors.portfolio_url?.message} label="Portfolio URL">
+                  <MdInput placeholder="https://your-portfolio.com" {...form.register("portfolio_url")} />
+                </MdField>
               </div>
-            </section>
+            </MdCard>
 
-            <section className={`${cardClassName} profile-fade-up profile-fade-delay-3`}>
-              {profileQuery.isLoading ? <p className="text-sm text-[#6B727F]">Loading profile...</p> : null}
+            <MdCard className="md-fade-up md-fade-delay-3 p-6 sm:p-7">
+              {profileQuery.isLoading ? (
+                <p className="text-sm text-md-onSurfaceVariant">Loading profile...</p>
+              ) : null}
+
               {profileQuery.isError ? (
-                <p className="text-sm font-medium text-rose-600">
+                <p className="text-sm font-medium text-rose-700">
                   Unable to load profile right now. You can still edit and save.
                 </p>
               ) : null}
 
-              <div className="mt-1 flex flex-wrap items-center gap-3">
-                <button
-                  className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-[#12A1C0] to-[#0A88A4] px-6 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(18,161,192,0.3)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={updateMutation.isPending}
-                  type="submit"
-                >
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <MdButton disabled={updateMutation.isPending} type="submit" variant="filled">
                   {updateMutation.isPending ? "Saving..." : "Save profile"}
-                </button>
+                </MdButton>
 
                 {updateMutation.isSuccess ? (
                   <p className="text-sm font-medium text-emerald-700">Profile saved.</p>
                 ) : null}
+
                 {updateMutation.isError ? (
-                  <p className="text-sm font-medium text-rose-600">
-                    Save failed. Check your entries and try again.
-                  </p>
+                  <p className="text-sm font-medium text-rose-700">Save failed. Check your entries and retry.</p>
                 ) : null}
               </div>
-            </section>
+            </MdCard>
           </form>
         </div>
       </div>

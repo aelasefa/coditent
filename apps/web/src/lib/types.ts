@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   role: UserRole;
+  is_approved: boolean;
   full_name: string;
 }
 

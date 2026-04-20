@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { MdCard } from "@/components/ui/md-card";
 import { saveToken } from "@/lib/auth";
 
 export default function SsoCallbackPage() {
@@ -47,42 +48,76 @@ export default function SsoCallbackPage() {
 
   if (!isParsed) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-3 px-4 text-center">
-        <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800" />
-        <h1 className="text-lg font-semibold text-slate-900">Preparing sign-in...</h1>
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-md-background px-4">
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="md-glow absolute -left-10 top-1/4 h-64 w-64 rounded-full bg-md-primary/20 blur-3xl" />
+          <div className="md-glow absolute right-0 top-1/3 h-64 w-64 rounded-full bg-md-tertiary/20 blur-3xl" />
+        </div>
+
+        <MdCard className="relative w-full max-w-md rounded-md-2xl p-8 text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-md-outline/30 border-t-md-primary" />
+          <h1 className="mt-4 text-xl font-medium">Preparing sign-in...</h1>
+        </MdCard>
       </main>
     );
   }
 
   if (readableError) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-2xl font-semibold text-slate-900">SSO login failed</h1>
-        <p className="text-sm text-slate-600">{readableError}</p>
-        <Link className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" href="/login">
-          Back to login
-        </Link>
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-md-background px-4">
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="md-glow absolute -left-10 top-1/4 h-64 w-64 rounded-full bg-md-primary/20 blur-3xl" />
+          <div className="md-glow absolute right-0 top-1/3 h-64 w-64 rounded-full bg-md-tertiary/20 blur-3xl" />
+        </div>
+
+        <MdCard className="relative w-full max-w-md rounded-md-2xl p-8 text-center">
+          <h1 className="text-2xl font-medium">SSO login failed</h1>
+          <p className="mt-3 text-sm text-md-onSurfaceVariant">{readableError}</p>
+          <Link
+            className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-md-primary px-6 text-sm font-medium text-md-onPrimary transition-all duration-300 ease-md hover:bg-md-primary/90 active:scale-95"
+            href="/login"
+          >
+            Back to login
+          </Link>
+        </MdCard>
       </main>
     );
   }
 
   if (!token) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-2xl font-semibold text-slate-900">Missing SSO token</h1>
-        <p className="text-sm text-slate-600">Try signing in again from the login page.</p>
-        <Link className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" href="/login">
-          Back to login
-        </Link>
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-md-background px-4">
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="md-glow absolute -left-10 top-1/4 h-64 w-64 rounded-full bg-md-primary/20 blur-3xl" />
+          <div className="md-glow absolute right-0 top-1/3 h-64 w-64 rounded-full bg-md-tertiary/20 blur-3xl" />
+        </div>
+
+        <MdCard className="relative w-full max-w-md rounded-md-2xl p-8 text-center">
+          <h1 className="text-2xl font-medium">Missing SSO token</h1>
+          <p className="mt-3 text-sm text-md-onSurfaceVariant">Try signing in again from login.</p>
+          <Link
+            className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-md-primary px-6 text-sm font-medium text-md-onPrimary transition-all duration-300 ease-md hover:bg-md-primary/90 active:scale-95"
+            href="/login"
+          >
+            Back to login
+          </Link>
+        </MdCard>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-3 px-4 text-center">
-      <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800" />
-      <h1 className="text-lg font-semibold text-slate-900">Signing you in...</h1>
-      <p className="text-sm text-slate-600">Please wait while we prepare your workspace.</p>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-md-background px-4">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="md-glow absolute -left-10 top-1/4 h-64 w-64 rounded-full bg-md-primary/20 blur-3xl" />
+        <div className="md-glow absolute right-0 top-1/3 h-64 w-64 rounded-full bg-md-tertiary/20 blur-3xl" />
+      </div>
+
+      <MdCard className="relative w-full max-w-md rounded-md-2xl p-8 text-center">
+        <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-md-outline/30 border-t-md-primary" />
+        <h1 className="mt-4 text-xl font-medium">Signing you in...</h1>
+        <p className="mt-2 text-sm text-md-onSurfaceVariant">Please wait while your workspace is prepared.</p>
+      </MdCard>
     </main>
   );
 }

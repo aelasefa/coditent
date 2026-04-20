@@ -2,21 +2,22 @@
 
 import { useRouter } from "next/navigation";
 
+import { MdButton } from "@/components/ui/md-button";
 import { removeToken } from "@/lib/auth";
 
 export function LogoutButton() {
   const router = useRouter();
 
   return (
-    <button
-      className="rounded border border-slate-300 px-3 py-1 text-sm"
+    <MdButton
+      size="sm"
       onClick={() => {
         removeToken();
         router.push("/login");
       }}
-      type="button"
+      variant="outlined"
     >
       Logout
-    </button>
+    </MdButton>
   );
 }

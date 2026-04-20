@@ -3,8 +3,17 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --md-background: #fffbfe;
+  --md-foreground: #1c1b1f;
+  --md-primary: #6750a4;
+  --md-on-primary: #ffffff;
+  --md-secondary-container: #e8def8;
+  --md-on-secondary-container: #1d192b;
+  --md-tertiary: #7d5260;
+  --md-surface: #f3edf7;
+  --md-surface-low: #e7e0ec;
+  --md-outline: #79747e;
+  --md-on-surface-variant: #49454f;
 }
 
 * {
@@ -15,19 +24,28 @@ html,
 body {
   margin: 0;
   padding: 0;
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
-    "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--md-background);
+  color: var(--md-foreground);
+  font-family: var(--font-roboto), "Roboto", sans-serif;
 }
 
-@keyframes profile-fade-up {
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(103, 80, 164, 0.24);
+}
+
+@keyframes md-fade-up {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(18px) scale(0.985);
   }
 
   to {
@@ -36,99 +54,24 @@ body {
   }
 }
 
-.profile-fade-up {
-  animation: profile-fade-up 420ms ease-out both;
+.md-fade-up {
+  animation: md-fade-up 700ms cubic-bezier(0.2, 0, 0, 1) both;
 }
 
-.profile-fade-delay-1 {
-  animation-delay: 70ms;
-}
-
-.profile-fade-delay-2 {
-  animation-delay: 140ms;
-}
-
-.profile-fade-delay-3 {
-  animation-delay: 210ms;
-}
-
-@keyframes home-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes home-orb-float {
-  0% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-7px);
-  }
-
-  100% {
-    transform: translateY(0px);
-  }
-}
-
-.home-reveal {
-  animation: home-reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.home-delay-1 {
+.md-fade-delay-1 {
   animation-delay: 120ms;
 }
 
-.home-delay-2 {
+.md-fade-delay-2 {
   animation-delay: 220ms;
 }
 
-.home-orb {
-  animation: home-orb-float 8.5s ease-in-out infinite;
+.md-fade-delay-3 {
+  animation-delay: 320ms;
 }
 
-@keyframes home-glow-pulse {
-  0% {
-    opacity: 0.44;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.78;
-    transform: scale(1.06);
-  }
-
-  100% {
-    opacity: 0.44;
-    transform: scale(1);
-  }
-}
-
-.home-glow {
-  animation: home-glow-pulse 9s ease-in-out infinite;
-}
-
-@keyframes nexus-reveal {
+@keyframes md-soft-float {
   from {
-    opacity: 0;
-    transform: translateY(22px) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes nexus-float {
-  0% {
     transform: translateY(0px);
   }
 
@@ -141,52 +84,46 @@ body {
   }
 }
 
-@keyframes nexus-glow {
+@keyframes md-glow-pulse {
   0% {
-    opacity: 0.38;
+    opacity: 0.32;
     transform: scale(1);
   }
 
   50% {
-    opacity: 0.66;
-    transform: scale(1.08);
+    opacity: 0.58;
+    transform: scale(1.06);
   }
 
   100% {
-    opacity: 0.38;
+    opacity: 0.32;
     transform: scale(1);
   }
 }
 
-.nexus-reveal {
-  animation: nexus-reveal 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.md-float {
+  animation: md-soft-float 8.5s ease-in-out infinite;
 }
 
-.nexus-delay-1 {
-  animation-delay: 130ms;
-}
-
-.nexus-delay-2 {
-  animation-delay: 250ms;
-}
-
-.nexus-float {
-  animation: nexus-float 8.5s ease-in-out infinite;
-}
-
-.nexus-glow {
-  animation: nexus-glow 10s ease-in-out infinite;
+.md-glow {
+  animation: md-glow-pulse 10s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-reveal,
-  .home-orb,
-  .home-glow,
-  .nexus-reveal,
-  .nexus-float,
-  .nexus-glow {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .md-fade-up,
+  .md-float,
+  .md-glow {
     animation: none !important;
   }
 }
 
-  
+
