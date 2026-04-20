@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    admin_email: str | None = None
+    admin_password: str | None = None
+    admin_full_name: str = "Platform Admin"
     gemini_api_key: str
     resend_api_key: str | None = None
     resend_from_email: str | None = None

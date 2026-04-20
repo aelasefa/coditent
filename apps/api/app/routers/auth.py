@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -15,9 +16,17 @@ from sqlalchemy.orm import joinedload
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.models import CandidateProfile, User, UserRole
-from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserMeOut, UserOut
+from app.services.admin_seed import seed_admin_user
+from app.schemas import (
+    LoginRequest,
+    RecruiterApprovalOut,
+    RegisterRequest,
+    TokenResponse,
+    UserMeOut,
+    UserOut,
+)
 from app.utils.jwt import create_access_token
 
 
@@ -233,6 +242,21 @@ async def _find_or_create_sso_user(
     return user
 
 
+async def ensure_default_admin_account(db: AsyncSession) -> None:
+    admin_email = (settings.admin_email or "").strip().lower()
+    admin_password = settings.admin_password or ""
+
+    if not admin_email or not admin_password:
+        return
+
+    await seed_admin_user(
+        db,
+        email=admin_email,
+        password=admin_password,
+        full_name=settings.admin_full_name,
+    )
+
+
 @router.get("/sso/providers")
 async def sso_providers() -> dict[str, bool]:
     return {
@@ -327,15 +351,20 @@ async def register(
     data: RegisterRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
-    result = await db.execute(select(User).where(User.email == data.email))
+    email = data.email.strip().lower()
+
+    result = await db.execute(select(User).where(User.email == email))
     existing_user = result.scalar_one_or_none()
     if existing_user is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
+    role = UserRole(data.role)
+
     user = User(
-        email=data.email,
+        email=email,
         password_hash=pwd_context.hash(data.password),
-        role=UserRole(data.role),
+        role=role,
+        is_approved=role != UserRole.RECRUITER,
         full_name=data.full_name,
     )
     db.add(user)
@@ -370,10 +399,18 @@ async def login(
     data: LoginRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
-    result = await db.execute(select(User).where(User.email == data.email))
+    email = data.email.strip().lower()
+
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if user is None or not pwd_context.verify(data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if user.role == UserRole.RECRUITER and not user.is_approved:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Recruiter account is pending admin approval",
+        )
 
     token = create_access_token(
         {
@@ -398,3 +435,38 @@ async def me(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     return UserMeOut.model_validate(user)
+
+
+@router.get("/admin/recruiters/pending", response_model=dict[str, list[RecruiterApprovalOut]])
+async def list_pending_recruiters(
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, list[RecruiterApprovalOut]]:
+    result = await db.execute(
+        select(User)
+        .where(User.role == UserRole.RECRUITER, User.is_approved.is_(False))
+        .order_by(User.created_at.asc())
+    )
+    recruiters = result.scalars().all()
+    return {"recruiters": [RecruiterApprovalOut.model_validate(recruiter) for recruiter in recruiters]}
+
+
+@router.patch("/admin/recruiters/{recruiter_id}/approve", response_model=RecruiterApprovalOut)
+async def approve_recruiter(
+    recruiter_id: uuid.UUID,
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RecruiterApprovalOut:
+    result = await db.execute(select(User).where(User.id == recruiter_id))
+    recruiter = result.scalar_one_or_none()
+
+    if recruiter is None or recruiter.role != UserRole.RECRUITER:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recruiter not found")
+
+    if recruiter.is_approved:
+        return RecruiterApprovalOut.model_validate(recruiter)
+
+    recruiter.is_approved = True
+    await db.commit()
+    await db.refresh(recruiter)
+    return RecruiterApprovalOut.model_validate(recruiter)

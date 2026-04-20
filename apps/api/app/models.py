@@ -11,6 +11,7 @@ from app.database import Base
 class UserRole(str, enum.Enum):
     CANDIDATE = "CANDIDATE"
     RECRUITER = "RECRUITER"
+    ADMIN = "ADMIN"
 
 
 class StudyLevel(str, enum.Enum):
@@ -32,6 +33,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.CANDIDATE, nullable=False)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 

@@ -49,4 +49,17 @@ async def require_recruiter(
 ) -> User:
     if current_user.role.value != "RECRUITER":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    if not current_user.is_approved:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Recruiter account is pending admin approval",
+        )
+    return current_user
+
+
+async def require_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if current_user.role.value != "ADMIN":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return current_user

@@ -13,6 +13,7 @@ class UserOut(APIModel):
     id: uuid.UUID
     email: str
     role: str
+    is_approved: bool
     full_name: str
 
 
@@ -68,8 +69,18 @@ class UserMeOut(APIModel):
     id: uuid.UUID
     email: str
     role: str
+    is_approved: bool
     full_name: str
     profile: ProfileOut | None
+
+
+class RecruiterApprovalOut(APIModel):
+    id: uuid.UUID
+    email: str
+    role: str
+    is_approved: bool
+    full_name: str
+    created_at: datetime
 
 
 class OfferCreate(APIModel):
