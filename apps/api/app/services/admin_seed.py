@@ -41,8 +41,19 @@ async def seed_admin_user(
     if not user.is_approved:
         user.is_approved = True
         updated = True
-    if not user.full_name.strip():
+    if not (user.full_name or "").strip():
         user.full_name = normalized_full_name
+        updated = True
+
+    # Keep the seeded admin credentials aligned with ADMIN_PASSWORD from environment.
+    password_matches = False
+    try:
+        password_matches = pwd_context.verify(password, user.password_hash)
+    except Exception:
+        password_matches = False
+
+    if not password_matches:
+        user.password_hash = pwd_context.hash(password)
         updated = True
 
     if updated:

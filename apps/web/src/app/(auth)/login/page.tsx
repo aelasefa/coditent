@@ -47,6 +47,10 @@ export default function LoginPage() {
         router.push("/recruiter");
         return;
       }
+      if (data.user.role === "ADMIN") {
+        router.push("/dashboard");
+        return;
+      }
       router.push("/profile");
     },
     onError: (error) => {
