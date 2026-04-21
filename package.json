@@ -2,7 +2,12 @@
   "name": "coditent",
   "private": true,
   "scripts": {
-    "dev:api": "pnpm --filter api dev",
-    "dev:web": "pnpm --filter web dev"
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "start": "npm --prefix apps/web run start"
+  },
+  "dependencies": {
+    "ogl": "^1.0.11",
+    "three": "^0.183.2"
   }
 }
