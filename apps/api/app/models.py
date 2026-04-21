@@ -11,6 +11,7 @@ from app.database import Base
 class UserRole(str, enum.Enum):
     CANDIDATE = "CANDIDATE"
     RECRUITER = "RECRUITER"
+    ADMIN = "ADMIN"
 
 
 class StudyLevel(str, enum.Enum):
@@ -32,6 +33,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.CANDIDATE, nullable=False)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -51,9 +53,15 @@ class CandidateProfile(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
     city: Mapped[str | None] = mapped_column(String, nullable=True)
     phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    headline: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     field_of_study: Mapped[str | None] = mapped_column(String, nullable=True)
     university: Mapped[str | None] = mapped_column(String, nullable=True)
     study_level: Mapped[StudyLevel | None] = mapped_column(Enum(StudyLevel), nullable=True)
+    skills: Mapped[str | None] = mapped_column(Text, nullable=True)
+    years_of_experience: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    linkedin_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    portfolio_url: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=datetime.utcnow, nullable=True)
 
     user: Mapped[User] = relationship("User", back_populates="profile")

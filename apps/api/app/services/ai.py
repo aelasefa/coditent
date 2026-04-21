@@ -41,10 +41,14 @@ Classe les offres de la plus pertinente à la moins pertinente.
 Retourne UNIQUEMENT un tableau JSON valide. Aucun texte en dehors du tableau.
 
 Profil candidat:
+- Titre professionnel: {profile.headline or 'Non spécifié'}
 - Domaine d'études: {profile.field_of_study or 'Non spécifié'}
 - Université: {profile.university or 'Non spécifiée'}
 - Niveau d'études: {profile.study_level.value if profile.study_level else 'Non spécifié'}
 - Ville: {profile.city or 'Non spécifiée'}
+- Compétences clés: {profile.skills or 'Non spécifiées'}
+- Années d'expérience: {profile.years_of_experience if profile.years_of_experience is not None else 'Non spécifiées'}
+- Résumé: {(profile.bio or 'Non spécifié')[:300]}
 
 Critères de recherche:
 - Domaine: {criteria.field}

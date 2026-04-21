@@ -40,12 +40,32 @@ This file documents the backend setup steps, current progress, and daily command
 3. `alembic upgrade head`
 4. `uvicorn app.main:app --reload --port 3001`
 
+## Frontend Start (web app)
+
+1. `cd /home/ayelasef/Desktop/coditent/apps/web`
+2. `npx pnpm@9.12.3 run dev`
+
 ## Quick Checks
 
 - Health check:
   - `curl http://127.0.0.1:3001/health`
 - Swagger docs:
   - `http://127.0.0.1:3001/docs`
+
+## SSO Setup (Google + LinkedIn)
+
+Add these variables to `apps/api/.env`:
+
+- `FRONTEND_URL=http://127.0.0.1:3000`
+- `GOOGLE_CLIENT_ID=...`
+- `GOOGLE_CLIENT_SECRET=...`
+- `LINKEDIN_CLIENT_ID=...`
+- `LINKEDIN_CLIENT_SECRET=...`
+
+OAuth callback URLs to register in provider dashboards:
+
+- Google callback: `http://127.0.0.1:8000/auth/sso/google/callback`
+- LinkedIn callback: `http://127.0.0.1:8000/auth/sso/linkedin/callback`
 
 ## Recommended Test Order
 
@@ -56,11 +76,3 @@ This file documents the backend setup steps, current progress, and daily command
 5. Recruiter login + create offer
 6. Candidate generate recommendations
 7. Candidate list saved recommendations
-
-## Secrets Notes
-
-- Keep `.env` local and never commit secrets.
-- If any secret was exposed, rotate immediately:
-  - Supabase DB password
-  - `SECRET_KEY`
-  - Gemini API key
