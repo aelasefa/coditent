@@ -1,8 +1,9 @@
-import type {
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
+import {
+  forwardRef,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from "react";
 
 import { cn } from "@/lib/cn";
@@ -30,9 +31,13 @@ export function MdField({ label, error, hint, htmlFor, children }: MdFieldProps)
 
 type MdInputProps = InputHTMLAttributes<HTMLInputElement>;
 
-export function MdInput({ className, ...props }: MdInputProps) {
+export const MdInput = forwardRef<HTMLInputElement, MdInputProps>(function MdInput(
+  { className, ...props },
+  ref
+) {
   return (
     <input
+      ref={ref}
       className={cn(
         "h-14 w-full rounded-t-md-sm rounded-b-none border-0 border-b-2 border-md-outline/70 bg-md-surfaceLow px-4",
         "text-sm text-md-foreground placeholder:text-md-onSurfaceVariant/70",
@@ -44,13 +49,17 @@ export function MdInput({ className, ...props }: MdInputProps) {
       {...props}
     />
   );
-}
+});
 
 type MdTextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
 
-export function MdTextArea({ className, ...props }: MdTextAreaProps) {
+export const MdTextArea = forwardRef<HTMLTextAreaElement, MdTextAreaProps>(function MdTextArea(
+  { className, ...props },
+  ref
+) {
   return (
     <textarea
+      ref={ref}
       className={cn(
         "min-h-28 w-full rounded-t-md-sm rounded-b-none border-0 border-b-2 border-md-outline/70 bg-md-surfaceLow px-4 py-3",
         "text-sm text-md-foreground placeholder:text-md-onSurfaceVariant/70",
@@ -62,13 +71,17 @@ export function MdTextArea({ className, ...props }: MdTextAreaProps) {
       {...props}
     />
   );
-}
+});
 
 type MdSelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 
-export function MdSelect({ className, children, ...props }: MdSelectProps) {
+export const MdSelect = forwardRef<HTMLSelectElement, MdSelectProps>(function MdSelect(
+  { className, children, ...props },
+  ref
+) {
   return (
     <select
+      ref={ref}
       className={cn(
         "h-14 w-full rounded-t-md-sm rounded-b-none border-0 border-b-2 border-md-outline/70 bg-md-surfaceLow px-4",
         "text-sm text-md-foreground",
@@ -82,4 +95,4 @@ export function MdSelect({ className, children, ...props }: MdSelectProps) {
       {children}
     </select>
   );
-}
+});

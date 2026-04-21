@@ -1,0 +1,21 @@
+.scrollFloat {
+  overflow: hidden;
+}
+
+.scrollFloatText {
+  display: inline;
+  text-wrap: balance;
+}
+
+.word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.char {
+  display: inline-block;
+}
+
+.space {
+  white-space: pre;
+}

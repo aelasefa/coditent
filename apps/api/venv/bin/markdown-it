@@ -1,4 +1,4 @@
-#!/home/ayelasef/Desktop/coditent/apps/api/venv/bin/python
+#!/home/ryder/Desktop/coditent/apps/api/venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

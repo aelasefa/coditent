@@ -6,17 +6,17 @@ const config: Config = {
     extend: {
       colors: {
         md: {
-          background: "#FFFBFE",
-          foreground: "#1C1B1F",
-          primary: "#6750A4",
+          background: "#06070B",
+          foreground: "#F5F2FF",
+          primary: "#8F75C7",
           onPrimary: "#FFFFFF",
-          secondaryContainer: "#E8DEF8",
-          onSecondaryContainer: "#1D192B",
-          tertiary: "#7D5260",
-          surface: "#F3EDF7",
-          surfaceLow: "#E7E0EC",
-          outline: "#79747E",
-          onSurfaceVariant: "#49454F",
+          secondaryContainer: "#1D1730",
+          onSecondaryContainer: "#DDD3FF",
+          tertiary: "#4CB6C4",
+          surface: "#0F1118",
+          surfaceLow: "#0B0D14",
+          outline: "#3A3450",
+          onSurfaceVariant: "#B7B1CC",
         },
       },
       borderRadius: {
@@ -29,9 +29,9 @@ const config: Config = {
         "md-hero": "48px",
       },
       boxShadow: {
-        "md-sm": "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05)",
-        "md-md": "0 6px 14px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08)",
-        "md-lg": "0 14px 30px rgba(0, 0, 0, 0.16), 0 6px 12px rgba(0, 0, 0, 0.08)",
+        "md-sm": "0 1px 2px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.03)",
+        "md-md": "0 8px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04)",
+        "md-lg": "0 18px 42px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.05)",
       },
       transitionTimingFunction: {
         md: "cubic-bezier(0.2, 0, 0, 1)",

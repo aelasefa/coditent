@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 
@@ -11,6 +11,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { MdButton } from "@/components/ui/md-button";
 import { MdCard } from "@/components/ui/md-card";
 import { getMe, getOffers, toggleOffer } from "@/lib/api";
+import { showcaseOffers } from "@/lib/showcase-offers";
 import type { Offer } from "@/lib/types";
 
 function isPendingApprovalError(error: unknown): boolean {
@@ -70,7 +71,22 @@ export default function RecruiterPage() {
     }
   }, [meQuery.error, offersQuery.error, router]);
 
-  const offers = offersQuery.data ?? [];
+  const liveOffers = offersQuery.data ?? [];
+
+  const offers = useMemo(() => {
+    if (liveOffers.length >= 20) {
+      return liveOffers;
+    }
+
+    const usedIds = new Set(liveOffers.map((offer) => offer.id));
+    const filler = showcaseOffers
+      .filter((offer) => !usedIds.has(offer.id))
+      .slice(0, 20 - liveOffers.length);
+
+    return [...liveOffers, ...filler];
+  }, [liveOffers]);
+
+  const showcaseCount = Math.max(0, offers.length - liveOffers.length);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-md-background pb-14">
@@ -112,6 +128,9 @@ export default function RecruiterPage() {
           <p className="text-sm text-md-onSurfaceVariant">
             Signed in as <span className="font-medium text-md-foreground">{meQuery.data?.full_name ?? "Recruiter"}</span>
           </p>
+          <p className="mt-2 text-xs uppercase tracking-[0.1em] text-md-onSurfaceVariant">
+            Showing {offers.length} offers ({liveOffers.length} live{showcaseCount > 0 ? ` + ${showcaseCount} showcase` : ""})
+          </p>
         </MdCard>
 
         {offersQuery.isLoading ? (
@@ -126,29 +145,36 @@ export default function RecruiterPage() {
           </MdCard>
         ) : null}
 
-        {!offersQuery.isLoading && !offersQuery.isError && offers.length === 0 ? (
+        {!offersQuery.isLoading && !offersQuery.isError && liveOffers.length === 0 ? (
           <MdCard className="mt-6 rounded-md-xl p-8 text-center text-md-onSurfaceVariant">
-            No active offers yet. Create your first offer to start recruiting.
+            No live offers yet. You can still browse showcase offers below while you publish your first one.
           </MdCard>
         ) : null}
 
         <div className="mt-6 space-y-4">
           {offers.map((offer) => {
-            const canToggle = meQuery.data?.id === offer.recruiter_id;
+            const isShowcase = offer.id.startsWith("showcase-");
+            const canToggle = !isShowcase && meQuery.data?.id === offer.recruiter_id;
 
             return (
               <OfferCard
                 key={offer.id}
                 offer={offer}
                 action={
-                  <MdButton
-                    disabled={!canToggle || toggleMutation.isPending}
-                    onClick={() => toggleMutation.mutate(offer.id)}
-                    size="sm"
-                    variant={offer.active ? "outlined" : "tonal"}
-                  >
-                    {offer.active ? "Set inactive" : "Set active"}
-                  </MdButton>
+                  isShowcase ? (
+                    <span className="inline-flex rounded-full bg-md-secondaryContainer px-3 py-1 text-xs font-medium uppercase tracking-[0.08em] text-md-onSecondaryContainer">
+                      Showcase
+                    </span>
+                  ) : (
+                    <MdButton
+                      disabled={!canToggle || toggleMutation.isPending}
+                      onClick={() => toggleMutation.mutate(offer.id)}
+                      size="sm"
+                      variant={offer.active ? "outlined" : "tonal"}
+                    >
+                      {offer.active ? "Set inactive" : "Set active"}
+                    </MdButton>
+                  )
                 }
               />
             );
