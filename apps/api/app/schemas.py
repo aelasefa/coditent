@@ -13,6 +13,7 @@ class UserOut(APIModel):
     id: uuid.UUID
     email: str
     role: str
+    is_approved: bool
     full_name: str
 
 
@@ -34,11 +35,17 @@ class TokenResponse(APIModel):
 
 
 class ProfileUpdate(APIModel):
-    city: str | None = None
-    phone: str | None = None
-    field_of_study: str | None = None
-    university: str | None = None
+    city: str | None = Field(default=None, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
+    headline: str | None = Field(default=None, max_length=120)
+    bio: str | None = Field(default=None, max_length=1500)
+    field_of_study: str | None = Field(default=None, max_length=120)
+    university: str | None = Field(default=None, max_length=160)
     study_level: Literal["BAC", "LICENCE", "MASTER", "DOCTORAT"] | None = None
+    skills: str | None = Field(default=None, max_length=500)
+    years_of_experience: int | None = Field(default=None, ge=0, le=40)
+    linkedin_url: str | None = Field(default=None, max_length=255)
+    portfolio_url: str | None = Field(default=None, max_length=255)
 
 
 class ProfileOut(APIModel):
@@ -46,9 +53,15 @@ class ProfileOut(APIModel):
     user_id: uuid.UUID
     city: str | None
     phone: str | None
+    headline: str | None
+    bio: str | None
     field_of_study: str | None
     university: str | None
     study_level: str | None
+    skills: str | None
+    years_of_experience: int | None
+    linkedin_url: str | None
+    portfolio_url: str | None
     updated_at: datetime | None
 
 
@@ -56,8 +69,18 @@ class UserMeOut(APIModel):
     id: uuid.UUID
     email: str
     role: str
+    is_approved: bool
     full_name: str
     profile: ProfileOut | None
+
+
+class RecruiterApprovalOut(APIModel):
+    id: uuid.UUID
+    email: str
+    role: str
+    is_approved: bool
+    full_name: str
+    created_at: datetime
 
 
 class OfferCreate(APIModel):

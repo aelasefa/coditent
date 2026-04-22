@@ -1,0 +1,1807 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coditent | Talent Workflow OS</title>
+    <meta
+      name="description"
+      content="Coditent connects candidates and recruiters in one expressive workspace for Morocco's hiring market."
+    />
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap");
+
+      :root {
+        --bg-deep: #0d0b1a;
+        --bg-surface: #13112a;
+        --bg-card: #1a1735;
+        --primary: #7c3aed;
+        --secondary: #9f67ff;
+        --brand-gradient: linear-gradient(135deg, #3d1572 0%, #7c3aed 50%, #a855f7 100%);
+        --text-primary: #ffffff;
+        --text-secondary: #c4b5d4;
+        --text-muted: #6b5f7a;
+        --border: #2a2545;
+        --live: #22c55e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Outfit", sans-serif;
+        font-weight: 400;
+        background: var(--bg-deep);
+        color: var(--text-primary);
+        line-height: 1.45;
+      }
+
+      .page-shell {
+        position: relative;
+        overflow: clip;
+        isolation: isolate;
+      }
+
+      .hero-mesh {
+        position: absolute;
+        inset: 0 0 auto;
+        height: 980px;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 18% 24%, rgba(124, 58, 237, 0.42), transparent 44%),
+          radial-gradient(circle at 80% 14%, rgba(168, 85, 247, 0.36), transparent 46%),
+          radial-gradient(circle at 62% 62%, rgba(61, 21, 114, 0.5), transparent 58%),
+          linear-gradient(180deg, rgba(13, 11, 26, 0.78) 0%, rgba(13, 11, 26, 1) 82%);
+      }
+
+      .hero-mesh::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(rgba(255, 255, 255, 0.08) 0.7px, transparent 0.7px);
+        background-size: 24px 24px;
+        opacity: 0.12;
+      }
+
+      .ambient-glow,
+      .ambient-glow-two {
+        position: absolute;
+        width: 34rem;
+        height: 34rem;
+        border-radius: 999px;
+        filter: blur(120px);
+        pointer-events: none;
+      }
+
+      .ambient-glow {
+        top: -11rem;
+        left: -8rem;
+        background: rgba(124, 58, 237, 0.42);
+      }
+
+      .ambient-glow-two {
+        top: 3rem;
+        right: -10rem;
+        background: rgba(159, 103, 255, 0.35);
+      }
+
+      .container {
+        width: min(1180px, calc(100% - 2rem));
+        margin-inline: auto;
+      }
+
+      .section {
+        padding: 5.5rem 0;
+      }
+
+      .section-line {
+        border: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent 0%, rgba(124, 58, 237, 0.7) 50%, transparent 100%);
+      }
+
+      .eyebrow {
+        font-family: "Space Mono", monospace;
+        font-size: 0.68rem;
+        letter-spacing: 0.16em;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        transition: background-color 220ms ease, border-color 220ms ease, backdrop-filter 220ms ease;
+      }
+
+      .nav-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        min-height: 74px;
+      }
+
+      .nav.scrolled {
+        background: rgba(13, 11, 26, 0.62);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.62rem;
+      }
+
+      .brand-mark {
+        width: 1.9rem;
+        aspect-ratio: 1;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.04);
+        font-family: "Syne", sans-serif;
+        font-weight: 800;
+      }
+
+      .brand-word {
+        font-family: "Syne", sans-serif;
+        font-size: 1.03rem;
+        letter-spacing: 0.03em;
+      }
+
+      .live-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.28rem 0.65rem;
+        border: 1px solid rgba(34, 197, 94, 0.35);
+        border-radius: 999px;
+        background: rgba(34, 197, 94, 0.12);
+        font-family: "Space Mono", monospace;
+        font-size: 0.66rem;
+        letter-spacing: 0.1em;
+      }
+
+      .live-dot {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 999px;
+        background: var(--live);
+        box-shadow: 0 0 0 rgba(34, 197, 94, 0.65);
+        animation: pulse-dot 1.8s ease-out infinite;
+      }
+
+      @keyframes pulse-dot {
+        0% {
+          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.65);
+        }
+
+        100% {
+          box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+        }
+      }
+
+      .nav-links {
+        display: none;
+        align-items: center;
+        gap: 1.2rem;
+      }
+
+      .nav-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-family: "Space Mono", monospace;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .actions {
+        display: inline-flex;
+        gap: 0.55rem;
+      }
+
+      .btn {
+        border: 1px solid transparent;
+        color: var(--text-primary);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        min-height: 2.45rem;
+        padding: 0 1rem;
+        border-radius: 999px;
+        font-family: "Outfit", sans-serif;
+        font-weight: 500;
+        font-size: 0.92rem;
+        transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
+        cursor: pointer;
+      }
+
+      .btn:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+      }
+
+      .btn-ghost {
+        border-color: rgba(124, 58, 237, 0.8);
+        background: rgba(124, 58, 237, 0.08);
+      }
+
+      .btn-primary {
+        background: var(--brand-gradient);
+      }
+
+      .hero {
+        position: relative;
+        padding: 4.6rem 0 3.5rem;
+      }
+
+      .hero-label {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0.38rem 0.82rem;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.06);
+        font-family: "Space Mono", monospace;
+        font-size: 0.64rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+
+      .hero-title {
+        margin: 1rem 0 0;
+        font-family: "Syne", sans-serif;
+        font-weight: 700;
+        font-size: clamp(3rem, 8vw, 7rem);
+        line-height: 0.94;
+        letter-spacing: -0.03em;
+      }
+
+      .gradient-text {
+        background: var(--brand-gradient);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .hero-subtext {
+        margin: 1.2rem 0 0;
+        color: var(--text-secondary);
+        font-weight: 300;
+        font-size: clamp(1rem, 1.8vw, 1.2rem);
+        max-width: 68ch;
+      }
+
+      .hero-ctas {
+        margin-top: 1.7rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.78rem;
+      }
+
+      .feature-pills {
+        margin-top: 1.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.56rem;
+      }
+
+      .pill {
+        padding: 0.35rem 0.72rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        font-family: "Space Mono", monospace;
+        font-size: 0.62rem;
+        letter-spacing: 0.1em;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+      }
+
+      .panel-grid {
+        margin-top: 2rem;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        border-radius: 4px;
+        padding: 1.1rem;
+      }
+
+      .panel-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.8rem;
+        margin-bottom: 0.8rem;
+      }
+
+      .panel-title {
+        font-family: "Syne", sans-serif;
+        font-size: 1.02rem;
+      }
+
+      .online-badge {
+        border-radius: 999px;
+        padding: 0.25rem 0.55rem;
+        border: 1px solid rgba(34, 197, 94, 0.32);
+        background: rgba(34, 197, 94, 0.12);
+        font-family: "Space Mono", monospace;
+        font-size: 0.58rem;
+        letter-spacing: 0.09em;
+      }
+
+      .stat-list {
+        display: grid;
+        gap: 0.6rem;
+      }
+
+      .stat-item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.7rem;
+        align-items: center;
+        padding: 0.66rem 0.7rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .stat-icon {
+        width: 2rem;
+        height: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        display: grid;
+        place-items: center;
+        color: var(--secondary);
+      }
+
+      .stat-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+      }
+
+      .stat-label {
+        color: var(--text-secondary);
+        font-size: 0.84rem;
+      }
+
+      .trend-badge {
+        border-radius: 999px;
+        padding: 0.22rem 0.5rem;
+        border: 1px solid rgba(124, 58, 237, 0.5);
+        background: rgba(124, 58, 237, 0.2);
+        color: #d9c9ff;
+        font-family: "Space Mono", monospace;
+        font-size: 0.56rem;
+        letter-spacing: 0.08em;
+      }
+
+      .stat-value {
+        margin-top: 0.3rem;
+        font-family: "Space Mono", monospace;
+        font-size: 1.25rem;
+      }
+
+      .activity-wrap {
+        position: relative;
+        min-height: 216px;
+      }
+
+      .activity-item {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: translateY(4px);
+        transition: opacity 280ms ease, transform 280ms ease;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.8rem;
+        display: grid;
+        align-content: start;
+        gap: 0.54rem;
+      }
+
+      .activity-item.active {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .activity-time {
+        color: var(--text-muted);
+        font-family: "Space Mono", monospace;
+        font-size: 0.67rem;
+        letter-spacing: 0.06em;
+      }
+
+      .activity-text {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+      }
+
+      .title-lg {
+        margin: 0.8rem 0 0;
+        font-family: "Syne", sans-serif;
+        font-size: clamp(1.9rem, 4.2vw, 3.3rem);
+        line-height: 1.06;
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: opacity 620ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 620ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .cap-list {
+        margin-top: 1.6rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.09);
+      }
+
+      .cap-row {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .cap-head {
+        width: 100%;
+        background: transparent;
+        border: 0;
+        color: inherit;
+        text-align: left;
+        padding: 1rem 0.15rem;
+        display: grid;
+        grid-template-columns: 48px 1fr 24px;
+        gap: 0.8rem;
+        align-items: start;
+        cursor: pointer;
+        border-left: 0 solid transparent;
+        transition: background-color 180ms ease, border-left-color 180ms ease, border-left-width 180ms ease;
+      }
+
+      .cap-head:hover,
+      .cap-row.active .cap-head {
+        background: rgba(255, 255, 255, 0.03);
+        border-left-width: 3px;
+        border-left-color: var(--primary);
+      }
+
+      .cap-num {
+        font-family: "Space Mono", monospace;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        padding-top: 0.18rem;
+      }
+
+      .cap-impact {
+        font-family: "Space Mono", monospace;
+        font-size: 0.62rem;
+        letter-spacing: 0.12em;
+        color: var(--secondary);
+      }
+
+      .cap-name {
+        margin-top: 0.24rem;
+        font-family: "Syne", sans-serif;
+        font-size: 1.14rem;
+      }
+
+      .cap-desc {
+        margin-top: 0.25rem;
+        color: var(--text-secondary);
+      }
+
+      .arrow {
+        color: var(--text-secondary);
+        transition: transform 180ms ease;
+      }
+
+      .cap-row.active .arrow {
+        transform: rotate(90deg);
+      }
+
+      .cap-detail {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 340ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .cap-row.active .cap-detail {
+        max-height: 260px;
+      }
+
+      .cap-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+        padding: 0 0.2rem 1rem 3.6rem;
+      }
+
+      .cap-chip {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.62rem;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+
+      .row-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.9rem;
+      }
+
+      .path-grid {
+        margin-top: 1.6rem;
+        display: grid;
+        gap: 0.9rem;
+        grid-template-columns: 1fr;
+      }
+
+      .path-card {
+        min-height: 260px;
+        display: grid;
+        align-content: space-between;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+
+      .path-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(159, 103, 255, 0.7);
+        box-shadow: 0 0 26px rgba(124, 58, 237, 0.28);
+      }
+
+      .path-title {
+        margin: 0.32rem 0 0;
+        font-family: "Syne", sans-serif;
+        font-size: 1.34rem;
+      }
+
+      .path-copy {
+        color: var(--text-secondary);
+      }
+
+      .path-link {
+        color: #e7dcff;
+        font-family: "Space Mono", monospace;
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .company-list {
+        margin-top: 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .company-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+        padding: 1rem 0.2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-left: 0 solid transparent;
+        transition: background-color 180ms ease, transform 180ms ease, border-left-width 180ms ease, border-left-color 180ms ease;
+        position: relative;
+      }
+
+      .company-row:hover {
+        background: rgba(124, 58, 237, 0.08);
+        transform: translateX(4px);
+        border-left-width: 3px;
+        border-left-color: var(--primary);
+      }
+
+      .company-row::after {
+        content: "->";
+        position: absolute;
+        right: 0.4rem;
+        top: 1.2rem;
+        color: #cbb8ff;
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+
+      .company-row:hover::after {
+        opacity: 1;
+      }
+
+      .company-name {
+        font-family: "Syne", sans-serif;
+        font-size: 1.3rem;
+      }
+
+      .company-meta {
+        color: var(--text-secondary);
+      }
+
+      .company-desc {
+        color: var(--text-secondary);
+      }
+
+      .company-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .opening-badge {
+        justify-self: start;
+      }
+
+      .tabs {
+        margin-top: 1.2rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .tab {
+        border-radius: 999px;
+        border: 1px solid rgba(124, 58, 237, 0.56);
+        padding: 0.42rem 0.82rem;
+        background: rgba(124, 58, 237, 0.1);
+        color: var(--text-secondary);
+        font-family: "Space Mono", monospace;
+        font-size: 0.67rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+      }
+
+      .tab.active {
+        background: var(--brand-gradient);
+        border-color: rgba(255, 255, 255, 0.25);
+        color: #fff;
+      }
+
+      .jobs {
+        margin-top: 1.2rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .job-item {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+        transition: opacity 220ms ease, max-height 260ms ease;
+        max-height: 160px;
+      }
+
+      .job-item.hidden {
+        opacity: 0;
+        max-height: 0;
+        pointer-events: none;
+      }
+
+      .job-head {
+        width: 100%;
+        background: transparent;
+        border: 0;
+        color: inherit;
+        text-align: left;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.7rem;
+        align-items: center;
+        padding: 0.95rem 0.2rem;
+        cursor: pointer;
+      }
+
+      .job-title {
+        font-family: "Syne", sans-serif;
+        font-size: 1.15rem;
+      }
+
+      .job-meta {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+
+      .salary-pill {
+        border-radius: 999px;
+        border: 1px solid rgba(124, 58, 237, 0.62);
+        background: rgba(124, 58, 237, 0.2);
+        padding: 0.32rem 0.56rem;
+        font-family: "Space Mono", monospace;
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+      }
+
+      .job-detail {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .job-item.open {
+        max-height: 520px;
+      }
+
+      .job-item.open .job-detail {
+        max-height: 340px;
+      }
+
+      .job-detail-inner {
+        padding: 0 0.2rem 0.95rem;
+      }
+
+      .job-copy {
+        color: var(--text-secondary);
+        margin-bottom: 0.82rem;
+      }
+
+      .process-wrap {
+        margin-top: 1.55rem;
+        position: relative;
+      }
+
+      .process-line {
+        position: absolute;
+        left: 22px;
+        top: 12px;
+        bottom: 12px;
+        border-left: 1px dashed rgba(124, 58, 237, 0.65);
+        opacity: 0.7;
+      }
+
+      .process-line.animate {
+        animation: dash-move 2.2s linear infinite;
+      }
+
+      @keyframes dash-move {
+        from {
+          border-left-color: rgba(124, 58, 237, 0.22);
+        }
+
+        to {
+          border-left-color: rgba(159, 103, 255, 0.92);
+        }
+      }
+
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.95rem;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 0.85rem;
+        align-items: start;
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      .step.visible {
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 520ms ease, transform 520ms ease;
+      }
+
+      .step-dot {
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        background: var(--brand-gradient);
+        display: grid;
+        place-items: center;
+        font-family: "Space Mono", monospace;
+        font-size: 0.75rem;
+      }
+
+      .step-title {
+        margin: 0;
+        font-family: "Syne", sans-serif;
+        font-size: 1.06rem;
+      }
+
+      .step-desc {
+        margin: 0.22rem 0 0;
+        color: var(--text-secondary);
+      }
+
+      .faq-list {
+        margin-top: 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .faq-item {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .faq-btn {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.8rem;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        padding: 0.95rem 0.2rem;
+        cursor: pointer;
+      }
+
+      .faq-q {
+        font-family: "Syne", sans-serif;
+        font-size: 1.02rem;
+      }
+
+      .faq-icon {
+        color: var(--secondary);
+        font-size: 1.2rem;
+        line-height: 1;
+        transition: transform 220ms ease;
+      }
+
+      .faq-item.open .faq-icon {
+        transform: rotate(45deg);
+      }
+
+      .faq-panel {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 360ms cubic-bezier(0.22, 0.9, 0.2, 1);
+      }
+
+      .faq-item.open .faq-panel {
+        max-height: 500px;
+      }
+
+      .faq-a {
+        color: var(--text-secondary);
+        padding: 0 0.2rem 1rem;
+      }
+
+      .footer {
+        margin-top: 2.5rem;
+        border-top: 1px solid transparent;
+        border-image: linear-gradient(90deg, transparent 0%, rgba(124, 58, 237, 0.75) 50%, transparent 100%) 1;
+        padding-top: 2rem;
+      }
+
+      .footer-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.2rem;
+      }
+
+      .footer-title {
+        margin: 0;
+        font-family: "Space Mono", monospace;
+        font-size: 0.66rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+      }
+
+      .footer-list {
+        list-style: none;
+        padding: 0;
+        margin: 0.55rem 0 0;
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .footer-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+      }
+
+      .footer-meta {
+        margin-top: 1.35rem;
+        padding: 0.95rem 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        color: var(--text-muted);
+        font-size: 0.88rem;
+      }
+
+      .load-item {
+        opacity: 0;
+        transform: translateY(18px);
+        animation: load-up 620ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      }
+
+      .delay-0 {
+        animation-delay: 0ms;
+      }
+
+      .delay-1 {
+        animation-delay: 100ms;
+      }
+
+      .delay-2 {
+        animation-delay: 200ms;
+      }
+
+      .delay-3 {
+        animation-delay: 350ms;
+      }
+
+      @keyframes load-up {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (min-width: 760px) {
+        .container {
+          width: min(1180px, calc(100% - 3rem));
+        }
+
+        .nav-links {
+          display: inline-flex;
+        }
+
+        .panel-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .cap-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .path-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+
+        .company-row {
+          grid-template-columns: 1.2fr 2fr auto;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .opening-badge {
+          justify-self: end;
+        }
+
+        .footer-grid {
+          grid-template-columns: 1.3fr 1fr 1fr 1fr;
+        }
+      }
+
+      @media (min-width: 1020px) {
+        .process-wrap {
+          padding-top: 1rem;
+        }
+
+        .process-line {
+          left: 0;
+          right: 0;
+          top: 22px;
+          bottom: auto;
+          border-left: 0;
+          border-top: 1px dashed rgba(124, 58, 237, 0.65);
+        }
+
+        .steps {
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          gap: 0.6rem;
+        }
+
+        .step {
+          grid-template-columns: 1fr;
+          text-align: left;
+          align-items: start;
+          padding-top: 0;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .actions .btn {
+          min-height: 2.2rem;
+          padding: 0 0.75rem;
+          font-size: 0.82rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="hero-mesh"></div>
+      <div class="ambient-glow"></div>
+      <div class="ambient-glow-two"></div>
+
+      <header class="nav" id="navbar" aria-label="Primary navigation">
+        <div class="container nav-inner">
+          <div class="brand">
+            <span class="brand-mark">C</span>
+            <span class="brand-word">Coditent</span>
+            <span class="live-pill"><span class="live-dot"></span>LIVE</span>
+          </div>
+
+          <nav class="nav-links" aria-label="Main">
+            <a class="nav-link" href="#pathways">Candidate</a>
+            <a class="nav-link" href="#pathways">Recruiter</a>
+            <a class="nav-link" href="#roles">Recommendations</a>
+          </nav>
+
+          <div class="actions" aria-label="Auth actions">
+            <a class="btn btn-ghost" href="#">Login</a>
+            <a class="btn btn-primary" href="#">Register</a>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="container">
+            <span class="hero-label load-item delay-0">Talent Workflow Platform</span>
+            <h1 class="hero-title load-item delay-1">
+              Connect candidates<br />
+              and <span class="gradient-text">recruiters</span> in<br />
+              one workspace.
+            </h1>
+            <p class="hero-subtext load-item delay-2">
+              Connect candidates and recruiters in one expressive workspace built for Morocco's hiring momentum.
+            </p>
+
+            <div class="hero-ctas load-item delay-3">
+              <a class="btn btn-primary" href="#pathways">Create account</a>
+              <a class="btn btn-ghost" href="#roles">Explore recommendations</a>
+            </div>
+
+            <div class="feature-pills">
+              <span class="pill">Profile Quality</span>
+              <span class="pill">Recruiter Speed</span>
+              <span class="pill">Recommendation Clarity</span>
+              <span class="pill">Decision Trust</span>
+            </div>
+
+            <div class="panel-grid reveal" id="hero-panels">
+              <article class="glass-panel" aria-label="Pipeline Snapshot">
+                <div class="panel-top">
+                  <h2 class="panel-title">Pipeline Snapshot</h2>
+                </div>
+
+                <div class="stat-list" id="stats">
+                  <div class="stat-item">
+                    <div class="stat-icon" aria-hidden="true">*</div>
+                    <div>
+                      <div class="stat-meta">
+                        <span class="stat-label">Profile Completion</span>
+                        <span class="trend-badge">This Week</span>
+                      </div>
+                      <div class="stat-value" data-target="84" data-suffix="%">0%</div>
+                    </div>
+                  </div>
+
+                  <div class="stat-item">
+                    <div class="stat-icon" aria-hidden="true">~</div>
+                    <div>
+                      <div class="stat-meta">
+                        <span class="stat-label">Recruiter Response</span>
+                        <span class="trend-badge">Faster</span>
+                      </div>
+                      <div class="stat-value" data-target="2.3" data-suffix="h">0h</div>
+                    </div>
+                  </div>
+
+                  <div class="stat-item">
+                    <div class="stat-icon" aria-hidden="true">+</div>
+                    <div>
+                      <div class="stat-meta">
+                        <span class="stat-label">Offer Momentum</span>
+                        <span class="trend-badge">Stable</span>
+                      </div>
+                      <div class="stat-value" data-target="27" data-prefix="+" data-suffix="%">+0%</div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="glass-panel" aria-label="Live Activity">
+                <div class="panel-top">
+                  <h2 class="panel-title">Live Activity</h2>
+                  <span class="online-badge">System Online</span>
+                </div>
+
+                <div class="activity-wrap" id="activity-feed">
+                  <div class="activity-item active">
+                    <div class="activity-time">2 min ago</div>
+                    <p class="activity-text">New candidate profile completed in Casablanca.</p>
+                  </div>
+                  <div class="activity-item">
+                    <div class="activity-time">4 min ago</div>
+                    <p class="activity-text">Recruiter published Backend Engineer role in Rabat.</p>
+                  </div>
+                  <div class="activity-item">
+                    <div class="activity-time">7 min ago</div>
+                    <p class="activity-text">AI recommendations refreshed for 14 active candidates.</p>
+                  </div>
+                  <div class="activity-item">
+                    <div class="activity-time">11 min ago</div>
+                    <p class="activity-text">Three interviews moved to confirmation stage.</p>
+                  </div>
+                  <div class="activity-item">
+                    <div class="activity-time">15 min ago</div>
+                    <p class="activity-text">Priority hiring request opened by Atlas Systems.</p>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <hr class="section-line" />
+
+        <section class="section reveal" id="capabilities">
+          <div class="container">
+            <p class="eyebrow">Core Capabilities</p>
+            <h2 class="title-lg">Purposeful design with practical workflow impact.</h2>
+
+            <div class="cap-list" id="cap-accordion">
+              <article class="cap-row active">
+                <button class="cap-head" aria-expanded="true" aria-controls="cap-detail-1">
+                  <span class="cap-num">01</span>
+                  <span>
+                    <span class="cap-impact">Faster Profile Decisions</span>
+                    <span class="cap-name">Signal-rich profiles</span>
+                    <span class="cap-desc">Capture practical strengths, context, and intent without bloating candidate flow.</span>
+                  </span>
+                  <span class="arrow" aria-hidden="true">></span>
+                </button>
+                <div class="cap-detail" id="cap-detail-1">
+                  <div class="cap-grid">
+                    <div class="cap-chip">Context-aware profile blocks tuned for recruiter review speed.</div>
+                    <div class="cap-chip">Trust signals and recommendation metadata surfaced early.</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="cap-row">
+                <button class="cap-head" aria-expanded="false" aria-controls="cap-detail-2">
+                  <span class="cap-num">02</span>
+                  <span>
+                    <span class="cap-impact">Lower Operational Friction</span>
+                    <span class="cap-name">Faster recruiter execution</span>
+                    <span class="cap-desc">Move from screening to offer publishing with less noise and cleaner context.</span>
+                  </span>
+                  <span class="arrow" aria-hidden="true">></span>
+                </button>
+                <div class="cap-detail" id="cap-detail-2">
+                  <div class="cap-grid">
+                    <div class="cap-chip">Workflow shortcuts designed for high-volume hiring teams.</div>
+                    <div class="cap-chip">Approval-safe controls and role lifecycle visibility.</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="cap-row">
+                <button class="cap-head" aria-expanded="false" aria-controls="cap-detail-3">
+                  <span class="cap-num">03</span>
+                  <span>
+                    <span class="cap-impact">Higher Funnel Activation</span>
+                    <span class="cap-name">Recommendation momentum</span>
+                    <span class="cap-desc">Surface relevant opportunities earlier with explainable ranking and updates.</span>
+                  </span>
+                  <span class="arrow" aria-hidden="true">></span>
+                </button>
+                <div class="cap-detail" id="cap-detail-3">
+                  <div class="cap-grid">
+                    <div class="cap-chip">Region and role-aware recommendation criteria for Morocco markets.</div>
+                    <div class="cap-chip">Transparent fit rationale for candidates and recruiters.</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <hr class="section-line" />
+
+        <section class="section reveal" id="pathways">
+          <div class="container">
+            <div class="row-head">
+              <p class="eyebrow">Entry Pathways</p>
+              <span class="pill">Returning users</span>
+            </div>
+            <h2 class="title-lg">Choose your lane and keep momentum.</h2>
+
+            <div class="path-grid">
+              <article class="glass-panel path-card">
+                <div>
+                  <p class="eyebrow">Candidate Space</p>
+                  <h3 class="path-title">Build once, get discovered</h3>
+                  <p class="path-copy">Create a complete profile and keep recommendations and opportunities in one surface.</p>
+                </div>
+                <a class="path-link" href="#">Open candidate space -></a>
+              </article>
+
+              <article class="glass-panel path-card">
+                <div>
+                  <p class="eyebrow">Recruiter Space</p>
+                  <h3 class="path-title">Run hiring with context</h3>
+                  <p class="path-copy">Review richer profiles, publish offers, and drive decisions in one coherent workflow.</p>
+                </div>
+                <a class="path-link" href="#">Open recruiter space -></a>
+              </article>
+
+              <article class="glass-panel path-card">
+                <div>
+                  <p class="eyebrow">Recommendations</p>
+                  <h3 class="path-title">Keep your funnel active</h3>
+                  <p class="path-copy">Generate role and city specific suggestions that keep hiring flow moving.</p>
+                </div>
+                <a class="path-link" href="#">Open recommendations -></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <hr class="section-line" />
+
+        <section class="section reveal" id="companies">
+          <div class="container">
+            <p class="eyebrow">Companies Hiring Now</p>
+            <h2 class="title-lg">Discover active teams and their hiring context.</h2>
+
+            <div class="company-list">
+              <article class="company-row">
+                <div>
+                  <div class="company-name">Atlas Systems</div>
+                  <div class="company-meta">Enterprise SaaS · Casablanca</div>
+                </div>
+                <div>
+                  <p class="company-desc">Scaling product and platform teams to accelerate B2B hiring workflows across the region.</p>
+                  <div class="company-tags">
+                    <span class="pill">Frontend</span><span class="pill">Backend</span><span class="pill">Product</span>
+                  </div>
+                </div>
+                <span class="pill opening-badge">12 Openings</span>
+              </article>
+
+              <article class="company-row">
+                <div>
+                  <div class="company-name">Northstar Labs</div>
+                  <div class="company-meta">AI Products · Rabat</div>
+                </div>
+                <div>
+                  <p class="company-desc">Building AI-first candidate discovery tools and recommendation pipelines with explainable signals.</p>
+                  <div class="company-tags">
+                    <span class="pill">ML</span><span class="pill">Data</span><span class="pill">QA</span>
+                  </div>
+                </div>
+                <span class="pill opening-badge">9 Openings</span>
+              </article>
+
+              <article class="company-row">
+                <div>
+                  <div class="company-name">Blue Dune</div>
+                  <div class="company-meta">Fintech · Tangier</div>
+                </div>
+                <div>
+                  <p class="company-desc">Hiring product designers and engineers to improve high-trust onboarding and operations flows.</p>
+                  <div class="company-tags">
+                    <span class="pill">Design</span><span class="pill">Mobile</span><span class="pill">Operations</span>
+                  </div>
+                </div>
+                <span class="pill opening-badge">6 Openings</span>
+              </article>
+
+              <article class="company-row">
+                <div>
+                  <div class="company-name">Mosaic Group</div>
+                  <div class="company-meta">Logistics Tech · Marrakech</div>
+                </div>
+                <div>
+                  <p class="company-desc">Expanding platform engineering and customer success squads for high-volume recruiter operations.</p>
+                  <div class="company-tags">
+                    <span class="pill">Platform</span><span class="pill">Success</span><span class="pill">Analytics</span>
+                  </div>
+                </div>
+                <span class="pill opening-badge">14 Openings</span>
+              </article>
+
+              <article class="company-row">
+                <div>
+                  <div class="company-name">Harbor SaaS</div>
+                  <div class="company-meta">HR Automation · Agadir</div>
+                </div>
+                <div>
+                  <p class="company-desc">Growing teams that improve recruiter decision velocity and candidate lifecycle quality.</p>
+                  <div class="company-tags">
+                    <span class="pill">Recruiting</span><span class="pill">Sales</span><span class="pill">Support</span>
+                  </div>
+                </div>
+                <span class="pill opening-badge">7 Openings</span>
+              </article>
+
+              <article class="company-row">
+                <div>
+                  <div class="company-name">Nomad Data</div>
+                  <div class="company-meta">Data Infrastructure · Casablanca</div>
+                </div>
+                <div>
+                  <p class="company-desc">Hiring data engineers and analysts to turn job-market and funnel metrics into action.</p>
+                  <div class="company-tags">
+                    <span class="pill">Data Eng</span><span class="pill">BI</span><span class="pill">Infra</span>
+                  </div>
+                </div>
+                <span class="pill opening-badge">10 Openings</span>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <hr class="section-line" />
+
+        <section class="section reveal" id="roles">
+          <div class="container">
+            <p class="eyebrow">Role Stream</p>
+            <h2 class="title-lg">High-signal opportunities this week.</h2>
+
+            <div class="tabs" role="tablist" aria-label="Role filters">
+              <button class="tab active" data-filter="all" role="tab" aria-selected="true">All</button>
+              <button class="tab" data-filter="engineering" role="tab" aria-selected="false">Engineering</button>
+              <button class="tab" data-filter="design" role="tab" aria-selected="false">Design</button>
+              <button class="tab" data-filter="data" role="tab" aria-selected="false">Data</button>
+              <button class="tab" data-filter="operations" role="tab" aria-selected="false">Operations</button>
+              <button class="tab" data-filter="success" role="tab" aria-selected="false">Success</button>
+            </div>
+
+            <div class="jobs" id="job-list">
+              <article class="job-item" data-category="engineering">
+                <button class="job-head" aria-expanded="false">
+                  <span>
+                    <span class="job-title">Senior Frontend Engineer</span>
+                    <span class="job-meta">Atlas Systems · Casablanca · Hybrid</span>
+                  </span>
+                  <span class="salary-pill">28K-36K MAD</span>
+                </button>
+                <div class="job-detail">
+                  <div class="job-detail-inner">
+                    <p class="job-copy">Own frontend architecture, design-system quality, and cross-team collaboration in a fast product environment.</p>
+                    <a class="btn btn-primary" href="#">Apply now</a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="job-item" data-category="design">
+                <button class="job-head" aria-expanded="false">
+                  <span>
+                    <span class="job-title">Product Designer</span>
+                    <span class="job-meta">Blue Dune · Rabat · Remote</span>
+                  </span>
+                  <span class="salary-pill">22K-30K MAD</span>
+                </button>
+                <div class="job-detail">
+                  <div class="job-detail-inner">
+                    <p class="job-copy">Design trust-heavy onboarding and operations flows with strong systems thinking and product craft.</p>
+                    <a class="btn btn-primary" href="#">Apply now</a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="job-item" data-category="data">
+                <button class="job-head" aria-expanded="false">
+                  <span>
+                    <span class="job-title">Data Analyst</span>
+                    <span class="job-meta">Nomad Data · Tangier · Hybrid</span>
+                  </span>
+                  <span class="salary-pill">18K-25K MAD</span>
+                </button>
+                <div class="job-detail">
+                  <div class="job-detail-inner">
+                    <p class="job-copy">Turn hiring and funnel metrics into executive-ready insight across dashboards and experimental analysis.</p>
+                    <a class="btn btn-primary" href="#">Apply now</a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="job-item" data-category="operations">
+                <button class="job-head" aria-expanded="false">
+                  <span>
+                    <span class="job-title">Technical Recruiter</span>
+                    <span class="job-meta">Harbor SaaS · Casablanca · On-site</span>
+                  </span>
+                  <span class="salary-pill">16K-22K MAD</span>
+                </button>
+                <div class="job-detail">
+                  <div class="job-detail-inner">
+                    <p class="job-copy">Partner with hiring managers and improve process throughput with measurable service levels.</p>
+                    <a class="btn btn-primary" href="#">Apply now</a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="job-item" data-category="engineering">
+                <button class="job-head" aria-expanded="false">
+                  <span>
+                    <span class="job-title">Backend Engineer</span>
+                    <span class="job-meta">Northstar Labs · Rabat · Hybrid</span>
+                  </span>
+                  <span class="salary-pill">24K-34K MAD</span>
+                </button>
+                <div class="job-detail">
+                  <div class="job-detail-inner">
+                    <p class="job-copy">Build APIs and ranking pipelines that power recruiter workflow speed and explainability.</p>
+                    <a class="btn btn-primary" href="#">Apply now</a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="job-item" data-category="success">
+                <button class="job-head" aria-expanded="false">
+                  <span>
+                    <span class="job-title">Customer Success Lead</span>
+                    <span class="job-meta">Mosaic Group · Marrakech · On-site</span>
+                  </span>
+                  <span class="salary-pill">18K-26K MAD</span>
+                </button>
+                <div class="job-detail">
+                  <div class="job-detail-inner">
+                    <p class="job-copy">Lead onboarding quality and recruiter adoption while tracking measurable activation outcomes.</p>
+                    <a class="btn btn-primary" href="#">Apply now</a>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <hr class="section-line" />
+
+        <section class="section reveal" id="process">
+          <div class="container">
+            <p class="eyebrow">Process</p>
+            <h2 class="title-lg">Seven steps from profile to placement.</h2>
+
+            <div class="process-wrap" id="process-wrap">
+              <div class="process-line" id="process-line"></div>
+              <ol class="steps" id="process-steps">
+                <li class="step">
+                  <span class="step-dot">1</span>
+                  <div>
+                    <h3 class="step-title">Access the Service</h3>
+                    <p class="step-desc">Start securely from web or mobile in seconds.</p>
+                  </div>
+                </li>
+                <li class="step">
+                  <span class="step-dot">2</span>
+                  <div>
+                    <h3 class="step-title">Register &amp; Create Profile</h3>
+                    <p class="step-desc">Build a rich profile with role context and strengths.</p>
+                  </div>
+                </li>
+                <li class="step">
+                  <span class="step-dot">3</span>
+                  <div>
+                    <h3 class="step-title">Select Search Criteria</h3>
+                    <p class="step-desc">Choose location, work mode, and preference filters.</p>
+                  </div>
+                </li>
+                <li class="step">
+                  <span class="step-dot">4</span>
+                  <div>
+                    <h3 class="step-title">AI Analysis</h3>
+                    <p class="step-desc">Coditent evaluates fit across multiple profile signals.</p>
+                  </div>
+                </li>
+                <li class="step">
+                  <span class="step-dot">5</span>
+                  <div>
+                    <h3 class="step-title">Automatic Recommendation</h3>
+                    <p class="step-desc">High-signal opportunities are ranked and prioritized.</p>
+                  </div>
+                </li>
+                <li class="step">
+                  <span class="step-dot">6</span>
+                  <div>
+                    <h3 class="step-title">Intelligent Display</h3>
+                    <p class="step-desc">Results surface with rationale and next-best actions.</p>
+                  </div>
+                </li>
+                <li class="step">
+                  <span class="step-dot">7</span>
+                  <div>
+                    <h3 class="step-title">Real-time Update</h3>
+                    <p class="step-desc">Your feed refreshes continuously as market changes.</p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <hr class="section-line" />
+
+        <section class="section reveal" id="faq">
+          <div class="container">
+            <p class="eyebrow">FAQ</p>
+            <h2 class="title-lg">Everything you need before you start.</h2>
+
+            <div class="faq-list" id="faq-list">
+              <article class="faq-item open">
+                <button class="faq-btn" aria-expanded="true">
+                  <span class="faq-q">How is Coditent different from generic job boards?</span>
+                  <span class="faq-icon">+</span>
+                </button>
+                <div class="faq-panel">
+                  <p class="faq-a">Coditent focuses on profile depth, recruiter workflow speed, and recommendation quality rather than listing volume alone.</p>
+                </div>
+              </article>
+
+              <article class="faq-item">
+                <button class="faq-btn" aria-expanded="false">
+                  <span class="faq-q">Can recruiters manage approvals and offer lifecycle here?</span>
+                  <span class="faq-icon">+</span>
+                </button>
+                <div class="faq-panel">
+                  <p class="faq-a">Yes. Recruiters can create and manage offers while admin approval keeps access trusted and role-safe.</p>
+                </div>
+              </article>
+
+              <article class="faq-item">
+                <button class="faq-btn" aria-expanded="false">
+                  <span class="faq-q">Do candidates get personalized opportunities?</span>
+                  <span class="faq-icon">+</span>
+                </button>
+                <div class="faq-panel">
+                  <p class="faq-a">Yes. Recommendations are generated from profile context and selected criteria, with fit rationale for clarity.</p>
+                </div>
+              </article>
+
+              <article class="faq-item">
+                <button class="faq-btn" aria-expanded="false">
+                  <span class="faq-q">Is this usable on mobile and desktop?</span>
+                  <span class="faq-icon">+</span>
+                </button>
+                <div class="faq-panel">
+                  <p class="faq-a">The experience is responsive by default and tuned for mobile and desktop interaction patterns.</p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer section">
+        <div class="container">
+          <div class="footer-grid">
+            <div>
+              <div class="brand">
+                <span class="brand-mark">C</span>
+                <span class="brand-word">Coditent</span>
+              </div>
+              <p class="eyebrow" style="margin-top: 0.6rem">Talent Workflow OS</p>
+              <p style="max-width: 30ch; color: var(--text-secondary)">
+                Connect candidates and recruiters in one expressive workspace.
+              </p>
+            </div>
+
+            <div>
+              <h3 class="footer-title">Product</h3>
+              <ul class="footer-list">
+                <li><a class="footer-link" href="#">Dashboard</a></li>
+                <li><a class="footer-link" href="#">Recommendations</a></li>
+                <li><a class="footer-link" href="#">Profile Builder</a></li>
+                <li><a class="footer-link" href="#">Recruiter Hub</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 class="footer-title">For Candidates</h3>
+              <ul class="footer-list">
+                <li><a class="footer-link" href="#">Create Profile</a></li>
+                <li><a class="footer-link" href="#">Track Momentum</a></li>
+                <li><a class="footer-link" href="#">Skill Positioning</a></li>
+                <li><a class="footer-link" href="#">Interview Prep</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 class="footer-title">For Recruiters</h3>
+              <ul class="footer-list">
+                <li><a class="footer-link" href="#">Publish Offers</a></li>
+                <li><a class="footer-link" href="#">Pipeline Speed</a></li>
+                <li><a class="footer-link" href="#">Candidate Review</a></li>
+                <li><a class="footer-link" href="#">Hiring Insights</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="footer-meta">
+            <span>© 2026 Coditent. All rights reserved.</span>
+            <span>Built for Morocco</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        const nav = document.getElementById("navbar");
+        const onScroll = () => {
+          if (window.scrollY > 60) {
+            nav.classList.add("scrolled");
+          } else {
+            nav.classList.remove("scrolled");
+          }
+        };
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+
+        const reveals = document.querySelectorAll(".reveal");
+        const revealObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("visible");
+                revealObserver.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.18 }
+        );
+
+        reveals.forEach((item) => revealObserver.observe(item));
+
+        const activityItems = Array.from(document.querySelectorAll("#activity-feed .activity-item"));
+        let activityIndex = 0;
+        setInterval(() => {
+          activityItems[activityIndex].classList.remove("active");
+          activityIndex = (activityIndex + 1) % activityItems.length;
+          activityItems[activityIndex].classList.add("active");
+        }, 2500);
+
+        const statsRoot = document.getElementById("stats");
+        const statsObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) {
+                return;
+              }
+
+              const valueNodes = entry.target.querySelectorAll("[data-target]");
+              valueNodes.forEach((node) => {
+                const target = Number(node.getAttribute("data-target") || "0");
+                const prefix = node.getAttribute("data-prefix") || "";
+                const suffix = node.getAttribute("data-suffix") || "";
+                const isDecimal = String(target).includes(".");
+                const start = performance.now();
+                const duration = 1200;
+
+                const tick = (now) => {
+                  const progress = Math.min((now - start) / duration, 1);
+                  const value = target * progress;
+                  const rendered = isDecimal ? value.toFixed(1) : Math.round(value).toString();
+                  node.textContent = prefix + rendered + suffix;
+                  if (progress < 1) {
+                    requestAnimationFrame(tick);
+                  }
+                };
+
+                requestAnimationFrame(tick);
+              });
+
+              statsObserver.disconnect();
+            });
+          },
+          { threshold: 0.45 }
+        );
+
+        if (statsRoot) {
+          statsObserver.observe(statsRoot);
+        }
+
+        const capRows = Array.from(document.querySelectorAll(".cap-row"));
+        capRows.forEach((row) => {
+          const trigger = row.querySelector(".cap-head");
+          trigger.addEventListener("click", () => {
+            capRows.forEach((item) => {
+              const button = item.querySelector(".cap-head");
+              const active = item === row;
+              item.classList.toggle("active", active);
+              button.setAttribute("aria-expanded", String(active));
+            });
+          });
+        });
+
+        const tabs = Array.from(document.querySelectorAll(".tab"));
+        const jobs = Array.from(document.querySelectorAll(".job-item"));
+
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            const filter = tab.getAttribute("data-filter");
+
+            tabs.forEach((item) => {
+              const active = item === tab;
+              item.classList.toggle("active", active);
+              item.setAttribute("aria-selected", String(active));
+            });
+
+            jobs.forEach((job) => {
+              const category = job.getAttribute("data-category");
+              const show = filter === "all" || filter === category;
+              job.classList.toggle("hidden", !show);
+              if (!show) {
+                job.classList.remove("open");
+                const head = job.querySelector(".job-head");
+                head.setAttribute("aria-expanded", "false");
+              }
+            });
+          });
+        });
+
+        jobs.forEach((job) => {
+          const trigger = job.querySelector(".job-head");
+          trigger.addEventListener("click", () => {
+            const next = !job.classList.contains("open");
+            job.classList.toggle("open", next);
+            trigger.setAttribute("aria-expanded", String(next));
+          });
+        });
+
+        const faqItems = Array.from(document.querySelectorAll(".faq-item"));
+        faqItems.forEach((item) => {
+          const btn = item.querySelector(".faq-btn");
+          btn.addEventListener("click", () => {
+            const isOpen = item.classList.contains("open");
+            item.classList.toggle("open", !isOpen);
+            btn.setAttribute("aria-expanded", String(!isOpen));
+          });
+        });
+
+        const processWrap = document.getElementById("process-wrap");
+        const processLine = document.getElementById("process-line");
+        const steps = Array.from(document.querySelectorAll(".step"));
+
+        const processObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) {
+                return;
+              }
+
+              processLine.classList.add("animate");
+              steps.forEach((step, index) => {
+                setTimeout(() => {
+                  step.classList.add("visible");
+                }, index * 110);
+              });
+
+              processObserver.disconnect();
+            });
+          },
+          { threshold: 0.22 }
+        );
+
+        processObserver.observe(processWrap);
+      })();
+    </script>
+  </body>
+</html>

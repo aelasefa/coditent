@@ -16,6 +16,51 @@ from app.services.ai import rank_offers
 router = APIRouter()
 
 
+def _fallback_rank_offers(
+    profile: CandidateProfile,
+    offers: list[Offer],
+) -> list[dict[str, str | int]]:
+    field_hint = (profile.field_of_study or "").strip().lower()
+    city_hint = (profile.city or "").strip().lower()
+    skills_hint = {
+        skill.strip().lower()
+        for skill in (profile.skills or "").split(",")
+        if skill.strip()
+    }
+
+    ranked_rows: list[dict[str, str | int]] = []
+    for offer in offers:
+        score = 50
+
+        offer_field = (offer.field or "").lower()
+        offer_region = (offer.region or "").lower()
+
+        if field_hint and field_hint in offer_field:
+            score += 25
+        if city_hint and city_hint in offer_region:
+            score += 20
+
+        requirements_text = f"{offer.requirements or ''} {offer.description or ''}".lower()
+        skill_hits = sum(
+            1
+            for skill in skills_hint
+            if len(skill) > 2 and skill in requirements_text
+        )
+        if skill_hits:
+            score += min(skill_hits * 6, 18)
+
+        ranked_rows.append(
+            {
+                "offer_id": str(offer.id),
+                "score": min(score, 100),
+                "reasoning": "Classement de secours applique car le scoring IA est indisponible.",
+            }
+        )
+
+    ranked_rows.sort(key=lambda row: int(row["score"]), reverse=True)
+    return ranked_rows[:10]
+
+
 @router.post("/generate", response_model=dict[str, list[RecommendationOut]])
 async def generate_recommendations(
     criteria: RecommendationRequest,
@@ -50,6 +95,8 @@ async def generate_recommendations(
         return {"recommendations": []}
 
     ai_results = await rank_offers(profile, criteria, offers)
+    if not ai_results:
+        ai_results = _fallback_rank_offers(profile, offers)
 
     await db.execute(
         delete(SavedRecommendation).where(SavedRecommendation.candidate_id == current_user.id)
@@ -109,6 +156,36 @@ async def get_recommendations(
         .order_by(SavedRecommendation.ai_score.desc())
     )
     recommendations = result.scalars().all()
+
+    active_offers_result = await db.execute(select(Offer).where(Offer.active.is_(True)))
+    active_offers = active_offers_result.scalars().all()
+
+    existing_offer_ids = {
+        recommendation.offer_id for recommendation in recommendations if recommendation.offer is not None
+    }
+    missing_offers = [offer for offer in active_offers if offer.id not in existing_offer_ids]
+
+    if missing_offers:
+        db.add_all(
+            [
+                SavedRecommendation(
+                    candidate_id=current_user.id,
+                    offer_id=offer.id,
+                    ai_score=0,
+                    ai_reasoning="Nouvelle offre ajoutee en attente du scoring IA.",
+                )
+                for offer in missing_offers
+            ]
+        )
+        await db.commit()
+
+        result = await db.execute(
+            select(SavedRecommendation)
+            .options(joinedload(SavedRecommendation.offer))
+            .where(SavedRecommendation.candidate_id == current_user.id)
+            .order_by(SavedRecommendation.ai_score.desc())
+        )
+        recommendations = result.scalars().all()
 
     return {
         "recommendations": [

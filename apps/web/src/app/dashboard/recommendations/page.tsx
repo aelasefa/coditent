@@ -7,7 +7,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { OfferCard } from "@/components/offer-card";
-import { Spinner } from "@/components/ui/spinner";
+import { LogoutButton } from "@/components/logout-button";
+import { MdButton } from "@/components/ui/md-button";
+import { MdCard } from "@/components/ui/md-card";
+import { MdField, MdInput, MdSelect } from "@/components/ui/md-field";
 import { generateRecommendations, getRecommendations } from "@/lib/api";
 
 const criteriaSchema = z.object({
@@ -43,80 +46,87 @@ export default function RecommendationsPage() {
   });
 
   const recommendations = recommendationsQuery.data ?? [];
-  const isProcessing = recommendationsQuery.isLoading || generateMutation.isPending;
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Recommendations</h1>
-        <Link className="text-sm font-medium text-slate-600 hover:text-slate-900" href="/dashboard">
-          Back to dashboard
-        </Link>
-      </header>
+    <main className="relative min-h-screen overflow-hidden bg-md-background pb-14">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="md-glow absolute -left-16 top-6 h-72 w-72 rounded-full bg-md-primary/18 blur-3xl" />
+        <div className="md-glow absolute right-0 top-1/3 h-80 w-80 rounded-full bg-md-tertiary/20 blur-3xl" />
+      </div>
 
-      <form
-        className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-4"
-        onSubmit={form.handleSubmit((values) => generateMutation.mutate(values))}
-      >
-        <div>
-          <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Field"
-            {...form.register("field")}
-          />
-          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.field?.message}</p>
-        </div>
-        <div>
-          <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Region"
-            {...form.register("region")}
-          />
-          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.region?.message}</p>
-        </div>
-        <div>
-          <select className="w-full rounded-lg border border-slate-300 px-3 py-2" {...form.register("type")}>
-            <option value="JOB">JOB</option>
-            <option value="INTERNSHIP">INTERNSHIP</option>
-          </select>
-          <p className="mt-1 min-h-5 text-xs text-rose-600">{form.formState.errors.type?.message}</p>
-        </div>
-        <button
-          className="h-10 rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
-          disabled={generateMutation.isPending}
-          type="submit"
-        >
-          {generateMutation.isPending ? "Generating..." : "Generate"}
-        </button>
-      </form>
+      <div className="relative mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <header className="md-fade-up flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">
+              Candidate insights
+            </p>
+            <h1 className="mt-1 text-3xl font-medium tracking-tight sm:text-4xl">Recommendations</h1>
+            <p className="mt-2 text-sm text-md-onSurfaceVariant">
+              Generate personalized offer recommendations by field, region, and opportunity type.
+            </p>
+          </div>
 
-      {isProcessing ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <Spinner label="AI is processing your recommendations..." />
-        </div>
-      ) : null}
+          <div className="flex items-center gap-2">
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
+              href="/profile"
+            >
+              Profile
+            </Link>
+            <LogoutButton />
+          </div>
+        </header>
 
-      {recommendationsQuery.isError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-          Failed to load recommendations. Please try again.
-        </div>
-      ) : null}
+        <MdCard className="md-fade-up md-fade-delay-1 mt-6 rounded-md-2xl p-6 sm:p-7">
+          <form
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+            onSubmit={form.handleSubmit((values) => generateMutation.mutate(values))}
+          >
+            <MdField error={form.formState.errors.field?.message} label="Field">
+              <MdInput placeholder="Informatique" {...form.register("field")} />
+            </MdField>
 
-      {!recommendationsQuery.isLoading && recommendations.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-600">
-          No recommendations found
-        </div>
-      ) : null}
+            <MdField error={form.formState.errors.region?.message} label="Region">
+              <MdInput placeholder="Casablanca" {...form.register("region")} />
+            </MdField>
 
-      <div className="space-y-3">
-        {recommendations.map((recommendation) => (
-          <OfferCard
-            key={recommendation.id}
-            offer={recommendation.offer}
-            reasoning={recommendation.reasoning ?? recommendation.ai_reasoning}
-            score={recommendation.score ?? recommendation.ai_score}
-          />
-        ))}
+            <MdField error={form.formState.errors.type?.message} label="Type">
+              <MdSelect {...form.register("type")}>
+                <option value="JOB">JOB</option>
+                <option value="INTERNSHIP">INTERNSHIP</option>
+              </MdSelect>
+            </MdField>
+
+            <div className="flex items-end">
+              <MdButton className="w-full" disabled={generateMutation.isPending} type="submit" variant="filled">
+                {generateMutation.isPending ? "Generating..." : "Generate"}
+              </MdButton>
+            </div>
+          </form>
+        </MdCard>
+
+        {(recommendationsQuery.isLoading || generateMutation.isPending) ? (
+          <MdCard className="mt-6 rounded-md-xl p-8 text-center text-md-onSurfaceVariant">
+            Loading recommendations...
+          </MdCard>
+        ) : null}
+
+        {!recommendationsQuery.isLoading && recommendations.length === 0 ? (
+          <MdCard className="mt-6 rounded-md-xl p-8 text-center text-md-onSurfaceVariant">
+            No recommendations found yet. Try generating with different criteria.
+          </MdCard>
+        ) : null}
+
+        <div className="mt-6 space-y-4">
+          {recommendations.map((recommendation) => (
+            <OfferCard
+              key={recommendation.id}
+              offer={recommendation.offer}
+              reasoning={recommendation.reasoning ?? recommendation.ai_reasoning}
+              score={recommendation.score ?? recommendation.ai_score}
+            />
+          ))}
+        </div>
       </div>
     </main>
   );

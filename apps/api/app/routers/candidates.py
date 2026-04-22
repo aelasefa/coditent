@@ -41,7 +41,7 @@ async def update_profile(
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
 
-    updates = data.model_dump(exclude_none=True)
+    updates = data.model_dump(exclude_unset=True)
     for key, value in updates.items():
         setattr(profile, key, value)
 

@@ -4,7 +4,7 @@ import { getToken, removeToken } from "@/lib/auth";
 import type { Offer, Profile, Recommendation, TokenResponse, User } from "@/lib/types";
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001",
+  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
 });
 
 api.interceptors.request.use((config: any) => {
