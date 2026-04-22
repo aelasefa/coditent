@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Roboto } from "next/font/google";
+import { Outfit, Space_Mono, Syne } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
 
@@ -8,10 +8,22 @@ export const metadata: Metadata = {
   description: "Coditent talent workflows",
 };
 
-const roboto = Roboto({
+const outfit = Outfit({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-roboto",
+  weight: ["300", "400", "500"],
+  variable: "--font-outfit",
+});
+
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-syne",
+});
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
 });
 
 export default function RootLayout({
@@ -21,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className={`${roboto.variable} min-h-full bg-md-background text-md-foreground`}>
+      <body className={`${outfit.variable} ${syne.variable} ${spaceMono.variable} min-h-full bg-md-background text-md-foreground`}>
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>

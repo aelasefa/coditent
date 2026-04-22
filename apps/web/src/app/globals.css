@@ -31,7 +31,7 @@ body {
 body {
   background: var(--md-background);
   color: var(--md-foreground);
-  font-family: var(--font-roboto), "Roboto", sans-serif;
+  font-family: var(--font-outfit), "Outfit", sans-serif;
 }
 
 a {
