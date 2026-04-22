@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
+import { Manrope, Outfit, Space_Mono, Syne } from "next/font/google";
 
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
