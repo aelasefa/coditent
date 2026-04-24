@@ -77,6 +77,14 @@ export default function LoginPage() {
       });
 
       const data = response.data;
+      if (data.user.role === "ADMIN") {
+        saveToken(data.token);
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        router.push("/admin");
+        return;
+      }
+
       const expectedRole = activeRole === "candidate" ? "CANDIDATE" : "RECRUITER";
 
       if (data.user.role !== expectedRole) {

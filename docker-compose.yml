@@ -19,6 +19,8 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: coditent-api
+    env_file:
+      - ./apps/api/.env
     depends_on:
       db:
         condition: service_healthy
