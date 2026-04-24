@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { getMe } from "@/lib/api";
+import { removeToken } from "@/lib/auth";
+import type { User } from "@/lib/types";
 import styles from "@/components/premium-landing.module.css";
 
 type RoleCategory = "all" | "engineering" | "design" | "data" | "operations" | "success";
@@ -27,17 +30,32 @@ type Stat = {
 };
 
 const activityItems = [
-  { time: "2 min ago", text: "New candidate profile completed in Casablanca." },
-  { time: "4 min ago", text: "Recruiter published Backend Engineer role in Rabat." },
-  { time: "7 min ago", text: "AI recommendations refreshed for 14 active candidates." },
-  { time: "11 min ago", text: "Three interviews moved to confirmation stage." },
-  { time: "15 min ago", text: "Priority hiring request opened by Atlas Systems." },
+  {
+    time: "2 MIN AGO",
+    text: "New candidate profile completed in Casablanca",
+    status: "LIVE",
+  },
+  {
+    time: "12 MIN AGO",
+    text: "Recruiter published Backend Engineer offer",
+    status: "QUEUED",
+  },
+  {
+    time: "1 HR AGO",
+    text: "3 matches surfaced for ML Engineer role",
+    status: "",
+  },
+  {
+    time: "3 HRS AGO",
+    text: "Atlas Systems posted 2 new openings",
+    status: "",
+  },
 ];
 
 const stats: Stat[] = [
-  { label: "Profile Completion", target: 84, suffix: "%", trend: "THIS WEEK" },
-  { label: "Recruiter Response", target: 2.3, suffix: "h", trend: "FASTER", decimal: true },
-  { label: "Offer Momentum", target: 27, suffix: "%", prefix: "+", trend: "STABLE" },
+  { label: "PROFILE COMPLETION", target: 84, suffix: "%", trend: "+5.2% THIS WEEK" },
+  { label: "RECRUITER RESPONSE", target: 2.3, suffix: "h", trend: "32 MIN FASTER", decimal: true },
+  { label: "OFFER MOMENTUM", target: 27, suffix: "%", prefix: "+", trend: "STABLE GROWTH" },
 ];
 
 const jobs: Job[] = [
@@ -116,6 +134,9 @@ export default function PremiumLanding() {
   const [openFaq, setOpenFaq] = useState(0);
   const [statsStarted, setStatsStarted] = useState(false);
   const [statValues, setStatValues] = useState([0, 0, 0]);
+  const [user, setUser] = useState<User | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const filteredJobs = useMemo(
     () => jobs.map((job) => activeRoleFilter === "all" || job.category === activeRoleFilter),
@@ -132,8 +153,42 @@ export default function PremiumLanding() {
   useEffect(() => {
     const id = window.setInterval(() => {
       setActivityIndex((prev) => (prev + 1) % activityItems.length);
-    }, 2500);
+    }, 3000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMe()
+      .then((data) => {
+        if (isMounted) {
+          setUser(data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setUser(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (!menuRef.current || !(event.target instanceof Node)) {
+        return;
+      }
+      if (!menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
   useEffect(() => {
@@ -170,6 +225,54 @@ export default function PremiumLanding() {
     return () => observer.disconnect();
   }, [statsStarted]);
 
+  const initials = useMemo(() => {
+    const fullName = user?.full_name?.trim();
+    if (!fullName) {
+      return "U";
+    }
+
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.charAt(0) ?? "";
+    const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) : "";
+    return `${first}${last}`.toUpperCase();
+  }, [user?.full_name]);
+
+  const userRole = (user?.role ?? "") as string;
+
+  const displayName = useMemo(() => {
+    const value = user?.full_name?.trim() || "User";
+    return value.length > 14 ? `${value.slice(0, 14)}...` : value;
+  }, [user?.full_name]);
+
+  const roleLabel = useMemo(() => {
+    if (userRole === "RECRUITER") {
+      return "Recruiter";
+    }
+
+    if (userRole === "ADMIN") {
+      return "Admin";
+    }
+
+    return "Candidate";
+  }, [userRole]);
+
+  const roleClass = useMemo(() => {
+    if (userRole === "RECRUITER") {
+      return styles.roleRecruiter;
+    }
+
+    if (userRole === "ADMIN") {
+      return styles.roleAdmin;
+    }
+
+    return styles.roleCandidate;
+  }, [userRole]);
+
+  function signOut() {
+    removeToken();
+    window.location.href = "/login";
+  }
+
   useEffect(() => {
     if (!statsStarted) return;
 
@@ -195,7 +298,7 @@ export default function PremiumLanding() {
       <div className={styles.ambientGlow} aria-hidden />
       <div className={styles.ambientGlowTwo} aria-hidden />
 
-      <header className={`${styles.nav} ${scrolled ? styles.navScrolled : ""}`}>
+      <header className={`${styles.nav} ${styles.contentLayer} ${scrolled ? styles.navScrolled : ""}`}>
         <div className={styles.container}>
           <div className={styles.navInner}>
             <div className={styles.brand}>
@@ -210,33 +313,81 @@ export default function PremiumLanding() {
               <a href="#roles" className={styles.navLink}>Recommendations</a>
             </nav>
 
-            <div className={styles.actions}>
-              <Link className={`${styles.btn} ${styles.btnGhost}`} href="/login">Login</Link>
-              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/register">Register</Link>
-            </div>
+            {user ? (
+              <div className={styles.profileMenu} ref={menuRef}>
+                <button
+                  className={styles.profileTrigger}
+                  type="button"
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                  aria-expanded={menuOpen}
+                >
+                  {(user as User & { avatar_url?: string | null }).avatar_url ? (
+                    <img
+                      alt={displayName}
+                      className={styles.profileAvatarImage}
+                      src={(user as User & { avatar_url?: string | null }).avatar_url as string}
+                    />
+                  ) : (
+                    <span className={styles.profileAvatarInitials}>{initials}</span>
+                  )}
+                  <span className={styles.profileName}>{displayName}</span>
+                  <span className={`${styles.roleBadge} ${roleClass}`}>{roleLabel}</span>
+                  <span className={`${styles.chevron} ${menuOpen ? styles.chevronOpen : ""}`}>▾</span>
+                </button>
+
+                {menuOpen ? (
+                  <div className={styles.menuDropdown}>
+                    <Link className={styles.menuItem} href="/profile" onClick={() => setMenuOpen(false)}>
+                      My Profile
+                    </Link>
+                    <Link className={styles.menuItem} href="/dashboard" onClick={() => setMenuOpen(false)}>
+                      Dashboard
+                    </Link>
+                    <Link className={styles.menuItem} href="/settings" onClick={() => setMenuOpen(false)}>
+                      Settings
+                    </Link>
+                    <div className={styles.menuDivider} />
+                    <button className={`${styles.menuItem} ${styles.menuSignOut}`} type="button" onClick={signOut}>
+                      Sign out
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className={styles.actions}>
+                <Link className={`${styles.btn} ${styles.btnGhost}`} href="/login">Login</Link>
+                <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/register">Register</Link>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      <main>
+      <main className={styles.contentLayer}>
         <section className={styles.hero}>
-          <div className={styles.container}>
-            <span className={`${styles.heroLabel} ${styles.loadItem} ${styles.delay0}`}>TALENT WORKFLOW PLATFORM</span>
+          <div className={styles.heroCenterWrap}>
+            <span className={`${styles.heroLabel} ${styles.loadItem} ${styles.delay0}`}>✦ TALENT WORKFLOW PLATFORM</span>
             <h1 className={`${styles.heroTitle} ${styles.loadItem} ${styles.delay1}`}>
-              Connect candidates
-              <br />
-              and <span className={styles.gradientText}>recruiters</span> in
-              <br />
-              one expressive workspace.
+              <span>Connect candidates</span>
+              <span>
+                and <span className={styles.gradientWord}>recruiters</span> in
+              </span>
+              <span>one expressive workspace.</span>
             </h1>
             <p className={`${styles.heroSubtext} ${styles.loadItem} ${styles.delay2}`}>
-              Connect candidates and recruiters in one expressive workspace built for Morocco&apos;s hiring momentum.
+              Align profile quality, recommendation signals, and offer publishing in a single surface built for Morocco&apos;s hiring momentum.
             </p>
-            <div className={`${styles.heroCtas} ${styles.loadItem} ${styles.delay3}`}>
+            <div className={`${styles.heroCtas} ${styles.heroCtasCentered} ${styles.loadItem} ${styles.delay3}`}>
               <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/register">Create account</Link>
               <Link className={`${styles.btn} ${styles.btnGhost}`} href="/dashboard/recommendations">Explore recommendations</Link>
             </div>
-            <div className={styles.featurePills}>
+
+            <p className={styles.socialProofLine}>
+              <span className={styles.socialProofStars}>★★★★★</span>
+              Trusted by 200+ companies across Morocco
+            </p>
+
+            <div className={`${styles.featurePills} ${styles.featurePillsCentered}`}>
               {[
                 "PROFILE QUALITY",
                 "RECRUITER SPEED",
@@ -246,45 +397,48 @@ export default function PremiumLanding() {
                 <span key={pill} className={styles.pill}>{pill}</span>
               ))}
             </div>
+          </div>
 
-            <div className={`${styles.panelGrid} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.panelGrid} ${styles.heroPanelGrid} ${styles.reveal}`} data-reveal>
               <article className={`${styles.glassPanel}`} id="stats-zone">
                 <div className={styles.panelTop}>
                   <h2 className={styles.panelTitle}>Pipeline Snapshot</h2>
                 </div>
-                <div className={styles.statList}>
+                <div className={`${styles.statList} ${styles.statListThreeCol}`}>
                   {stats.map((stat, index) => (
-                    <div className={styles.statItem} key={stat.label}>
-                      <div className={styles.statIcon} aria-hidden>{index === 0 ? "*" : index === 1 ? "~" : "+"}</div>
+                    <div className={`${styles.statItem} ${styles.statCard}`} key={stat.label}>
+                      <div className={styles.statTopRow}>
+                        <div className={styles.statIcon} aria-hidden>{index === 0 ? "◉" : index === 1 ? "◷" : "↗"}</div>
+                        <span className={`${styles.trendBadge} ${index === 0 ? styles.trendSuccess : index === 1 ? styles.trendInfo : styles.trendViolet}`}>{stat.trend}</span>
+                      </div>
                       <div>
-                        <div className={styles.statMeta}>
-                          <span className={styles.statLabel}>{stat.label}</span>
-                          <span className={styles.trendBadge}>{stat.trend}</span>
-                        </div>
-                        <div className={styles.statValue}>
+                        <div className={styles.statValueLarge}>
                           {(stat.prefix ?? "") + (stat.decimal ? statValues[index].toFixed(1) : Math.round(statValues[index]).toString()) + stat.suffix}
                         </div>
+                        <span className={styles.statLabel}>{stat.label}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </article>
 
-              <article className={styles.glassPanel}>
+              <article className={`${styles.glassPanel} ${styles.activityPanel}`}>
                 <div className={styles.panelTop}>
                   <h2 className={styles.panelTitle}>Live Activity</h2>
-                  <span className={styles.onlineBadge}>SYSTEM ONLINE</span>
+                  <span className={styles.onlineBadge}>● SYSTEM ONLINE</span>
                 </div>
                 <div className={styles.activityWrap}>
                   {activityItems.map((item, index) => (
                     <div key={item.time + item.text} className={`${styles.activityItem} ${index === activityIndex ? styles.activityActive : ""}`}>
-                      <div className={styles.activityTime}>{item.time}</div>
-                      <p className={styles.activityText}>{item.text}</p>
+                      <p className={styles.activityText}>• {item.text}</p>
+                      <div className={styles.activityMetaRow}>
+                        <div className={styles.activityTime}>{item.time}</div>
+                        {item.status ? <span className={styles.activityStatus}>{item.status}</span> : null}
+                      </div>
                     </div>
                   ))}
                 </div>
               </article>
-            </div>
           </div>
         </section>
 
@@ -478,7 +632,7 @@ export default function PremiumLanding() {
               <div className={`${styles.processLine} ${styles.processLineAnimate}`} />
               <ol className={styles.steps}>
                 {processSteps.map((step, index) => (
-                  <li key={step} className={`${styles.step} ${styles.stepVisible}`} style={{ transitionDelay: `${index * 90}ms` }}>
+                  <li key={step} className={`${styles.step} ${styles.stepVisible} ${styles[`stepDelay${index + 1}`]}`}>
                     <span className={styles.stepDot}>{index + 1}</span>
                     <div>
                       <h3 className={styles.stepTitle}>{step}</h3>
@@ -524,7 +678,7 @@ export default function PremiumLanding() {
         </section>
       </main>
 
-      <footer className={`${styles.footer} ${styles.section}`}>
+      <footer className={`${styles.footer} ${styles.section} ${styles.contentLayer}`}>
         <div className={styles.container}>
           <div className={styles.footerGrid}>
             <div>
