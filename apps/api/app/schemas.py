@@ -29,6 +29,11 @@ class LoginRequest(APIModel):
     password: str
 
 
+class AdminLoginRequest(APIModel):
+    email: EmailStr
+    password: str
+
+
 class TokenResponse(APIModel):
     token: str
     user: UserOut
@@ -118,3 +123,21 @@ class RecommendationOut(APIModel):
     ai_score: int
     ai_reasoning: str
     offer: OfferOut
+
+
+class AdminStatsOut(APIModel):
+    total_users: int
+    total_candidates: int
+    total_recruiters: int
+    total_offers: int
+
+
+class AdminActivityOut(APIModel):
+    id: uuid.UUID
+    action: str
+    admin_id: uuid.UUID
+    admin_email: str
+    target_user_id: uuid.UUID | None
+    target_user_email: str | None
+    details: str | None
+    created_at: datetime

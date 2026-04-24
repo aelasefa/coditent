@@ -4,7 +4,12 @@ import type { NextRequest } from "next/server";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
 function isProtectedPath(pathname: string): boolean {
-  return pathname.startsWith("/profile") || pathname.startsWith("/dashboard") || pathname.startsWith("/recruiter");
+  return (
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/recruiter") ||
+    pathname.startsWith("/admin")
+  );
 }
 
 function decodeJwtPayload(token: string): { role?: string } | null {
@@ -33,7 +38,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if ((pathname === "/login" || pathname === "/register") && token) {
+  if ((pathname === "/login" || pathname === "/register" || pathname === "/admin/login") && token) {
+    if (role === "ADMIN") {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
+
     if (role === "RECRUITER" || role === "ADMIN") {
       return NextResponse.redirect(new URL("/recruiter", request.url));
     }
@@ -49,9 +58,31 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/recruiter", request.url));
   }
 
+  if (pathname.startsWith("/admin") && role !== "ADMIN") {
+    if (!token) {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+    if (role === "RECRUITER") {
+      return NextResponse.redirect(new URL("/recruiter", request.url));
+    }
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if ((pathname.startsWith("/profile") || pathname.startsWith("/dashboard") || pathname.startsWith("/recruiter")) && role === "ADMIN") {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/profile/:path*", "/dashboard/:path*", "/recruiter/:path*", "/login", "/register"],
+  matcher: [
+    "/profile/:path*",
+    "/dashboard/:path*",
+    "/recruiter/:path*",
+    "/admin/:path*",
+    "/login",
+    "/register",
+    "/admin/login",
+  ],
 };

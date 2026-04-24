@@ -1,5 +1,4 @@
 import secrets
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -16,12 +15,12 @@ from sqlalchemy.orm import joinedload
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user, require_admin
+from app.dependencies import get_current_user
 from app.models import CandidateProfile, User, UserRole
 from app.services.admin_seed import seed_admin_user
 from app.schemas import (
+    AdminLoginRequest,
     LoginRequest,
-    RecruiterApprovalOut,
     RegisterRequest,
     TokenResponse,
     UserMeOut,
@@ -422,6 +421,41 @@ async def login(
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
+@router.post("/admin/login", response_model=TokenResponse)
+async def admin_login(
+    data: AdminLoginRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TokenResponse:
+    admin_email = (settings.admin_email or "").strip().lower()
+    admin_password = settings.admin_password or ""
+
+    if not admin_email or not admin_password:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin login not configured")
+
+    request_email = data.email.strip().lower()
+    is_valid_email = secrets.compare_digest(request_email, admin_email)
+    is_valid_password = secrets.compare_digest(data.password, admin_password)
+
+    if not is_valid_email or not is_valid_password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
+
+    admin_user, _ = await seed_admin_user(
+        db,
+        email=admin_email,
+        password=admin_password,
+        full_name=settings.admin_full_name,
+    )
+
+    token = create_access_token(
+        {
+            "sub": str(admin_user.id),
+            "email": admin_user.email,
+            "role": UserRole.ADMIN.value,
+        }
+    )
+    return TokenResponse(token=token, user=UserOut.model_validate(admin_user))
+
+
 @router.get("/me", response_model=UserMeOut)
 async def me(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -435,38 +469,3 @@ async def me(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     return UserMeOut.model_validate(user)
-
-
-@router.get("/admin/recruiters/pending", response_model=dict[str, list[RecruiterApprovalOut]])
-async def list_pending_recruiters(
-    _: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict[str, list[RecruiterApprovalOut]]:
-    result = await db.execute(
-        select(User)
-        .where(User.role == UserRole.RECRUITER, User.is_approved.is_(False))
-        .order_by(User.created_at.asc())
-    )
-    recruiters = result.scalars().all()
-    return {"recruiters": [RecruiterApprovalOut.model_validate(recruiter) for recruiter in recruiters]}
-
-
-@router.patch("/admin/recruiters/{recruiter_id}/approve", response_model=RecruiterApprovalOut)
-async def approve_recruiter(
-    recruiter_id: uuid.UUID,
-    _: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> RecruiterApprovalOut:
-    result = await db.execute(select(User).where(User.id == recruiter_id))
-    recruiter = result.scalar_one_or_none()
-
-    if recruiter is None or recruiter.role != UserRole.RECRUITER:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recruiter not found")
-
-    if recruiter.is_approved:
-        return RecruiterApprovalOut.model_validate(recruiter)
-
-    recruiter.is_approved = True
-    await db.commit()
-    await db.refresh(recruiter)
-    return RecruiterApprovalOut.model_validate(recruiter)

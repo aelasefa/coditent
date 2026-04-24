@@ -1,4 +1,4 @@
-export type UserRole = "CANDIDATE" | "RECRUITER";
+export type UserRole = "CANDIDATE" | "RECRUITER" | "ADMIN";
 
 export interface User {
   id: string;
@@ -51,4 +51,22 @@ export interface Recommendation {
 export interface TokenResponse {
   token: string;
   user: User;
+}
+
+export interface AdminStats {
+  total_users: number;
+  total_candidates: number;
+  total_recruiters: number;
+  total_offers: number;
+}
+
+export interface AdminActivity {
+  id: string;
+  action: string;
+  admin_id: string;
+  admin_email: string;
+  target_user_id: string | null;
+  target_user_email: string | null;
+  details: string | null;
+  created_at: string;
 }

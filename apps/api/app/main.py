@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import AsyncSessionLocal
 from app.dependencies import get_current_user
 from app.models import User
-from app.routers import auth, candidates, offers, recommendations
+from app.routers import admin, auth, candidates, offers, recommendations
 from app.routers.auth import ensure_default_admin_account
 
 
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.include_router(admin.router, tags=["Admin"])
 app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 app.include_router(offers.router, prefix="/offers", tags=["Offers"])
 app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])

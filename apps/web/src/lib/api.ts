@@ -2,7 +2,15 @@ import axios from "axios";
 
 import { removeToken } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
-import type { Offer, Profile, Recommendation, TokenResponse, User } from "@/lib/types";
+import type {
+  AdminActivity,
+  AdminStats,
+  Offer,
+  Profile,
+  Recommendation,
+  TokenResponse,
+  User,
+} from "@/lib/types";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
@@ -48,6 +56,14 @@ export async function login(payload: {
   password: string;
 }): Promise<TokenResponse> {
   const { data } = await api.post<TokenResponse>("/auth/login", payload);
+  return data;
+}
+
+export async function adminLogin(payload: {
+  email: string;
+  password: string;
+}): Promise<TokenResponse> {
+  const { data } = await api.post<TokenResponse>("/auth/admin/login", payload);
   return data;
 }
 
@@ -104,4 +120,44 @@ export async function generateRecommendations(payload: {
     payload
   );
   return data.recommendations;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const { data } = await api.get<AdminStats>("/admin/stats");
+  return data;
+}
+
+export async function getAdminUsers(): Promise<User[]> {
+  const { data } = await api.get<{ users: User[] }>("/admin/users");
+  return data.users;
+}
+
+export async function getAdminOffers(): Promise<Offer[]> {
+  const { data } = await api.get<{ offers: Offer[] }>("/admin/offers");
+  return data.offers;
+}
+
+export async function getPendingRecruiters(): Promise<User[]> {
+  const { data } = await api.get<{ recruiters: User[] }>("/admin/recruiters/pending");
+  return data.recruiters;
+}
+
+export async function approveRecruiter(recruiterId: string): Promise<User> {
+  const { data } = await api.patch<User>(`/admin/recruiters/${recruiterId}/approve`);
+  return data;
+}
+
+export async function rejectRecruiter(recruiterId: string): Promise<User> {
+  const { data } = await api.patch<User>(`/admin/recruiters/${recruiterId}/reject`);
+  return data;
+}
+
+export async function getAdminActivity(): Promise<AdminActivity[]> {
+  const { data } = await api.get<{ activity: AdminActivity[] }>("/admin/activity");
+  return data.activity;
+}
+
+export async function impersonateUser(userId: string): Promise<TokenResponse> {
+  const { data } = await api.post<TokenResponse>(`/admin/impersonate/${userId}`);
+  return data;
 }

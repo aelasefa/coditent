@@ -33,7 +33,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.CANDIDATE, nullable=False)
-    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -100,3 +100,16 @@ class SavedRecommendation(Base):
 
     candidate: Mapped[User] = relationship("User", back_populates="recommendations")
     offer: Mapped[Offer] = relationship("Offer", back_populates="recommendations")
+
+
+class AdminActivityLog(Base):
+    __tablename__ = "admin_activity_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action: Mapped[str] = mapped_column(String(80), nullable=False)
+    admin_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    admin_email: Mapped[str] = mapped_column(String, nullable=False)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    target_user_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
