@@ -1,38 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { LogoutButton } from "@/components/logout-button";
-import { MdButton } from "@/components/ui/md-button";
-import { MdCard } from "@/components/ui/md-card";
-import { MdField, MdInput, MdSelect, MdTextArea } from "@/components/ui/md-field";
 import { getProfile, updateProfile } from "@/lib/api";
+import styles from "./profile-builder.module.css";
 
-const urlField = z.union([z.literal(""), z.string().url("Enter a valid URL")]);
+const urlField = z.union([z.literal(""), z.string().url()]);
 
 const profileSchema = z.object({
-  headline: z.string().max(120, "Headline must be 120 characters or less"),
-  bio: z.string().max(1500, "Bio must be 1500 characters or less"),
-  skills: z.string().max(500, "Skills must be 500 characters or less"),
+  headline: z.string().max(120),
+  bio: z.string().max(500),
+  skills: z.string().max(500),
   years_of_experience: z
     .string()
-    .regex(/^\d*$/, "Use whole numbers only")
-    .refine((value) => value === "" || Number(value) <= 40, "Years must be between 0 and 40"),
-  city: z.string().max(100, "City must be 100 characters or less"),
-  phone: z.string().max(30, "Phone must be 30 characters or less"),
-  field_of_study: z.string().max(120, "Field of study must be 120 characters or less"),
-  university: z.string().max(160, "University must be 160 characters or less"),
+    .regex(/^\d*$/)
+    .refine((value) => value === "" || Number(value) <= 40),
+  city: z.string().max(100),
+  phone: z.string().max(30),
+  field_of_study: z.string().max(120),
+  university: z.string().max(160),
   study_level: z.enum(["", "BAC", "LICENCE", "MASTER", "DOCTORAT"]),
   linkedin_url: urlField,
   portfolio_url: urlField,
 });
 
 type ProfileValues = z.infer<typeof profileSchema>;
+
+const checklistItems = [
+  "Profile photo",
+  "Professional headline",
+  "Bio summary",
+  "Key skills",
+  "Years of experience",
+  "Field of study",
+  "Study level",
+  "City",
+  "Phone number",
+  "LinkedIn URL",
+  "Portfolio URL",
+];
 
 const completionKeys = [
   "headline",
@@ -45,28 +57,33 @@ const completionKeys = [
   "phone",
   "linkedin_url",
   "portfolio_url",
-] as const satisfies ReadonlyArray<keyof ProfileValues>;
+] as const;
 
-const completionLabels: Record<(typeof completionKeys)[number], string> = {
-  headline: "Professional headline",
-  bio: "Bio summary",
-  skills: "Key skills",
-  years_of_experience: "Years of experience",
-  field_of_study: "Field of study",
-  study_level: "Study level",
-  city: "City",
-  phone: "Phone number",
-  linkedin_url: "LinkedIn URL",
-  portfolio_url: "Portfolio URL",
-};
-
-function toNullable(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+function getSeniorityLabel(years: number): string {
+  if (years === 0) return "Entry level";
+  if (years <= 2) return "Junior";
+  if (years <= 5) return "Mid-level";
+  if (years <= 10) return "Senior";
+  return "Expert / Lead";
 }
 
-export default function ProfilePage() {
+function getInitials(fullName: string | null | undefined): string {
+  if (!fullName) return "U";
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) : "";
+  return `${first}${last}`.toUpperCase();
+}
+
+export default function ProfileBuilderPage() {
   const queryClient = useQueryClient();
+  const skillInputRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [displayedPercentage, setDisplayedPercentage] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+  const [aiLoading, setAiLoading] = useState<"headline" | "bio" | null>(null);
 
   const form = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -85,40 +102,13 @@ export default function ProfilePage() {
     },
   });
 
-  const watchedValues = form.watch(completionKeys);
-
-  const completedCount = useMemo(() => {
-    return watchedValues.filter(
-      (value) => typeof value === "string" && value.trim().length > 0
-    ).length;
-  }, [watchedValues]);
-
-  const completionPercent = useMemo(() => {
-    return Math.round((completedCount / completionKeys.length) * 100);
-  }, [completedCount]);
-
-  const completionItems = useMemo(() => {
-    return completionKeys.map((key, index) => {
-      const value = watchedValues[index];
-      const done = typeof value === "string" && value.trim().length > 0;
-
-      return {
-        key,
-        label: completionLabels[key],
-        done,
-      };
-    });
-  }, [watchedValues]);
-
   const profileQuery = useQuery({
     queryKey: ["profile"],
     queryFn: getProfile,
   });
 
   useEffect(() => {
-    if (!profileQuery.data) {
-      return;
-    }
+    if (!profileQuery.data) return;
 
     form.reset({
       headline: profileQuery.data.headline ?? "",
@@ -137,237 +127,473 @@ export default function ProfilePage() {
       linkedin_url: profileQuery.data.linkedin_url ?? "",
       portfolio_url: profileQuery.data.portfolio_url ?? "",
     });
-  }, [form, profileQuery.data]);
+
+    if (profileQuery.data.skills) {
+      setSkills(profileQuery.data.skills.split(",").map((s) => s.trim()).filter(Boolean));
+    }
+  }, [profileQuery.data, form]);
+
+  const watchedValues = form.watch(completionKeys);
+
+  const completedCount = useMemo(() => {
+    return watchedValues.filter((value) => typeof value === "string" && value.trim().length > 0).length;
+  }, [watchedValues]);
+
+  const completionPercent = useMemo(() => {
+    return Math.round((completedCount / 10) * 100);
+  }, [completedCount]);
+
+  useEffect(() => {
+    if (displayedPercentage === completionPercent) return;
+
+    const start = displayedPercentage;
+    const diff = completionPercent - start;
+    const duration = 600;
+    const startTime = Date.now();
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      setDisplayedPercentage(Math.round(start + diff * progress));
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [completionPercent, displayedPercentage]);
+
+  const checkedItems = useMemo(() => {
+    return watchedValues.map((value) => typeof value === "string" && value.trim().length > 0);
+  }, [watchedValues]);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    if ((e.key === "Enter" || e.key === ",") && input.value.trim()) {
+      e.preventDefault();
+      const skill = input.value.trim().replace(/,$/, "");
+      if (skill && !skills.includes(skill) && skills.length < 20) {
+        const newSkills = [...skills, skill];
+        setSkills(newSkills);
+        form.setValue("skills", newSkills.join(", "));
+        input.value = "";
+      }
+    }
+  };
+
+  const handleRemoveSkill = (skill: string) => {
+    const newSkills = skills.filter((s) => s !== skill);
+    setSkills(newSkills);
+    form.setValue("skills", newSkills.join(", "));
+  };
 
   const updateMutation = useMutation({
     mutationFn: updateProfile,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    },
+    onError: () => {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 2000);
     },
   });
 
-  const updatedAtLabel = useMemo(() => {
-    if (!profileQuery.data?.updated_at) {
-      return "Not updated yet";
+  const handleGenerateHeadline = async () => {
+    if (skills.length === 0) return;
+    setAiLoading("headline");
+    try {
+      const res = await fetch("/api/ai/generate-headline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skills,
+          fieldOfStudy: form.getValues("field_of_study"),
+        }),
+      });
+      const data = await res.json();
+      form.setValue("headline", data.headline);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAiLoading(null);
     }
+  };
 
-    return new Date(profileQuery.data.updated_at).toLocaleString();
-  }, [profileQuery.data?.updated_at]);
+  const handleGenerateBio = async () => {
+    if (skills.length === 0) return;
+    setAiLoading("bio");
+    try {
+      const res = await fetch("/api/ai/generate-bio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skills,
+          fieldOfStudy: form.getValues("field_of_study"),
+          headline: form.getValues("headline"),
+        }),
+      });
+      const data = await res.json();
+      form.setValue("bio", data.bio);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleSave = form.handleSubmit(async (values) => {
+    const years = values.years_of_experience.trim();
+    updateMutation.mutate({
+      headline: values.headline.trim() || null,
+      bio: values.bio.trim() || null,
+      skills: skills.length > 0 ? skills.join(", ") : null,
+      years_of_experience: years ? Number(years) : null,
+      city: values.city.trim() || null,
+      phone: values.phone.trim() || null,
+      field_of_study: values.field_of_study.trim() || null,
+      university: values.university.trim() || null,
+      study_level: values.study_level || null,
+      linkedin_url: values.linkedin_url.trim() || null,
+      portfolio_url: values.portfolio_url.trim() || null,
+    });
+  });
+
+  const bioValue = form.watch("bio");
+  const bioChars = bioValue.length;
+  const bioAtMax = bioChars >= 500;
+
+  const stepperValue = form.watch("years_of_experience");
+  const expValue = stepperValue ? Number(stepperValue) : 0;
+
+  const linkedinUrl = form.watch("linkedin_url");
+  const portfolioUrl = form.watch("portfolio_url");
+
+  const isLinkedinValid =
+    !linkedinUrl || linkedinUrl === "" || linkedinUrl.startsWith("http://") || linkedinUrl.startsWith("https://");
+  const isPortfolioValid =
+    !portfolioUrl || portfolioUrl === "" || portfolioUrl.startsWith("http://") || portfolioUrl.startsWith("https://");
+
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - displayedPercentage / 100);
+
+  const lastUpdated = profileQuery.data?.updated_at
+    ? new Date(profileQuery.data.updated_at).toLocaleDateString()
+    : "Not updated";
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-md-background pb-14">
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="md-glow absolute -left-20 top-8 h-80 w-80 rounded-full bg-md-primary/18 blur-3xl" />
-        <div className="md-glow absolute -right-24 top-1/3 h-96 w-96 rounded-full bg-md-tertiary/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 h-72 w-72 rounded-full bg-md-secondaryContainer/50 blur-3xl" />
-      </div>
+    <div className={styles.builderShell}>
+      {/* LEFT PANEL */}
+      <aside className={styles.builderLeft}>
+        <div className={styles.leftHeader}>
+          <p className={styles.eyebrow}>CANDIDATE WORKSPACE</p>
+          <h1 className={styles.title}>Profile builder</h1>
+          <p className={styles.subtitle}>Build a recruiter-ready profile</p>
 
-      <div className="relative mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="md-fade-up flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">
-              Candidate workspace
-            </p>
-            <h1 className="mt-1 text-3xl font-medium tracking-tight sm:text-4xl">Profile builder</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-md-onSurfaceVariant sm:text-base">
-              Build a recruiter-ready profile with clearer context and stronger recommendations.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
-              href="/dashboard/recommendations"
-            >
+          <div className={styles.headerActions}>
+            <Link href="/dashboard/recommendations" className={styles.actionBtn}>
               Recommendations
             </Link>
             <LogoutButton />
           </div>
-        </header>
-
-        <div className="mt-7 grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-            <MdCard className="md-fade-up p-6">
-              <p className="text-xs uppercase tracking-[0.12em] text-md-onSurfaceVariant">Profile strength</p>
-              <div className="mt-3 flex items-end justify-between gap-3">
-                <p className="text-4xl font-medium text-md-primary">{completionPercent}%</p>
-                <p className="text-right text-xs text-md-onSurfaceVariant">
-                  {completedCount}/{completionKeys.length} sections completed
-                </p>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-md-secondaryContainer">
-                <div
-                  className="h-full rounded-full bg-md-primary transition-all duration-300 ease-md"
-                  style={{ width: `${completionPercent}%` }}
-                />
-              </div>
-              <p className="mt-3 text-xs text-md-onSurfaceVariant">Last updated: {updatedAtLabel}</p>
-            </MdCard>
-
-            <MdCard className="md-fade-up md-fade-delay-1 p-6">
-              <h2 className="text-sm font-medium">Profile checklist</h2>
-              <ul className="mt-3 space-y-2.5">
-                {completionItems.map((item, index) => (
-                  <li className="flex items-center gap-2" key={item.key}>
-                    <span
-                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-medium ${
-                        item.done
-                          ? "border-md-primary bg-md-secondaryContainer text-md-primary"
-                          : "border-md-outline/50 bg-md-background text-md-onSurfaceVariant"
-                      }`}
-                    >
-                      {item.done ? "v" : index + 1}
-                    </span>
-                    <span className={`text-sm ${item.done ? "text-md-foreground" : "text-md-onSurfaceVariant"}`}>
-                      {item.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </MdCard>
-          </aside>
-
-          <form
-            className="space-y-5"
-            onSubmit={form.handleSubmit((values) => {
-              const years = values.years_of_experience.trim();
-              updateMutation.mutate({
-                headline: toNullable(values.headline),
-                bio: toNullable(values.bio),
-                skills: toNullable(values.skills),
-                years_of_experience: years ? Number(years) : null,
-                city: toNullable(values.city),
-                phone: toNullable(values.phone),
-                field_of_study: toNullable(values.field_of_study),
-                university: toNullable(values.university),
-                study_level: values.study_level || null,
-                linkedin_url: toNullable(values.linkedin_url),
-                portfolio_url: toNullable(values.portfolio_url),
-              });
-            })}
-          >
-            <MdCard className="md-fade-up p-6 sm:p-7">
-              <h2 className="text-xl font-medium">Professional snapshot</h2>
-              <p className="mt-1 text-sm text-md-onSurfaceVariant">
-                Give recruiters a fast view of your role, strengths, and impact.
-              </p>
-
-              <div className="mt-5 space-y-4">
-                <MdField error={form.formState.errors.headline?.message} label="Headline">
-                  <MdInput
-                    placeholder="Junior Data Analyst focused on retail insights"
-                    {...form.register("headline")}
-                  />
-                </MdField>
-
-                <MdField error={form.formState.errors.bio?.message} label="Bio">
-                  <MdTextArea
-                    placeholder="Summarize your strengths, project context, and practical impact."
-                    rows={5}
-                    {...form.register("bio")}
-                  />
-                </MdField>
-
-                <MdField error={form.formState.errors.skills?.message} label="Skills">
-                  <MdTextArea
-                    placeholder="Comma separated: Python, SQL, Power BI, client communication"
-                    rows={3}
-                    {...form.register("skills")}
-                  />
-                </MdField>
-
-                <MdField
-                  error={form.formState.errors.years_of_experience?.message}
-                  label="Years of experience"
-                >
-                  <MdInput min={0} max={40} placeholder="0" type="number" {...form.register("years_of_experience")} />
-                </MdField>
-              </div>
-            </MdCard>
-
-            <MdCard className="md-fade-up md-fade-delay-1 p-6 sm:p-7">
-              <h2 className="text-xl font-medium">Education</h2>
-              <p className="mt-1 text-sm text-md-onSurfaceVariant">
-                Add background details that improve recommendation quality.
-              </p>
-
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <MdField error={form.formState.errors.field_of_study?.message} label="Field of study">
-                  <MdInput placeholder="Computer Science" {...form.register("field_of_study")} />
-                </MdField>
-
-                <MdField error={form.formState.errors.university?.message} label="University">
-                  <MdInput placeholder="ENSA Casablanca" {...form.register("university")} />
-                </MdField>
-
-                <MdField error={form.formState.errors.study_level?.message} label="Study level">
-                  <MdSelect {...form.register("study_level")}>
-                    <option value="">Select level</option>
-                    <option value="BAC">BAC</option>
-                    <option value="LICENCE">LICENCE</option>
-                    <option value="MASTER">MASTER</option>
-                    <option value="DOCTORAT">DOCTORAT</option>
-                  </MdSelect>
-                </MdField>
-              </div>
-            </MdCard>
-
-            <MdCard className="md-fade-up md-fade-delay-2 p-6 sm:p-7">
-              <h2 className="text-xl font-medium">Contact and links</h2>
-              <p className="mt-1 text-sm text-md-onSurfaceVariant">
-                Help recruiters reach you and verify your online profile.
-              </p>
-
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <MdField error={form.formState.errors.city?.message} label="City">
-                  <MdInput placeholder="Rabat" {...form.register("city")} />
-                </MdField>
-
-                <MdField error={form.formState.errors.phone?.message} label="Phone">
-                  <MdInput placeholder="+212 6 00 00 00 00" {...form.register("phone")} />
-                </MdField>
-
-                <MdField error={form.formState.errors.linkedin_url?.message} label="LinkedIn URL">
-                  <MdInput
-                    placeholder="https://www.linkedin.com/in/your-profile"
-                    {...form.register("linkedin_url")}
-                  />
-                </MdField>
-
-                <MdField error={form.formState.errors.portfolio_url?.message} label="Portfolio URL">
-                  <MdInput placeholder="https://your-portfolio.com" {...form.register("portfolio_url")} />
-                </MdField>
-              </div>
-            </MdCard>
-
-            <MdCard className="md-fade-up md-fade-delay-3 p-6 sm:p-7">
-              {profileQuery.isLoading ? (
-                <p className="text-sm text-md-onSurfaceVariant">Loading profile...</p>
-              ) : null}
-
-              {profileQuery.isError ? (
-                <p className="text-sm font-medium text-rose-700">
-                  Unable to load profile right now. You can still edit and save.
-                </p>
-              ) : null}
-
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <MdButton disabled={updateMutation.isPending} type="submit" variant="filled">
-                  {updateMutation.isPending ? "Saving..." : "Save profile"}
-                </MdButton>
-
-                {updateMutation.isSuccess ? (
-                  <p className="text-sm font-medium text-emerald-700">Profile saved.</p>
-                ) : null}
-
-                {updateMutation.isError ? (
-                  <p className="text-sm font-medium text-rose-700">Save failed. Check your entries and retry.</p>
-                ) : null}
-              </div>
-            </MdCard>
-          </form>
         </div>
-      </div>
-    </main>
+
+        <div className={styles.ringContainer}>
+          <div className={styles.ringWrapper}>
+            <svg className={styles.ringSvg} viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#7C3AED" />
+                  <stop offset="100%" stopColor="#A855F7" />
+                </linearGradient>
+              </defs>
+              <circle cx="50" cy="50" r={radius} stroke="rgba(124, 58, 237, 0.12)" strokeWidth="8" fill="none" />
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                stroke="url(#ringGradient)"
+                strokeWidth="8"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                style={{ transition: "stroke-dashoffset 700ms cubic-bezier(0.4, 0, 0.2, 1)" }}
+              />
+            </svg>
+
+            <div className={styles.ringCenter}>
+              <div className={styles.percentage}>{displayedPercentage}%</div>
+              <div className={styles.completeLabel}>complete</div>
+            </div>
+          </div>
+
+          <div className={styles.ringStats}>
+            <p className={styles.ringStatLine}>{completedCount} / 10 fields filled</p>
+            <p className={styles.ringStatLine}>Last updated: {lastUpdated}</p>
+          </div>
+        </div>
+
+        <div className={styles.checklist}>
+          <p className={styles.checklistLabel}>Profile checklist</p>
+          {checklistItems.map((label, index) => (
+            <div key={label} className={styles.checkItem}>
+              <div className={`${styles.checkDot} ${checkedItems[index] ? styles.checkDotFilled : styles.checkDotEmpty}`}>
+                {checkedItems[index] ? "✓" : index + 1}
+              </div>
+              <span className={`${styles.checkLabel} ${checkedItems[index] ? styles.checkLabelFilled : styles.checkLabelEmpty}`}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* RIGHT PANEL */}
+      <main className={styles.builderRight}>
+        <form onSubmit={handleSave} className={styles.fieldGroup}>
+          {/* SECTION 1: PROFILE PHOTO */}
+          <section id="section-photo" className={`${styles.sectionCard} ${styles.sectionCardAnimate1}`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Profile photo</h2>
+              <p className={styles.sectionSubtitle}>Helps recruiters recognize you.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+
+            <div className={styles.uploadSection}>
+              <div className={styles.avatarPreview}>
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Avatar" className={styles.avatarImage} />
+                ) : (
+                  getInitials(form.getValues("headline") || "")
+                )}
+              </div>
+              <label className={styles.uploadZone}>
+                <div className={styles.uploadIcon}>📷</div>
+                <div className={styles.uploadText}>Drop photo or click to upload</div>
+                <div className={styles.uploadSubtext}>PNG, JPG up to 5MB</div>
+                <input type="file" accept="image/*" onChange={handlePhotoChange} className={styles.fileInput} />
+              </label>
+            </div>
+          </section>
+
+          {/* SECTION 2: PROFESSIONAL SNAPSHOT */}
+          <section id="section-snapshot" className={`${styles.sectionCard} ${styles.sectionCardAnimate2}`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Professional snapshot</h2>
+              <p className={styles.sectionSubtitle}>Give recruiters a fast view of your role, strengths, and impact.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+
+            <div className={styles.fieldGroup}>
+              <div>
+                <label className={styles.fieldLabel}>Headline</label>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="Junior Data Analyst focused on retail insights"
+                  {...form.register("headline")}
+                />
+                <button type="button" className={styles.aiBtn} onClick={handleGenerateHeadline} disabled={aiLoading === "headline"}>
+                  {aiLoading === "headline" ? "⏳ Generating..." : "✦ Generate with AI"}
+                </button>
+              </div>
+
+              <div>
+                <label className={styles.fieldLabel}>Bio</label>
+                <textarea
+                  className={styles.textarea}
+                  placeholder="Summarize your strengths, project context, and practical impact."
+                  {...form.register("bio")}
+                  disabled={bioAtMax}
+                />
+                <div className={`${styles.characterCounter} ${bioChars > 450 ? styles.characterCounterWarning : ""} ${bioAtMax ? styles.characterCounterError : ""}`}>
+                  {bioChars} / 500
+                </div>
+                <button type="button" className={styles.aiBtn} onClick={handleGenerateBio} disabled={aiLoading === "bio"}>
+                  {aiLoading === "bio" ? "⏳ Generating..." : "✦ Generate with AI"}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION 3: KEY SKILLS */}
+          <section id="section-skills" className={`${styles.sectionCard} ${styles.sectionCardAnimate3}`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Key skills</h2>
+              <p className={styles.sectionSubtitle}>Add skills one by one — these power your AI recommendations.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+
+            <div className={styles.skillsWrap} onClick={() => skillInputRef.current?.focus()}>
+              {skills.map((skill) => (
+                <div key={skill} className={styles.skillChip}>
+                  {skill}
+                  <button
+                    type="button"
+                    className={styles.skillRemoveBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleRemoveSkill(skill);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <input
+                ref={skillInputRef}
+                type="text"
+                className={styles.skillInput}
+                placeholder={skills.length === 0 ? "Add a skill..." : ""}
+                onKeyDown={handleAddSkill}
+              />
+            </div>
+            {skills.length >= 20 && <div className={styles.skillsMax}>Maximum 20 skills reached</div>}
+          </section>
+
+          {/* SECTION 4: EXPERIENCE */}
+          <section id="section-experience" className={`${styles.sectionCard} ${styles.sectionCardAnimate4}`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Experience</h2>
+              <p className={styles.sectionSubtitle}>Help recruiters calibrate your seniority.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+
+            <div className={styles.stepperWrap}>
+              <button
+                type="button"
+                className={styles.stepperBtn}
+                onClick={() => {
+                  const val = expValue > 0 ? expValue - 1 : 0;
+                  form.setValue("years_of_experience", String(val));
+                }}
+              >
+                −
+              </button>
+              <div className={styles.stepperValue}>{expValue}</div>
+              <button
+                type="button"
+                className={styles.stepperBtn}
+                onClick={() => {
+                  const val = expValue < 40 ? expValue + 1 : 40;
+                  form.setValue("years_of_experience", String(val));
+                }}
+              >
+                +
+              </button>
+            </div>
+            <div className={styles.seniorityLabel}>{getSeniorityLabel(expValue)}</div>
+          </section>
+
+          {/* SECTION 5: EDUCATION */}
+          <section id="section-education" className={`${styles.sectionCard} ${styles.sectionCardAnimate5}`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Education</h2>
+              <p className={styles.sectionSubtitle}>Add background details that improve recommendation quality.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+
+            <div className={styles.gridTwo}>
+              <div>
+                <label className={styles.fieldLabel}>Field of study</label>
+                <input type="text" className={styles.input} placeholder="Computer Science" {...form.register("field_of_study")} />
+              </div>
+
+              <div>
+                <label className={styles.fieldLabel}>University</label>
+                <input type="text" className={styles.input} placeholder="ENSA Casablanca" {...form.register("university")} />
+              </div>
+
+              <div>
+                <label className={styles.fieldLabel}>Study level</label>
+                <select className={styles.selectTrigger} {...form.register("study_level")}>
+                  <option value="">Select level</option>
+                  <option value="BAC">BAC</option>
+                  <option value="LICENCE">LICENCE</option>
+                  <option value="MASTER">MASTER</option>
+                  <option value="DOCTORAT">DOCTORAT</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION 6: CONTACT AND LINKS */}
+          <section id="section-contact" className={`${styles.sectionCard} ${styles.sectionCardAnimate6}`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Contact and links</h2>
+              <p className={styles.sectionSubtitle}>Help recruiters reach you and verify your online presence.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+
+            <div className={styles.gridTwo}>
+              <div>
+                <label className={styles.fieldLabel}>City</label>
+                <input type="text" className={styles.input} placeholder="Rabat" {...form.register("city")} />
+              </div>
+
+              <div>
+                <label className={styles.fieldLabel}>Phone</label>
+                <input type="tel" className={styles.input} placeholder="+212 6 00 00 00 00" {...form.register("phone")} />
+              </div>
+
+              <div className={styles.urlValidation}>
+                <label className={styles.fieldLabel}>LinkedIn URL</label>
+                <input
+                  type="text"
+                  className={`${styles.input} ${!isLinkedinValid ? styles.inputInvalid : ""}`}
+                  placeholder="https://www.linkedin.com/in/your-profile"
+                  {...form.register("linkedin_url")}
+                />
+                {linkedinUrl && linkedinUrl !== "" && (
+                  <div className={`${styles.urlValidationIcon} ${isLinkedinValid ? styles.urlValid : styles.urlInvalid}`}>
+                    {isLinkedinValid ? "✓" : "✗"}
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.urlValidation}>
+                <label className={styles.fieldLabel}>Portfolio URL</label>
+                <input
+                  type="text"
+                  className={`${styles.input} ${!isPortfolioValid ? styles.inputInvalid : ""}`}
+                  placeholder="https://your-portfolio.com"
+                  {...form.register("portfolio_url")}
+                />
+                {portfolioUrl && portfolioUrl !== "" && (
+                  <div className={`${styles.urlValidationIcon} ${isPortfolioValid ? styles.urlValid : styles.urlInvalid}`}>
+                    {isPortfolioValid ? "✓" : "✗"}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </form>
+      </main>
+
+      {/* FLOATING SAVE BUTTON */}
+      <button
+        onClick={handleSave}
+        disabled={updateMutation.isPending}
+        className={`${styles.saveBtn} ${saveStatus === "success" ? styles.saveBtnSuccess : ""} ${saveStatus === "error" ? styles.saveBtnError : ""} ${updateMutation.isPending ? styles.saveBtnLoading : ""}`}
+      >
+        {updateMutation.isPending ? "⏳ Saving..." : saveStatus === "success" ? "✓ Saved" : saveStatus === "error" ? "✗ Error" : "Save profile"}
+      </button>
+    </div>
   );
 }
