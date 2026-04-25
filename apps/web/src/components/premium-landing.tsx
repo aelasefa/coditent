@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getMe } from "@/lib/api";
 import { removeToken } from "@/lib/auth";
+import { categories } from "@/lib/categories";
 import type { User } from "@/lib/types";
 import styles from "@/components/premium-landing.module.css";
 
@@ -126,6 +128,7 @@ const processSteps = [
 ];
 
 export default function PremiumLanding() {
+  const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
   const [activityIndex, setActivityIndex] = useState(0);
   const [activeCapability, setActiveCapability] = useState(0);
@@ -372,7 +375,7 @@ export default function PremiumLanding() {
               <span>
                 and <span className={styles.gradientWord}>recruiters</span> in
               </span>
-              <span>one expressive workspace.</span>
+              <span>one <span className={styles.underlineWord}>expressive</span> workspace.</span>
             </h1>
             <p className={`${styles.heroSubtext} ${styles.loadItem} ${styles.delay2}`}>
               Align profile quality, recommendation signals, and offer publishing in a single surface built for Morocco&apos;s hiring momentum.
@@ -570,6 +573,39 @@ export default function PremiumLanding() {
                   </div>
                   <span className={`${styles.pill} ${styles.openingBadge}`}>{openings}</span>
                 </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <hr className={styles.sectionLine} />
+
+        <section className={styles.categorySection}>
+          <div className={styles.container}>
+            <p className={styles.eyebrow}>EXPLORE BY CATEGORY</p>
+            <h2 className={styles.categoryTitle}>
+              Find your next role in{' '}
+              <span className={styles.underlineWord}>any field.</span>
+            </h2>
+            <div className={styles.categoryGrid}>
+              {categories.map((cat, index) => (
+                <button
+                  key={cat.label}
+                  className={styles.categoryCard}
+                  style={{ animationDelay: `${index * 60}ms` }}
+                  onClick={() => router.push(`/offers/${cat.slug}`)}
+                  type="button"
+                >
+                  <span
+                    className={styles.categoryEmoji}
+                    style={{ background: cat.bg }}
+                  >
+                    <span className={styles.categoryEmojiShine} />
+                    {cat.emoji}
+                  </span>
+                  <span className={styles.categoryArrow}>↗</span>
+                  <span className={styles.categoryLabel}>{cat.label}</span>
+                </button>
               ))}
             </div>
           </div>
