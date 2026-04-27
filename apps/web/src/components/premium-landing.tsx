@@ -8,6 +8,7 @@ import { getMe } from "@/lib/api";
 import { removeToken } from "@/lib/auth";
 import { categories } from "@/lib/categories";
 import type { User } from "@/lib/types";
+import CoditentLogo from "@/components/CoditentLogo";
 import styles from "@/components/premium-landing.module.css";
 
 type RoleCategory = "all" | "engineering" | "design" | "data" | "operations" | "success";
@@ -305,8 +306,19 @@ export default function PremiumLanding() {
         <div className={styles.container}>
           <div className={styles.navInner}>
             <div className={styles.brand}>
-              <span className={styles.brandMark}>C</span>
-              <span className={styles.brandWord}>Coditent</span>
+              <button
+                className={styles.logoBtn}
+                onClick={() => window.location.reload()}
+                type="button"
+                aria-label="Refresh page"
+                title="Click to refresh"
+              >
+                <CoditentLogo
+                  size={36}
+                  useSvg={false}
+                  className={styles.logoMark}
+                />
+              </button>
               <span className={styles.livePill}><span className={styles.liveDot} />LIVE</span>
             </div>
 
@@ -603,8 +615,11 @@ export default function PremiumLanding() {
                     <span className={styles.categoryEmojiShine} />
                     {cat.emoji}
                   </span>
+                  <div className={styles.categoryText}>
+                    <span className={styles.categoryLabel}>{cat.label}</span>
+                    <span className={styles.categoryDesc}>{cat.desc}</span>
+                  </div>
                   <span className={styles.categoryArrow}>↗</span>
-                  <span className={styles.categoryLabel}>{cat.label}</span>
                 </button>
               ))}
             </div>
@@ -717,36 +732,127 @@ export default function PremiumLanding() {
       <footer className={`${styles.footer} ${styles.section} ${styles.contentLayer}`}>
         <div className={styles.container}>
           <div className={styles.footerGrid}>
-            <div>
+            <div className={styles.footerBrand}>
               <div className={styles.brand}>
                 <span className={styles.brandMark}>C</span>
                 <span className={styles.brandWord}>Coditent</span>
               </div>
               <p className={styles.eyebrow}>TALENT WORKFLOW OS</p>
               <p className={styles.footerCopy}>Connect candidates and recruiters in one expressive workspace.</p>
+              <div className={styles.footerSocials}>
+                <a
+                  href="https://www.coditent.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.footerSocialLink}
+                >
+                  🌐 coditent.com
+                </a>
+              </div>
             </div>
             <div>
               <h3 className={styles.footerTitle}>Product</h3>
               <ul className={styles.footerList}>
-                <li>Dashboard</li><li>Recommendations</li><li>Profile Builder</li><li>Recruiter Hub</li>
+                <li>
+                  <Link href="/dashboard" className={styles.footerLink}>
+                    Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/dashboard/recommendations" className={styles.footerLink}>
+                    Recommendations
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/dashboard/profile" className={styles.footerLink}>
+                    Profile Builder
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/offers/all" className={styles.footerLink}>
+                    Browse Offers
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/recruiter/offers/new" className={styles.footerLink}>
+                    Recruiter Hub
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h3 className={styles.footerTitle}>For Candidates</h3>
               <ul className={styles.footerList}>
-                <li>Create Profile</li><li>Track Momentum</li><li>Skill Positioning</li><li>Interview Prep</li>
+                <li>
+                  <Link href="/dashboard/profile" className={styles.footerLink}>
+                    Create Profile
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/dashboard/recommendations" className={styles.footerLink}>
+                    My Recommendations
+                  </Link>
+                </li>
+                <li>
+                  <span className={styles.footerLinkDisabled}>
+                    Track Momentum
+                    <span className={styles.comingSoon}>Soon</span>
+                  </span>
+                </li>
+                <li>
+                  <span className={styles.footerLinkDisabled}>
+                    Skill Positioning
+                    <span className={styles.comingSoon}>Soon</span>
+                  </span>
+                </li>
+                <li>
+                  <span className={styles.footerLinkDisabled}>
+                    Interview Prep
+                    <span className={styles.comingSoon}>Soon</span>
+                  </span>
+                </li>
               </ul>
             </div>
             <div>
               <h3 className={styles.footerTitle}>For Recruiters</h3>
               <ul className={styles.footerList}>
-                <li>Publish Offers</li><li>Pipeline Speed</li><li>Candidate Review</li><li>Hiring Insights</li>
+                <li>
+                  <Link href="/recruiter/offers/new" className={styles.footerLink}>
+                    Publish Offers
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/recruiter" className={styles.footerLink}>
+                    Recruiter Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <span className={styles.footerLinkDisabled}>
+                    Pipeline Speed
+                    <span className={styles.comingSoon}>Soon</span>
+                  </span>
+                </li>
+                <li>
+                  <span className={styles.footerLinkDisabled}>
+                    Candidate Review
+                    <span className={styles.comingSoon}>Soon</span>
+                  </span>
+                </li>
+                <li>
+                  <span className={styles.footerLinkDisabled}>
+                    Hiring Insights
+                    <span className={styles.comingSoon}>Soon</span>
+                  </span>
+                </li>
               </ul>
             </div>
           </div>
           <div className={styles.footerMeta}>
             <span>(c) 2026 Coditent. All rights reserved.</span>
-            <span>Built for Morocco</span>
+            <div className={styles.footerMetaRight}>
+              <span className={styles.footerMetaDot}>•</span>
+              <span>Built for Morocco</span>
+            </div>
           </div>
         </div>
       </footer>
