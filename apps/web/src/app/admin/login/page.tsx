@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import axios from "axios";
 
@@ -12,6 +12,7 @@ import { saveToken } from "@/lib/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +31,12 @@ export default function AdminLoginPage() {
       const data = await adminLogin({ email, password });
       saveToken(data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/admin");
+      const nextParam = searchParams.get("next");
+      const nextPath =
+        nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+          ? nextParam
+          : null;
+      router.push(nextPath ?? "/admin");
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         setErrorMessage("Invalid admin credentials.");

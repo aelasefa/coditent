@@ -4,12 +4,23 @@ import type { NextRequest } from "next/server";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
 function isProtectedPath(pathname: string): boolean {
+  if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login") {
+    return false;
+  }
+
   return (
     pathname.startsWith("/profile") ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/recruiter") ||
     pathname.startsWith("/admin")
   );
+}
+
+function buildLoginRedirect(request: NextRequest): URL {
+  const { pathname, search } = request.nextUrl;
+  const nextPath = encodeURIComponent(`${pathname}${search}`);
+  const loginPath = pathname.startsWith("/admin") ? "/admin/login" : "/login";
+  return new URL(`${loginPath}?next=${nextPath}`, request.url);
 }
 
 function decodeJwtPayload(token: string): { role?: string } | null {
@@ -35,7 +46,7 @@ export function middleware(request: NextRequest) {
   const role = token ? decodeJwtPayload(token)?.role : null;
 
   if (isProtectedPath(pathname) && !token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(buildLoginRedirect(request));
   }
 
   if ((pathname === "/login" || pathname === "/register" || pathname === "/admin/login") && token) {
@@ -58,9 +69,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/recruiter", request.url));
   }
 
+  if (pathname === "/admin/login") {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/admin") && role !== "ADMIN") {
     if (!token) {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
+      return NextResponse.redirect(buildLoginRedirect(request));
     }
     if (role === "RECRUITER") {
       return NextResponse.redirect(new URL("/recruiter", request.url));

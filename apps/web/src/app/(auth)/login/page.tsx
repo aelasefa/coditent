@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useState } from "react";
 
@@ -51,6 +51,7 @@ const roleContent: Record<
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeRole, setActiveRole] = useState<LoginRole>("candidate");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,11 +78,17 @@ export default function LoginPage() {
       });
 
       const data = response.data;
+      const nextParam = searchParams.get("next");
+      const nextPath =
+        nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+          ? nextParam
+          : null;
+
       if (data.user.role === "ADMIN") {
         saveToken(data.token);
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
-        router.push("/admin");
+        router.push(nextPath ?? "/admin");
         return;
       }
 
@@ -103,6 +110,11 @@ export default function LoginPage() {
       saveToken(data.token);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      if (nextPath) {
+        router.push(nextPath);
+        return;
+      }
 
       router.push(data.user.role === "RECRUITER" ? "/recruiter" : "/dashboard");
     } catch (error) {

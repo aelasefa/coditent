@@ -16,6 +16,28 @@ export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
 });
 
+const protectedPrefixes = ["/profile", "/dashboard", "/recruiter", "/admin"];
+
+function isProtectedPath(pathname: string): boolean {
+  if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login") {
+    return false;
+  }
+
+  return protectedPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+function buildLoginRedirect(pathname: string, search: string): string {
+  const nextPath = encodeURIComponent(`${pathname}${search ?? ""}`);
+
+  if (pathname.startsWith("/admin")) {
+    return `/admin/login?next=${nextPath}`;
+  }
+
+  return `/login?next=${nextPath}`;
+}
+
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -30,10 +52,19 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (typeof window !== "undefined" && error?.response?.status === 401) {
+    const skipRedirect = Boolean(
+      (error?.config as { skipAuthRedirect?: boolean } | undefined)?.skipAuthRedirect
+    );
+
+    if (typeof window !== "undefined" && error?.response?.status === 401 && !skipRedirect) {
       removeToken();
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+
+      const { pathname, search } = window.location;
+      if (isProtectedPath(pathname)) {
+        const redirectTo = buildLoginRedirect(pathname, search);
+        if (`${pathname}${search}` !== redirectTo) {
+          window.location.href = redirectTo;
+        }
       }
     }
 
