@@ -10,6 +10,8 @@ import { categories } from "@/lib/categories";
 import type { User } from "@/lib/types";
 import CoditentLogo from "@/components/CoditentLogo";
 import styles from "@/components/premium-landing.module.css";
+import { LogoLoop } from "./ui/logo-loop";
+import { SiReact, SiNextdotjs, SiTypescript, SiTailwindcss } from "react-icons/si";
 
 type RoleCategory = "all" | "engineering" | "design" | "data" | "operations" | "success";
 
@@ -594,6 +596,25 @@ export default function PremiumLanding() {
 
         <section className={styles.categorySection}>
           <div className={styles.container}>
+            <div style={{ height: '200px', position: 'relative', overflow: 'hidden', padding: '40px 0' }}>
+              <LogoLoop
+                logos={[
+                  { node: <div className="flex items-center justify-center w-20 h-20 bg-purple-900/20 border border-purple-500/30 rounded-2xl text-purple-300 shadow-[0_0_20px_rgba(124,58,237,0.15)]"><SiReact size={40} /></div>, title: "React", href: "https://react.dev" },
+                  { node: <div className="flex items-center justify-center w-20 h-20 bg-purple-900/20 border border-purple-500/30 rounded-2xl text-purple-300 shadow-[0_0_20px_rgba(124,58,237,0.15)]"><SiNextdotjs size={40} /></div>, title: "Next.js", href: "https://nextjs.org" },
+                  { node: <div className="flex items-center justify-center w-20 h-20 bg-purple-900/20 border border-purple-500/30 rounded-2xl text-purple-300 shadow-[0_0_20px_rgba(124,58,237,0.15)]"><SiTypescript size={40} /></div>, title: "TypeScript", href: "https://www.typescriptlang.org" },
+                  { node: <div className="flex items-center justify-center w-20 h-20 bg-purple-900/20 border border-purple-500/30 rounded-2xl text-purple-300 shadow-[0_0_20px_rgba(124,58,237,0.15)]"><SiTailwindcss size={40} /></div>, title: "Tailwind CSS", href: "https://tailwindcss.com" }
+                ]}
+                speed={100}
+                direction="left"
+                logoHeight={80}
+                gap={50}
+                hoverSpeed={0}
+                scaleOnHover
+                fadeOut
+                fadeOutColor="#06070b"
+                ariaLabel="Technology partners"
+              />
+            </div>
             <p className={styles.eyebrow}>EXPLORE BY CATEGORY</p>
             <h2 className={styles.categoryTitle}>
               Find your next role in{' '}
