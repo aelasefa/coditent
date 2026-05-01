@@ -6,11 +6,13 @@ import google.generativeai as genai
 
 from app.config import settings
 from app.models import CandidateProfile, Offer
+from app.observability import get_logger
 from app.schemas import RecommendationRequest
 
 
 genai.configure(api_key=settings.gemini_api_key)
 _model = genai.GenerativeModel("gemini-1.5-flash")
+logger = get_logger("ai")
 
 
 async def rank_offers(
@@ -63,16 +65,19 @@ Retourne un tableau JSON de 10 éléments maximum, du plus pertinent au moins:
 """
 
     try:
+        logger.info("ai_request_started", offers=len(offers))
         response = await asyncio.to_thread(
             _model.generate_content,
             prompt,
             generation_config={"temperature": 0.2, "max_output_tokens": 1000},
         )
     except Exception:
+        logger.error("ai_request_failed", reason="generation_error")
         return []
 
     raw_text = (getattr(response, "text", "") or "").strip()
     if not raw_text:
+        logger.error("ai_request_failed", reason="empty_response")
         return []
 
     cleaned = raw_text.strip()
@@ -86,9 +91,11 @@ Retourne un tableau JSON de 10 éléments maximum, du plus pertinent au moins:
     try:
         parsed = json.loads(cleaned)
     except Exception:
+        logger.error("ai_request_failed", reason="invalid_json")
         return []
 
     if not isinstance(parsed, list):
+        logger.error("ai_request_failed", reason="unexpected_payload")
         return []
 
     results: list[dict[str, Any]] = []

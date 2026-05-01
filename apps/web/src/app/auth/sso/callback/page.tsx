@@ -5,19 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { MdCard } from "@/components/ui/md-card";
-import { saveToken } from "@/lib/auth";
+import { getMe } from "@/lib/api";
 
 export default function SsoCallbackPage() {
   const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [isParsed, setIsParsed] = useState(false);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
-    setToken(query.get("token"));
-    setRole(query.get("role"));
     setErrorCode(query.get("error"));
     setIsParsed(true);
   }, []);
@@ -32,19 +29,44 @@ export default function SsoCallbackPage() {
   }, [errorCode]);
 
   useEffect(() => {
-    if (!isParsed || !token) {
+    if (!isParsed || errorCode) {
       return;
     }
+    let isMounted = true;
 
-    saveToken(token);
+    async function finalizeLogin() {
+      try {
+        const user = await getMe();
+        if (!isMounted) {
+          return;
+        }
+        setRole(user.role ?? null);
+        localStorage.setItem("user", JSON.stringify(user));
 
-    if (role === "RECRUITER") {
-      router.replace("/recruiter");
-      return;
+        if (user.role === "ADMIN") {
+          router.replace("/admin");
+          return;
+        }
+
+        if (user.role === "RECRUITER") {
+          router.replace("/recruiter");
+          return;
+        }
+
+        router.replace("/dashboard");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        setErrorCode("sso_session_missing");
+      }
     }
 
-    router.replace("/profile");
-  }, [isParsed, token, role, router]);
+    finalizeLogin();
+    return () => {
+      isMounted = false;
+    };
+  }, [isParsed, errorCode, router]);
 
   if (!isParsed) {
     return (
@@ -84,7 +106,7 @@ export default function SsoCallbackPage() {
     );
   }
 
-  if (!token) {
+  if (!role && isParsed && !readableError) {
     return (
       <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-md-background px-4">
         <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -93,8 +115,8 @@ export default function SsoCallbackPage() {
         </div>
 
         <MdCard className="relative w-full max-w-md rounded-md-2xl p-8 text-center">
-          <h1 className="text-2xl font-medium">Missing SSO token</h1>
-          <p className="mt-3 text-sm text-md-onSurfaceVariant">Try signing in again from login.</p>
+          <h1 className="text-2xl font-medium">Completing SSO login</h1>
+          <p className="mt-3 text-sm text-md-onSurfaceVariant">Confirming your session with the API.</p>
           <Link
             className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-md-primary px-6 text-sm font-medium text-md-onPrimary transition-all duration-300 ease-md hover:bg-md-primary/90 active:scale-95"
             href="/login"

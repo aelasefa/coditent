@@ -64,8 +64,8 @@ Add these variables to `apps/api/.env`:
 
 OAuth callback URLs to register in provider dashboards:
 
-- Google callback: `http://127.0.0.1:8000/auth/sso/google/callback`
-- LinkedIn callback: `http://127.0.0.1:8000/auth/sso/linkedin/callback`
+- Google callback: `http://127.0.0.1:8001/auth/sso/google/callback`
+- LinkedIn callback: `http://127.0.0.1:8001/auth/sso/linkedin/callback`
 
 ## Recommended Test Order
 

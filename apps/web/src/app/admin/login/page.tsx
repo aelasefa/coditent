@@ -29,6 +29,10 @@ export default function AdminLoginPage() {
 
     try {
       const data = await adminLogin({ email, password });
+      if (data.user.role !== "ADMIN") {
+        setErrorMessage("This account is not an admin.");
+        return;
+      }
       saveToken(data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       const nextParam = searchParams.get("next");

@@ -14,6 +14,7 @@ async def seed_admin_user(
     email: str,
     password: str,
     full_name: str,
+    reset_password: bool = False,
 ) -> tuple[User, bool]:
     normalized_email = email.strip().lower()
     normalized_full_name = full_name.strip() or "Platform Admin"
@@ -43,6 +44,9 @@ async def seed_admin_user(
         updated = True
     if not user.full_name.strip():
         user.full_name = normalized_full_name
+        updated = True
+    if reset_password:
+        user.password_hash = pwd_context.hash(password)
         updated = True
 
     if updated:

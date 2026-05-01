@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import require_recruiter
+from app.dependencies import get_pagination, require_recruiter
 from app.models import Offer, OfferType, User
 from app.schemas import OfferCreate, OfferOut
 
@@ -17,9 +17,15 @@ router = APIRouter()
 @router.get("", response_model=dict[str, list[OfferOut]])
 async def list_offers(
     db: Annotated[AsyncSession, Depends(get_db)],
+    pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[OfferOut]]:
+    limit, offset = pagination
     result = await db.execute(
-        select(Offer).where(Offer.active.is_(True)).order_by(Offer.posted_at.desc())
+        select(Offer)
+        .where(Offer.active.is_(True))
+        .order_by(Offer.posted_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     offers = result.scalars().all()
     return {"offers": [OfferOut.model_validate(offer) for offer in offers]}

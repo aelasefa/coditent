@@ -7,13 +7,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import require_admin
+from app.dependencies import get_pagination, require_admin
 from app.models import AdminActivityLog, Offer, User, UserRole
+from app.observability import get_logger
 from app.schemas import AdminActivityOut, AdminStatsOut, OfferOut, RecruiterApprovalOut, TokenResponse, UserOut
 from app.utils.jwt import create_access_token
 
 
 router = APIRouter(prefix="/admin")
+logger = get_logger("admin")
 
 
 async def _log_admin_action(
@@ -36,8 +38,15 @@ async def _log_admin_action(
             )
         )
         await db.commit()
+        logger.info(
+            "admin_action",
+            action=action,
+            admin_id=str(admin_user.id),
+            target_user_id=str(target_user.id) if target_user else None,
+        )
     except SQLAlchemyError:
         await db.rollback()
+        logger.error("admin_action_failed", action=action, admin_id=str(admin_user.id))
 
 
 @router.get("/recruiters/pending", response_model=dict[str, list[RecruiterApprovalOut]])
@@ -131,8 +140,12 @@ async def get_admin_stats(
 async def get_admin_users(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[UserOut]]:
-    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    limit, offset = pagination
+    result = await db.execute(
+        select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    )
     users = result.scalars().all()
     return {"users": [UserOut.model_validate(user) for user in users]}
 
@@ -141,8 +154,12 @@ async def get_admin_users(
 async def get_admin_offers(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[OfferOut]]:
-    result = await db.execute(select(Offer).order_by(Offer.posted_at.desc()))
+    limit, offset = pagination
+    result = await db.execute(
+        select(Offer).order_by(Offer.posted_at.desc()).limit(limit).offset(offset)
+    )
     offers = result.scalars().all()
     return {"offers": [OfferOut.model_validate(offer) for offer in offers]}
 
@@ -151,10 +168,15 @@ async def get_admin_offers(
 async def get_admin_activity(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[AdminActivityOut]]:
     try:
+        limit, offset = pagination
         result = await db.execute(
-            select(AdminActivityLog).order_by(AdminActivityLog.created_at.desc()).limit(100)
+            select(AdminActivityLog)
+            .order_by(AdminActivityLog.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         activity = result.scalars().all()
         return {"activity": [AdminActivityOut.model_validate(item) for item in activity]}

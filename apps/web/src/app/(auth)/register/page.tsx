@@ -9,6 +9,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { MdButton } from "@/components/ui/md-button";
 import { MdCard } from "@/components/ui/md-card";
 import { MdField, MdInput, MdSelect } from "@/components/ui/md-field";
@@ -129,6 +130,8 @@ export default function RegisterPage() {
               });
             })}
           >
+            <SocialLoginButtons separator="OR" />
+
             <MdField error={form.formState.errors.full_name?.message} htmlFor="full_name" label="Full name">
               <MdInput
                 autoComplete="name"

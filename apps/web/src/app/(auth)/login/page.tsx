@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useState } from "react";
 
+import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { MdButton } from "@/components/ui/md-button";
 import { MdCard } from "@/components/ui/md-card";
 import { MdField, MdInput } from "@/components/ui/md-field";
@@ -59,8 +60,6 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeContent = roleContent[activeRole];
-  const socialButtonClass =
-    "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium tracking-[0.01em] transition-all duration-300 ease-md active:scale-95";
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -204,33 +203,7 @@ export default function LoginPage() {
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                className={`${socialButtonClass} cursor-not-allowed border border-md-outline/30 text-md-onSurfaceVariant/70`}
-                disabled
-                title="Coming soon"
-                type="button"
-              >
-                Continue with Google
-              </button>
-
-              <button
-                className={`${socialButtonClass} cursor-not-allowed border border-md-outline/30 text-md-onSurfaceVariant/70`}
-                disabled
-                title="Coming soon"
-                type="button"
-              >
-                Continue with LinkedIn
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-md-outline/30" />
-              <span className="text-xs uppercase tracking-[0.12em] text-md-onSurfaceVariant">
-                OR USE EMAIL
-              </span>
-              <div className="h-px flex-1 bg-md-outline/30" />
-            </div>
+            <SocialLoginButtons separator="OR" />
 
             <MdField htmlFor="email" label="Email">
               <MdInput

@@ -15,6 +15,7 @@ class UserOut(APIModel):
     role: str
     is_approved: bool
     full_name: str
+    avatar_url: str | None = None
 
 
 class RegisterRequest(APIModel):
@@ -76,6 +77,7 @@ class UserMeOut(APIModel):
     role: str
     is_approved: bool
     full_name: str
+    avatar_url: str | None = None
     profile: ProfileOut | None
 
 

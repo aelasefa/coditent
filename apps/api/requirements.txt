@@ -12,3 +12,8 @@ httpx
 google-generativeai
 python-dotenv
 supabase
+slowapi
+redis
+celery
+prometheus-client
+structlog

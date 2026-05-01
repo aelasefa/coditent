@@ -29,20 +29,47 @@ services:
       FRONTEND_URL: http://localhost:3001
       GEMINI_API_KEY: local-dev-placeholder
       JWT_SECRET: local-dev-secret
+      REDIS_URL: redis://redis:6379/0
+      ACCESS_TOKEN_COOKIE_SECURE: "false"
     ports:
-      - "8001:8000"
+      - "8001:8001"
     command: >
       sh -c "alembic upgrade head &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      uvicorn app.main:app --host 0.0.0.0 --port 8001"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\"",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\"",
         ]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: coditent-worker
+    depends_on:
+      api:
+        condition: service_started
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://coditent:coditent@db:5432/coditent
+      GEMINI_API_KEY: local-dev-placeholder
+      JWT_SECRET: local-dev-secret
+      REDIS_URL: redis://redis:6379/0
+    command: celery -A app.tasks worker --loglevel=info
+
+  redis:
+    image: redis:7-alpine
+    container_name: coditent-redis
+    ports:
+      - "6379:6379"
 
   web:
     build:

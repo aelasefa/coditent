@@ -1,159 +1,99 @@
+import json
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.cache import get_async_redis
 from app.database import get_db
-from app.dependencies import require_candidate
-from app.models import CandidateProfile, Offer, OfferType, SavedRecommendation, User
+from app.dependencies import get_pagination, require_candidate
+from app.models import Offer, SavedRecommendation, User
 from app.schemas import RecommendationOut, RecommendationRequest
-from app.services.ai import rank_offers
+from app.services.recommendation_jobs import make_cache_key
+from app.tasks import generate_recommendations_task
 
 
 router = APIRouter()
 
 
-def _fallback_rank_offers(
-    profile: CandidateProfile,
-    offers: list[Offer],
-) -> list[dict[str, str | int]]:
-    field_hint = (profile.field_of_study or "").strip().lower()
-    city_hint = (profile.city or "").strip().lower()
-    skills_hint = {
-        skill.strip().lower()
-        for skill in (profile.skills or "").split(",")
-        if skill.strip()
-    }
-
-    ranked_rows: list[dict[str, str | int]] = []
-    for offer in offers:
-        score = 50
-
-        offer_field = (offer.field or "").lower()
-        offer_region = (offer.region or "").lower()
-
-        if field_hint and field_hint in offer_field:
-            score += 25
-        if city_hint and city_hint in offer_region:
-            score += 20
-
-        requirements_text = f"{offer.requirements or ''} {offer.description or ''}".lower()
-        skill_hits = sum(
-            1
-            for skill in skills_hint
-            if len(skill) > 2 and skill in requirements_text
-        )
-        if skill_hits:
-            score += min(skill_hits * 6, 18)
-
-        ranked_rows.append(
-            {
-                "offer_id": str(offer.id),
-                "score": min(score, 100),
-                "reasoning": "Classement de secours applique car le scoring IA est indisponible.",
-            }
-        )
-
-    ranked_rows.sort(key=lambda row: int(row["score"]), reverse=True)
-    return ranked_rows[:10]
-
-
-@router.post("/generate", response_model=dict[str, list[RecommendationOut]])
+@router.post("/generate", response_model=dict[str, str | bool])
 async def generate_recommendations(
     criteria: RecommendationRequest,
     current_user: Annotated[User, Depends(require_candidate)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict[str, list[RecommendationOut]]:
-    profile_result = await db.execute(
-        select(CandidateProfile).where(CandidateProfile.user_id == current_user.id)
-    )
-    profile = profile_result.scalar_one_or_none()
-    if profile is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Candidate profile not found",
+) -> dict[str, str | bool]:
+    redis_client = get_async_redis()
+    criteria_payload = criteria.model_dump()
+    cache_key = make_cache_key(current_user.id, criteria_payload)
+    cached = await redis_client.get(cache_key)
+
+    job_id = str(uuid.uuid4())
+    job_key = f"job:{job_id}"
+
+    if cached:
+        await redis_client.set(
+            job_key,
+            json.dumps(
+                {
+                    "status": "completed",
+                    "candidate_id": str(current_user.id),
+                    "criteria": criteria_payload,
+                    "result": json.loads(cached),
+                }
+            ),
+            ex=3600,
         )
+        return {"job_id": job_id, "status": "completed", "cached": True}
 
-    offers_result = await db.execute(
-        select(Offer)
-        .where(Offer.active.is_(True))
-        .where(Offer.type == OfferType(criteria.type))
-        .where(Offer.field.ilike(f"%{criteria.field}%"))
-        .where(Offer.region.ilike(f"%{criteria.region}%"))
-        .limit(30)
-    )
-    offers = offers_result.scalars().all()
-
-    if not offers:
-        await db.execute(
-            delete(SavedRecommendation).where(SavedRecommendation.candidate_id == current_user.id)
-        )
-        await db.commit()
-        return {"recommendations": []}
-
-    ai_results = await rank_offers(profile, criteria, offers)
-    if not ai_results:
-        ai_results = _fallback_rank_offers(profile, offers)
-
-    await db.execute(
-        delete(SavedRecommendation).where(SavedRecommendation.candidate_id == current_user.id)
+    await redis_client.set(
+        job_key,
+        json.dumps(
+            {
+                "status": "pending",
+                "candidate_id": str(current_user.id),
+                "criteria": criteria_payload,
+            }
+        ),
+        ex=3600,
     )
 
-    offer_map = {str(offer.id): offer for offer in offers}
-    new_rows: list[SavedRecommendation] = []
-    for row in ai_results:
-        offer_id = row.get("offer_id")
-        if offer_id not in offer_map:
-            continue
+    generate_recommendations_task.delay(job_id, str(current_user.id), criteria_payload)
+    return {"job_id": job_id, "status": "pending", "cached": False}
 
-        try:
-            parsed_offer_id = uuid.UUID(offer_id)
-        except (TypeError, ValueError):
-            continue
 
-        new_rows.append(
-            SavedRecommendation(
-                candidate_id=current_user.id,
-                offer_id=parsed_offer_id,
-                ai_score=int(row.get("score", 0)),
-                ai_reasoning=str(row.get("reasoning", "")),
-            )
-        )
+@router.get("/jobs/{job_id}")
+async def get_recommendation_job_status(
+    job_id: str,
+    current_user: Annotated[User, Depends(require_candidate)],
+) -> dict:
+    redis_client = get_async_redis()
+    payload = await redis_client.get(f"job:{job_id}")
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
 
-    if new_rows:
-        db.add_all(new_rows)
+    data = json.loads(payload)
+    if data.get("candidate_id") != str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-    await db.commit()
-
-    recommendations_result = await db.execute(
-        select(SavedRecommendation)
-        .options(joinedload(SavedRecommendation.offer))
-        .where(SavedRecommendation.candidate_id == current_user.id)
-        .order_by(SavedRecommendation.ai_score.desc())
-    )
-    recommendations = recommendations_result.scalars().all()
-
-    return {
-        "recommendations": [
-            RecommendationOut.model_validate(recommendation)
-            for recommendation in recommendations
-        ]
-    }
+    return data
 
 
 @router.get("", response_model=dict[str, list[RecommendationOut]])
 async def get_recommendations(
     current_user: Annotated[User, Depends(require_candidate)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[RecommendationOut]]:
+    limit, offset = pagination
     result = await db.execute(
         select(SavedRecommendation)
         .options(joinedload(SavedRecommendation.offer))
         .where(SavedRecommendation.candidate_id == current_user.id)
         .order_by(SavedRecommendation.ai_score.desc())
+        .limit(limit)
+        .offset(offset)
     )
     recommendations = result.scalars().all()
 
@@ -184,6 +124,8 @@ async def get_recommendations(
             .options(joinedload(SavedRecommendation.offer))
             .where(SavedRecommendation.candidate_id == current_user.id)
             .order_by(SavedRecommendation.ai_score.desc())
+            .limit(limit)
+            .offset(offset)
         )
         recommendations = result.scalars().all()
 

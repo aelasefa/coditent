@@ -14,6 +14,7 @@ import type {
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+  withCredentials: true,
 });
 
 const protectedPrefixes = ["/profile", "/dashboard", "/recruiter", "/admin"];
@@ -94,7 +95,7 @@ export async function adminLogin(payload: {
   email: string;
   password: string;
 }): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>("/auth/admin/login", payload);
+  const { data } = await api.post<TokenResponse>("/auth/login", payload);
   return data;
 }
 

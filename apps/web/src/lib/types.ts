@@ -6,6 +6,7 @@ export interface User {
   role: UserRole;
   is_approved: boolean;
   full_name: string;
+  avatar_url?: string | null;
 }
 
 export interface Profile {

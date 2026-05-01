@@ -1,13 +1,8 @@
 import secrets
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from typing import Annotated
-from urllib.parse import urlencode
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
-from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,170 +12,35 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import CandidateProfile, User, UserRole
-from app.services.admin_seed import seed_admin_user
-from app.schemas import (
-    AdminLoginRequest,
-    LoginRequest,
-    RegisterRequest,
-    TokenResponse,
-    UserMeOut,
-    UserOut,
+from app.limiter import limiter
+from app.observability import get_logger
+from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserMeOut, UserOut
+from app.services.oauth_service import (
+    build_frontend_dashboard_url,
+    build_oauth_authorize_url,
+    create_oauth_state,
+    exchange_code_for_access_token,
+    fetch_user_identity,
+    get_oauth_provider,
+    resolve_redirect_uri,
+    verify_oauth_state,
 )
 from app.utils.jwt import create_access_token
 
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth_state_expire_minutes = 10
-frontend_sso_callback_path = "/auth/sso/callback"
-
-
-@dataclass(frozen=True)
-class OAuthProvider:
-    name: str
-    client_id: str | None
-    client_secret: str | None
-    authorization_url: str
-    token_url: str
-    userinfo_url: str
-    scopes: tuple[str, ...]
-
-
-def _get_oauth_provider(provider: str) -> OAuthProvider:
-    normalized_provider = provider.strip().lower()
-
-    if normalized_provider == "google":
-        config = OAuthProvider(
-            name="google",
-            client_id=settings.google_client_id,
-            client_secret=settings.google_client_secret,
-            authorization_url="https://accounts.google.com/o/oauth2/v2/auth",
-            token_url="https://oauth2.googleapis.com/token",
-            userinfo_url="https://www.googleapis.com/oauth2/v3/userinfo",
-            scopes=("openid", "email", "profile"),
-        )
-    elif normalized_provider == "linkedin":
-        config = OAuthProvider(
-            name="linkedin",
-            client_id=settings.linkedin_client_id,
-            client_secret=settings.linkedin_client_secret,
-            authorization_url="https://www.linkedin.com/oauth/v2/authorization",
-            token_url="https://www.linkedin.com/oauth/v2/accessToken",
-            userinfo_url="https://api.linkedin.com/v2/userinfo",
-            scopes=("openid", "profile", "email"),
-        )
-    else:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sso_provider_not_supported")
-
-    if not config.client_id or not config.client_secret:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="sso_not_configured")
-
-    return config
-
-
-def _create_oauth_state(provider: str) -> str:
-    state_payload = {
-        "purpose": "oauth_state",
-        "provider": provider,
-        "nonce": secrets.token_urlsafe(24),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=oauth_state_expire_minutes),
-    }
-    return jwt.encode(state_payload, settings.secret_key, algorithm=settings.algorithm)
-
-
-def _verify_oauth_state(state_token: str, provider: str) -> None:
-    try:
-        payload = jwt.decode(state_token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state") from exc
-
-    if payload.get("purpose") != "oauth_state" or payload.get("provider") != provider:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
-
-
-def _name_from_email(email: str) -> str:
-    local_part = email.split("@", 1)[0]
-    words = [piece.capitalize() for piece in local_part.replace(".", " ").replace("_", " ").split()]
-    return " ".join(words) or email
-
-
-def _build_frontend_sso_callback_url(params: dict[str, str]) -> str:
-    callback_base = f"{settings.frontend_url.rstrip('/')}{frontend_sso_callback_path}"
-    return f"{callback_base}?{urlencode(params)}"
-
-
-async def _exchange_code_for_access_token(
-    provider: OAuthProvider,
-    code: str,
-    redirect_uri: str,
-) -> str:
-    payload = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "client_id": provider.client_id,
-        "client_secret": provider.client_secret,
-        "redirect_uri": redirect_uri,
-    }
-
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post(provider.token_url, data=payload, headers={"Accept": "application/json"})
-
-    if response.is_error:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_exchange_failed")
-
-    try:
-        token_payload = response.json()
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_parse_failed") from exc
-
-    access_token = token_payload.get("access_token")
-    if not access_token:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_missing")
-
-    return access_token
-
-
-async def _fetch_user_identity(provider: OAuthProvider, access_token: str) -> tuple[str, str]:
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(
-            provider.userinfo_url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json",
-            },
-        )
-
-    if response.is_error:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_profile_fetch_failed")
-
-    try:
-        profile_payload = response.json()
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_profile_parse_failed") from exc
-
-    email = str(profile_payload.get("email") or "").strip().lower()
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="sso_email_missing",
-        )
-
-    full_name = str(profile_payload.get("name") or "").strip()
-    if not full_name and provider.name == "linkedin":
-        given_name = str(profile_payload.get("given_name") or "").strip()
-        family_name = str(profile_payload.get("family_name") or "").strip()
-        full_name = " ".join([value for value in [given_name, family_name] if value]).strip()
-
-    if not full_name:
-        full_name = _name_from_email(email)
-
-    return email, full_name
+logger = get_logger("auth")
 
 
 async def _find_or_create_sso_user(
     db: AsyncSession,
+    *,
     email: str,
     full_name: str,
+    oauth_provider: str,
+    oauth_id: str,
+    avatar_url: str | None,
 ) -> User:
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -190,6 +50,15 @@ async def _find_or_create_sso_user(
 
         if not user.full_name.strip() and full_name:
             user.full_name = full_name
+            needs_commit = True
+        if oauth_provider and user.oauth_provider != oauth_provider:
+            user.oauth_provider = oauth_provider
+            needs_commit = True
+        if oauth_id and user.oauth_id != oauth_id:
+            user.oauth_id = oauth_id
+            needs_commit = True
+        if avatar_url and user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
             needs_commit = True
 
         if user.role == UserRole.CANDIDATE:
@@ -221,6 +90,9 @@ async def _find_or_create_sso_user(
         password_hash=pwd_context.hash(secrets.token_urlsafe(32)),
         role=UserRole.CANDIDATE,
         full_name=full_name,
+        oauth_provider=oauth_provider,
+        oauth_id=oauth_id,
+        avatar_url=avatar_url,
     )
     db.add(user)
     await db.flush()
@@ -241,21 +113,6 @@ async def _find_or_create_sso_user(
     return user
 
 
-async def ensure_default_admin_account(db: AsyncSession) -> None:
-    admin_email = (settings.admin_email or "").strip().lower()
-    admin_password = settings.admin_password or ""
-
-    if not admin_email or not admin_password:
-        return
-
-    await seed_admin_user(
-        db,
-        email=admin_email,
-        password=admin_password,
-        full_name=settings.admin_full_name,
-    )
-
-
 @router.get("/sso/providers")
 async def sso_providers() -> dict[str, bool]:
     return {
@@ -266,22 +123,12 @@ async def sso_providers() -> dict[str, bool]:
 
 @router.get("/sso/{provider}/start")
 async def sso_start(provider: str, request: Request) -> RedirectResponse:
-    oauth_provider = _get_oauth_provider(provider)
-    redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
-    state_token = _create_oauth_state(oauth_provider.name)
-
-    query_params: dict[str, str] = {
-        "client_id": oauth_provider.client_id or "",
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": " ".join(oauth_provider.scopes),
-        "state": state_token,
-    }
-
-    if oauth_provider.name == "google":
-        query_params["prompt"] = "select_account"
-
-    authorization_url = f"{oauth_provider.authorization_url}?{urlencode(query_params)}"
+    oauth_provider = get_oauth_provider(provider)
+    request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
+    redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
+    state_token = create_oauth_state(oauth_provider.name)
+    authorization_url = build_oauth_authorize_url(oauth_provider, redirect_uri, state_token)
+    logger.info("sso_start", provider=oauth_provider.name)
     return RedirectResponse(url=authorization_url, status_code=status.HTTP_302_FOUND)
 
 
@@ -295,39 +142,51 @@ async def sso_callback(
     error: str | None = None,
 ) -> RedirectResponse:
     try:
-        oauth_provider = _get_oauth_provider(provider)
+        oauth_provider = get_oauth_provider(provider)
     except HTTPException as exc:
         return RedirectResponse(
-            url=_build_frontend_sso_callback_url({"error": str(exc.detail)}),
+            url=build_frontend_dashboard_url(),
             status_code=status.HTTP_302_FOUND,
         )
 
     if error:
+        logger.warning("sso_error", provider=provider, error=error)
         return RedirectResponse(
-            url=_build_frontend_sso_callback_url({"error": "sso_access_denied"}),
+            url=build_frontend_dashboard_url(),
             status_code=status.HTTP_302_FOUND,
         )
 
     if not code or not state:
+        logger.warning("sso_error", provider=provider, error="sso_code_or_state_missing")
         return RedirectResponse(
-            url=_build_frontend_sso_callback_url({"error": "sso_code_or_state_missing"}),
+            url=build_frontend_dashboard_url(),
             status_code=status.HTTP_302_FOUND,
         )
 
     try:
-        _verify_oauth_state(state, oauth_provider.name)
-        redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
-        provider_access_token = await _exchange_code_for_access_token(oauth_provider, code, redirect_uri)
-        email, full_name = await _fetch_user_identity(oauth_provider, provider_access_token)
-        user = await _find_or_create_sso_user(db, email=email, full_name=full_name)
+        verify_oauth_state(state, oauth_provider.name)
+        request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
+        redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
+        provider_access_token = await exchange_code_for_access_token(oauth_provider, code, redirect_uri)
+        identity = await fetch_user_identity(oauth_provider, provider_access_token)
+        user = await _find_or_create_sso_user(
+            db,
+            email=identity.email,
+            full_name=identity.full_name,
+            oauth_provider=identity.provider,
+            oauth_id=identity.oauth_id,
+            avatar_url=identity.avatar_url,
+        )
     except HTTPException as exc:
+        logger.warning("sso_error", provider=provider, error=str(exc.detail))
         return RedirectResponse(
-            url=_build_frontend_sso_callback_url({"error": str(exc.detail)}),
+            url=build_frontend_dashboard_url(),
             status_code=status.HTTP_302_FOUND,
         )
     except Exception:
+        logger.error("sso_error", provider=provider, error="sso_internal_error")
         return RedirectResponse(
-            url=_build_frontend_sso_callback_url({"error": "sso_internal_error"}),
+            url=build_frontend_dashboard_url(),
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -339,15 +198,25 @@ async def sso_callback(
         }
     )
 
-    return RedirectResponse(
-        url=_build_frontend_sso_callback_url({"token": token, "role": user.role.value}),
-        status_code=status.HTTP_302_FOUND,
+    response = RedirectResponse(url=build_frontend_dashboard_url(), status_code=status.HTTP_302_FOUND)
+    response.set_cookie(
+        key=settings.access_token_cookie_name,
+        value=token,
+        httponly=True,
+        secure=settings.access_token_cookie_secure,
+        samesite=settings.access_token_cookie_samesite,
+        max_age=settings.access_token_expire_minutes * 60,
+        path="/",
     )
+    logger.info("sso_success", provider=oauth_provider.name, user_id=str(user.id))
+    return response
 
 
 @router.post("/register", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def register(
     data: RegisterRequest,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     email = data.email.strip().lower()
@@ -355,6 +224,7 @@ async def register(
     result = await db.execute(select(User).where(User.email == email))
     existing_user = result.scalar_one_or_none()
     if existing_user is not None:
+        logger.warning("register_failed", email=email, reason="email_in_use")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
     role = UserRole(data.role)
@@ -383,6 +253,8 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
+    logger.info("register_success", user_id=str(user.id), role=user.role.value)
+
     token = create_access_token(
         {
             "sub": str(user.id),
@@ -394,8 +266,10 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
     data: LoginRequest,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     email = data.email.strip().lower()
@@ -403,9 +277,11 @@ async def login(
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if user is None or not pwd_context.verify(data.password, user.password_hash):
+        logger.warning("login_failed", email=email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if user.role == UserRole.RECRUITER and not user.is_approved:
+        logger.warning("login_failed", email=email, reason="recruiter_unapproved")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recruiter account is pending admin approval",
@@ -418,42 +294,8 @@ async def login(
             "role": user.role.value,
         }
     )
+    logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
-
-
-@router.post("/admin/login", response_model=TokenResponse)
-async def admin_login(
-    data: AdminLoginRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> TokenResponse:
-    admin_email = (settings.admin_email or "").strip().lower()
-    admin_password = settings.admin_password or ""
-
-    if not admin_email or not admin_password:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin login not configured")
-
-    request_email = data.email.strip().lower()
-    is_valid_email = secrets.compare_digest(request_email, admin_email)
-    is_valid_password = secrets.compare_digest(data.password, admin_password)
-
-    if not is_valid_email or not is_valid_password:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
-
-    admin_user, _ = await seed_admin_user(
-        db,
-        email=admin_email,
-        password=admin_password,
-        full_name=settings.admin_full_name,
-    )
-
-    token = create_access_token(
-        {
-            "sub": str(admin_user.id),
-            "email": admin_user.email,
-            "role": UserRole.ADMIN.value,
-        }
-    )
-    return TokenResponse(token=token, user=UserOut.model_validate(admin_user))
 
 
 @router.get("/me", response_model=UserMeOut)

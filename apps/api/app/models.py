@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import UUID, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import UUID, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -28,6 +28,10 @@ class OfferType(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index("ix_users_email", "email"),
+        Index("ix_users_role", "role"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -35,6 +39,9 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.CANDIDATE, nullable=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
+    oauth_provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    oauth_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     profile: Mapped["CandidateProfile | None"] = relationship(
@@ -69,6 +76,7 @@ class CandidateProfile(Base):
 
 class Offer(Base):
     __tablename__ = "offers"
+    __table_args__ = (Index("ix_offers_recruiter_id", "recruiter_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     recruiter_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -90,6 +98,11 @@ class Offer(Base):
 
 class SavedRecommendation(Base):
     __tablename__ = "saved_recommendations"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "offer_id", name="uq_saved_recommendations_candidate_offer"),
+        Index("ix_saved_recommendations_candidate_id", "candidate_id"),
+        Index("ix_saved_recommendations_offer_id", "offer_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     candidate_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
