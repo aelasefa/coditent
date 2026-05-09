@@ -99,6 +99,41 @@ export async function adminLogin(payload: {
   return data;
 }
 
+export async function completeOauthRegistration(payload: {
+  role: "candidate" | "recruiter";
+}): Promise<TokenResponse> {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/oauth/complete-registration`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const data = (await response.json()) as
+    | (TokenResponse & { access_token?: string })
+    | { detail?: string };
+  if (!response.ok) {
+    const detail = typeof data === "object" && data && "detail" in data ? data.detail : null;
+    const error = new Error(typeof detail === "string" ? detail : "Complete registration failed");
+    (error as { status?: number }).status = response.status;
+    throw error;
+  }
+
+  if (typeof data === "object" && data && "access_token" in data) {
+    return {
+      token: (data as { access_token?: string }).access_token ?? "",
+      user: (data as TokenResponse).user,
+    };
+  }
+
+  return data as TokenResponse;
+}
+
 export async function getMe(): Promise<User> {
   const { data } = await api.get<User>("/auth/me");
   return data;

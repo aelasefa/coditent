@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8001/auth/sso/google/callback"
     linkedin_client_id: str | None = None
     linkedin_client_secret: str | None = None
+    linkedin_redirect_uri: str = "http://localhost:8001/auth/sso/linkedin/callback"
     secret_key: str = Field(validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -21,14 +22,24 @@ class Settings(BaseSettings):
     access_token_cookie_name: str = "access_token"
     access_token_cookie_secure: bool = True
     access_token_cookie_samesite: str = "lax"
+    oauth_onboarding_cookie_name: str = "oauth_onboarding"
+    oauth_onboarding_expire_minutes: int = 10
+    oauth_onboarding_cookie_secure: bool = False
+    oauth_onboarding_cookie_samesite: str = "lax"
     redis_url: str = "redis://localhost:6379/0"
     recommendation_cache_ttl_seconds: int = 900
     log_level: str = "INFO"
 
     @model_validator(mode="after")
-    def require_google_oauth(self) -> "Settings":
-        if not self.google_client_id or not self.google_client_secret:
-            raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required")
+    def validate_oauth_config(self) -> "Settings":
+        if (self.google_client_id and not self.google_client_secret) or (
+            self.google_client_secret and not self.google_client_id
+        ):
+            raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must both be set")
+        if (self.linkedin_client_id and not self.linkedin_client_secret) or (
+            self.linkedin_client_secret and not self.linkedin_client_id
+        ):
+            raise ValueError("LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET must both be set")
         return self
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

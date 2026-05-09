@@ -30,6 +30,10 @@ class LoginRequest(APIModel):
     password: str
 
 
+class OAuthCompleteRegistrationRequest(APIModel):
+    role: Literal["candidate", "recruiter"]
+
+
 class AdminLoginRequest(APIModel):
     email: EmailStr
     password: str
@@ -37,6 +41,11 @@ class AdminLoginRequest(APIModel):
 
 class TokenResponse(APIModel):
     token: str
+    user: UserOut
+
+
+class OAuthCompleteRegistrationResponse(APIModel):
+    access_token: str
     user: UserOut
 
 
