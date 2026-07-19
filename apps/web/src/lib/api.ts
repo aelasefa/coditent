@@ -5,6 +5,8 @@ import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type {
   AdminActivity,
   AdminStats,
+  Application,
+  ApplicationStatus,
   Offer,
   Profile,
   Recommendation,
@@ -12,8 +14,13 @@ import type {
   User,
 } from "@/lib/types";
 
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001").replace(
+  /\/$/,
+  ""
+);
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+  baseURL: API_BASE_URL,
   withCredentials: true,
 });
 
@@ -103,7 +110,7 @@ export async function completeOauthRegistration(payload: {
   role: "candidate" | "recruiter";
 }): Promise<TokenResponse> {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/oauth/complete-registration`,
+    `${API_BASE_URL}/auth/oauth/complete-registration`,
     {
       method: "POST",
       credentials: "include",
@@ -146,6 +153,23 @@ export async function getProfile(): Promise<Profile> {
 
 export async function updateProfile(payload: Partial<Profile>): Promise<Profile> {
   const { data } = await api.put<Profile>("/candidates/profile", payload);
+  return data;
+}
+
+// Auto‑fill profile from a CV using the backend Gemini extractor
+export async function autoFillProfileFromCV(file: File): Promise<Partial<Profile>> {
+  const formData = new FormData();
+  formData.append("cv", file);
+  const response = await fetch(`${API_BASE_URL}/candidates/profile/auto-fill`, {
+    method: "POST",
+    body: formData,
+    // Let auth interceptor handle cookies; no JSON headers needed.
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Auto‑fill failed: ${text}`);
+  }
+  const data = (await response.json()) as Partial<Profile>;
   return data;
 }
 
@@ -227,4 +251,49 @@ export async function getAdminActivity(): Promise<AdminActivity[]> {
 export async function impersonateUser(userId: string): Promise<TokenResponse> {
   const { data } = await api.post<TokenResponse>(`/admin/impersonate/${userId}`);
   return data;
+}
+
+export async function applyToOffer(
+  offerId: string,
+  payload: { cover_letter?: string } = {}
+): Promise<Application> {
+  const { data } = await api.post<Application>(`/offers/${offerId}/apply`, payload);
+  return data;
+}
+
+export async function getMyApplications(): Promise<Application[]> {
+  const { data } = await api.get<{ applications: Application[] }>("/me/applications");
+  return data.applications;
+}
+
+export async function getOfferApplications(offerId: string): Promise<Application[]> {
+  const { data } = await api.get<{ applications: Application[] }>(
+    `/offers/${offerId}/applications`
+  );
+  return data.applications;
+}
+
+export async function updateApplicationStatus(
+  applicationId: string,
+  payload: { status: ApplicationStatus; recruiter_note?: string }
+): Promise<Application> {
+  const { data } = await api.patch<Application>(
+    `/applications/${applicationId}/status`,
+    payload
+  );
+  return data;
+}
+
+export async function withdrawApplication(applicationId: string): Promise<Application> {
+  await api.delete(`/applications/${applicationId}`);
+  return {
+    id: applicationId,
+    candidate_id: "",
+    offer_id: "",
+    status: "WITHDRAWN",
+    cover_letter: null,
+    recruiter_note: null,
+    applied_at: "",
+    updated_at: null,
+  };
 }

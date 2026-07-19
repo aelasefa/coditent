@@ -8,7 +8,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { LogoutButton } from "@/components/logout-button";
-import { getProfile, updateProfile } from "@/lib/api";
+import { getProfile, updateProfile, autoFillProfileFromCV } from "@/lib/api";
 import styles from "./profile-builder.module.css";
 
 const urlField = z.union([z.literal(""), z.string().url()]);
@@ -79,6 +79,9 @@ export default function ProfileBuilderPage() {
   const queryClient = useQueryClient();
   const skillInputRef = useRef<HTMLInputElement>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  // CV file for auto‑fill
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [autoFillLoading, setAutoFillLoading] = useState<boolean>(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [skills, setSkills] = useState<string[]>([]);
   const [displayedPercentage, setDisplayedPercentage] = useState(0);
@@ -178,6 +181,44 @@ export default function ProfileBuilderPage() {
       setPhotoPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle CV file selection
+  const handleCVChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCvFile(file);
+  };
+
+  // Trigger auto‑fill using the selected CV
+  const handleAutoFill = async () => {
+    if (!cvFile) return;
+    setAutoFillLoading(true);
+    try {
+      const extracted = await autoFillProfileFromCV(cvFile);
+      if (extracted.headline) form.setValue("headline", extracted.headline);
+      if (extracted.bio) form.setValue("bio", extracted.bio);
+      if (extracted.skills) {
+        const skillList = (extracted.skills as string).split(",").map((s) => s.trim()).filter(Boolean);
+        setSkills(skillList);
+        form.setValue("skills", skillList.join(", "));
+      }
+      if (extracted.years_of_experience !== undefined && extracted.years_of_experience !== null) {
+        form.setValue("years_of_experience", String(extracted.years_of_experience));
+      }
+      if (extracted.city) form.setValue("city", extracted.city);
+      if (extracted.phone) form.setValue("phone", extracted.phone);
+      if (extracted.field_of_study) form.setValue("field_of_study", extracted.field_of_study);
+      if (extracted.university) form.setValue("university", extracted.university);
+      if (extracted.study_level) form.setValue("study_level", extracted.study_level);
+      if (extracted.linkedin_url) form.setValue("linkedin_url", extracted.linkedin_url);
+      if (extracted.portfolio_url) form.setValue("portfolio_url", extracted.portfolio_url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAutoFillLoading(false);
+      setCvFile(null);
+    }
   };
 
   const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -306,6 +347,9 @@ export default function ProfileBuilderPage() {
           <p className={styles.subtitle}>Build a recruiter-ready profile</p>
 
           <div className={styles.headerActions}>
+            <Link href="/dashboard/applications" className={styles.actionBtn}>
+              My applications
+            </Link>
             <Link href="/dashboard/recommendations" className={styles.actionBtn}>
               Recommendations
             </Link>
@@ -389,6 +433,25 @@ export default function ProfileBuilderPage() {
                 <div className={styles.uploadSubtext}>PNG, JPG up to 5MB</div>
                 <input type="file" accept="image/*" onChange={handlePhotoChange} className={styles.fileInput} />
               </label>
+            </div>
+          </section>
+
+          {/* SECTION 1b: IMPORT CV */}
+          <section id="section-cv" className={\`\${styles.sectionCard} \${styles.sectionCardAnimate1}\`}>
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Import CV</h2>
+              <p className={styles.sectionSubtitle}>Upload your CV to auto‑fill the profile fields.</p>
+              <hr className={styles.sectionSeparator} />
+            </div>
+            <div className={styles.uploadSection}>
+              <label className={styles.uploadZone}>
+                <div className={styles.uploadIcon}>📄</div>
+                <div className={styles.uploadText}>Select CV file (PDF, DOCX, TXT)</div>
+                <input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleCVChange} className={styles.fileInput} />
+              </label>
+              <button type="button" className={styles.aiBtn} onClick={handleAutoFill} disabled={!cvFile || autoFillLoading}>
+                {autoFillLoading ? "⏳ Auto‑filling..." : "Upload CV → Auto‑fill"}
+              </button>
             </div>
           </section>
 

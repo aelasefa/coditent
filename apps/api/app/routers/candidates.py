@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,34 @@ async def get_profile(
 
     return ProfileOut.model_validate(profile)
 
+# Auto‑fill profile from a CV using Gemini (backend only)
+@router.post("/profile/auto-fill", response_model=ProfileUpdate)
+async def auto_fill_profile(
+    cv: UploadFile = File(...),
+    current_user: Annotated[User, Depends(require_candidate)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    # Read file bytes
+    content = await cv.read()
+    # Extract profile fields via Gemini
+    from app.services.cv_extractor import extract_profile_from_cv
+    extracted = await extract_profile_from_cv(content, cv.filename or "cv")
+    # Map to the ProfileUpdate schema (fields may be None)
+    fields = {
+        "city": extracted.get("city"),
+        "phone": extracted.get("phone"),
+        "headline": extracted.get("headline"),
+        "bio": extracted.get("bio"),
+        "field_of_study": extracted.get("field_of_study"),
+        "university": extracted.get("university"),
+        "study_level": extracted.get("study_level"),
+        "skills": extracted.get("skills"),
+        "years_of_experience": extracted.get("years_of_experience"),
+        "linkedin_url": extracted.get("linkedin_url"),
+        "portfolio_url": extracted.get("portfolio_url"),
+    }
+    return fields
+
 
 @router.put("/profile", response_model=ProfileOut)
 async def update_profile(
@@ -48,3 +76,31 @@ async def update_profile(
     await db.commit()
     await db.refresh(profile)
     return ProfileOut.model_validate(profile)
+
+# Auto‑fill profile from a CV using Gemini (backend only)
+@router.post("/profile/auto-fill", response_model=ProfileUpdate)
+async def auto_fill_profile(
+    cv: UploadFile = File(...),
+    current_user: Annotated[User, Depends(require_candidate)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    # Read file bytes
+    content = await cv.read()
+    # Extract profile fields via Gemini
+    from app.services.cv_extractor import extract_profile_from_cv
+    extracted = await extract_profile_from_cv(content, cv.filename or "cv")
+    # Map to the ProfileUpdate schema (fields may be None)
+    fields = {
+        "city": extracted.get("city"),
+        "phone": extracted.get("phone"),
+        "headline": extracted.get("headline"),
+        "bio": extracted.get("bio"),
+        "field_of_study": extracted.get("field_of_study"),
+        "university": extracted.get("university"),
+        "study_level": extracted.get("study_level"),
+        "skills": extracted.get("skills"),
+        "years_of_experience": extracted.get("years_of_experience"),
+        "linkedin_url": extracted.get("linkedin_url"),
+        "portfolio_url": extracted.get("portfolio_url"),
+    }
+    return fields
