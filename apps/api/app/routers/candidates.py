@@ -30,9 +30,9 @@ async def get_profile(
 # Auto‑fill profile from a CV using Gemini (backend only)
 @router.post("/profile/auto-fill", response_model=ProfileUpdate)
 async def auto_fill_profile(
-    cv: UploadFile = File(...),
     current_user: Annotated[User, Depends(require_candidate)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    cv: UploadFile = File(...),
 ) -> dict:
     # Read file bytes
     content = await cv.read()
@@ -80,9 +80,9 @@ async def update_profile(
 # Auto‑fill profile from a CV using Gemini (backend only)
 @router.post("/profile/auto-fill", response_model=ProfileUpdate)
 async def auto_fill_profile(
-    cv: UploadFile = File(...),
     current_user: Annotated[User, Depends(require_candidate)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    cv: UploadFile = File(...),
 ) -> dict:
     # Read file bytes
     content = await cv.read()

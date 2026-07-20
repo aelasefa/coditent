@@ -161,6 +161,7 @@ export async function autoFillProfileFromCV(file: File): Promise<Partial<Profile
   const formData = new FormData();
   formData.append("cv", file);
   const response = await fetch(`${API_BASE_URL}/candidates/profile/auto-fill`, {
+    credentials: "include",
     method: "POST",
     body: formData,
     // Let auth interceptor handle cookies; no JSON headers needed.

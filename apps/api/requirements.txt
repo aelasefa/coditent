@@ -14,6 +14,7 @@ python-dotenv
 supabase
 slowapi
 redis
+python-multipart
 celery
 prometheus-client
 structlog
