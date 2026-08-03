@@ -186,7 +186,7 @@
 
 .tableHead {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 0.9fr 1fr 0.7fr;
+  grid-template-columns: 2fr 1.2fr 0.9fr 1fr 0.7fr 0.9fr;
   padding: 0.65rem 1.25rem;
   background: rgba(255, 255, 255, 0.025);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -200,7 +200,7 @@
 
 .jobRow {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 0.9fr 1fr 0.7fr;
+  grid-template-columns: 2fr 1.2fr 0.9fr 1fr 0.7fr 0.9fr;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   align-items: center;
@@ -278,10 +278,15 @@
 }
 
 .colSalary,
-.colMode {
+.colMode,
+.colApply {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+.colApply {
+  justify-content: flex-end;
 }
 
 .salaryChip {
@@ -465,6 +470,11 @@
 
   .colMode::before {
     content: "Mode  ";
+    color: var(--ct-text-muted);
+  }
+
+  .colApply::before {
+    content: "Action  ";
     color: var(--ct-text-muted);
   }
 }

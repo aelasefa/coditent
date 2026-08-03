@@ -115,6 +115,12 @@ export default function RecruiterPage() {
               Recommendations
             </Link>
             <Link
+              className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
+              href="/recruiter/applicants"
+            >
+              Applicants
+            </Link>
+            <Link
               className="inline-flex h-9 items-center justify-center rounded-full bg-md-primary px-4 text-sm font-medium text-md-onPrimary transition-all duration-300 ease-md hover:bg-md-primary/90 active:scale-95"
               href="/recruiter/offers/new"
             >

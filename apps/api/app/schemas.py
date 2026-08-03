@@ -152,3 +152,31 @@ class AdminActivityOut(APIModel):
     target_user_email: str | None
     details: str | None
     created_at: datetime
+
+
+class ApplicationCreate(APIModel):
+    cover_letter: str | None = Field(default=None, max_length=4000)
+
+
+class ApplicationOut(APIModel):
+    id: uuid.UUID
+    candidate_id: uuid.UUID
+    offer_id: uuid.UUID
+    status: str
+    cover_letter: str | None
+    recruiter_note: str | None
+    applied_at: datetime
+    updated_at: datetime | None
+    offer: OfferOut | None = None
+    candidate: UserOut | None = None
+    candidate_profile: ProfileOut | None = None
+
+
+class ApplicationUpdate(APIModel):
+    status: Literal["PENDING", "REVIEWED", "ACCEPTED", "REJECTED", "WITHDRAWN"]
+    recruiter_note: str | None = Field(default=None, max_length=4000)
+
+
+class ApplicationStatusOut(APIModel):
+    applied: bool
+    application: ApplicationOut | None = None

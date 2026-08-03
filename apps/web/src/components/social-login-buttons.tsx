@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { API_BASE_URL } from "@/lib/api";
+
 const googleIcon = (
   <svg viewBox="0 0 48 48" className="h-4 w-4" role="img" aria-label="Google">
     <path
@@ -43,7 +45,6 @@ export function SocialLoginButtons({
   className,
   separator = "OR",
 }: SocialLoginButtonsProps) {
-  const ssoBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
   const baseButtonClass =
     "inline-flex h-11 w-full items-center justify-center gap-3 rounded-full px-4 text-sm font-semibold transition-all duration-300 ease-md active:scale-95";
 
@@ -52,7 +53,7 @@ export function SocialLoginButtons({
       <div className="grid gap-3">
         <a
           className={`${baseButtonClass} border border-md-outline/30 bg-white text-slate-900 hover:border-md-primary/40 hover:shadow-sm`}
-          href={`${ssoBaseUrl}/auth/sso/google/start`}
+          href={`${API_BASE_URL}/auth/sso/google/start`}
         >
           <span aria-hidden className="flex h-5 w-5 items-center justify-center">
             {googleIcon}
@@ -61,7 +62,7 @@ export function SocialLoginButtons({
         </a>
         <a
           className={`${baseButtonClass} bg-[#0A66C2] text-white hover:bg-[#0A66C2]/90`}
-          href={`${ssoBaseUrl}/auth/sso/linkedin/start`}
+          href={`${API_BASE_URL}/auth/sso/linkedin/start`}
         >
           <span aria-hidden className="flex h-5 w-5 items-center justify-center">
             {linkedInIcon}

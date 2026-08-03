@@ -1,14 +1,19 @@
+"use client";
+
 import type { Offer } from "@/lib/types";
+import { ApplyButton } from "@/components/apply-button";
 import { MdCard } from "@/components/ui/md-card";
+import { useIsOfferApplied } from "@/lib/use-applications";
 
 interface OfferCardProps {
   offer: Offer;
   score?: number;
   reasoning?: string;
   action?: React.ReactNode;
+  showApply?: boolean;
 }
 
-const avatarSet = ["🧑‍💻", "🧠", "🎨", "📊", "🚀", "🤝", "🛠️", "🌟", "🎯", "💼"];
+const avatarSet = ["🧑‍💻", "🧑‍🤯", "🎨", "📊", "🚀", "🤝", "🛠️", "🌟", "🎯", "💼"];
 
 function avatarForOffer(offer: Offer): string {
   const seed = `${offer.company}-${offer.title}-${offer.field}`;
@@ -21,8 +26,9 @@ function avatarForOffer(offer: Offer): string {
   return avatarSet[hash % avatarSet.length];
 }
 
-export function OfferCard({ offer, score, reasoning, action }: OfferCardProps) {
+export function OfferCard({ offer, score, reasoning, action, showApply = false }: OfferCardProps) {
   const avatar = avatarForOffer(offer);
+  const { applied } = useIsOfferApplied(showApply ? offer.id : undefined);
 
   return (
     <MdCard className="group relative overflow-hidden rounded-md-lg border-md-outline/20 bg-md-surface p-5">
@@ -77,6 +83,12 @@ export function OfferCard({ offer, score, reasoning, action }: OfferCardProps) {
       ) : null}
 
       {action ? <div className="pt-1">{action}</div> : null}
+
+      {showApply ? (
+        <div className="pt-1">
+          <ApplyButton offerId={offer.id} initialApplied={applied} />
+        </div>
+      ) : null}
     </MdCard>
   );
 }

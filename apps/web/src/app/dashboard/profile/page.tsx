@@ -437,7 +437,7 @@ export default function ProfileBuilderPage() {
           </section>
 
           {/* SECTION 1b: IMPORT CV */}
-          <section id="section-cv" className={\`\${styles.sectionCard} \${styles.sectionCardAnimate1}\`}>
+          <section id="section-cv" className={`${styles.sectionCard} ${styles.sectionCardAnimate1}`}>
             <div className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Import CV</h2>
               <p className={styles.sectionSubtitle}>Upload your CV to auto‑fill the profile fields.</p>
@@ -446,7 +446,9 @@ export default function ProfileBuilderPage() {
             <div className={styles.uploadSection}>
               <label className={styles.uploadZone}>
                 <div className={styles.uploadIcon}>📄</div>
-                <div className={styles.uploadText}>Select CV file (PDF, DOCX, TXT)</div>
+                <div className={styles.uploadText}>
+                  {cvFile ? cvFile.name : "Select CV file (PDF, DOCX, TXT)"}
+                </div>
                 <input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleCVChange} className={styles.fileInput} />
               </label>
               <button type="button" className={styles.aiBtn} onClick={handleAutoFill} disabled={!cvFile || autoFillLoading}>

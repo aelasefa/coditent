@@ -63,12 +63,15 @@ export default function RecommendationsPage() {
             <p className={styles.pageSub}>
               Generate personalized offers by field, region, and type.
             </p>
-            <div className={styles.headerActions}>
-              <Link href="/dashboard/profile" className={styles.actionLink}>
-                Profile
-              </Link>
-              <LogoutButton />
-            </div>
+          <div className={styles.headerActions}>
+            <Link href="/dashboard/applications" className={styles.actionLink}>
+              My applications
+            </Link>
+            <Link href="/dashboard/profile" className={styles.actionLink}>
+              Profile
+            </Link>
+            <LogoutButton />
+          </div>
           </div>
 
           <div className={styles.panelDivider} />
@@ -237,6 +240,7 @@ export default function RecommendationsPage() {
                     style={{ animationDelay: `${index * 80}ms` }}
                   >
                     <OfferCard
+                      showApply
                       offer={recommendation.offer}
                       reasoning={recommendation.reasoning ?? recommendation.ai_reasoning}
                       score={recommendation.score ?? recommendation.ai_score}

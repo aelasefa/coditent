@@ -11,7 +11,7 @@ from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics
-from app.routers import admin, auth, candidates, offers, recommendations
+from app.routers import admin, applications, auth, candidates, offers, recommendations
 
 
 app = FastAPI(
@@ -28,7 +28,13 @@ app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3001"],
+        allow_origins=[
+        settings.frontend_url,
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,6 +47,7 @@ app.include_router(admin.router, tags=["Admin"])
 app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 app.include_router(offers.router, prefix="/offers", tags=["Offers"])
 app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
+app.include_router(applications.router, tags=["Applications"])
 
 
 @app.get("/health")

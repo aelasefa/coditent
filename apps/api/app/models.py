@@ -26,6 +26,14 @@ class OfferType(str, enum.Enum):
     INTERNSHIP = "INTERNSHIP"
 
 
+class ApplicationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    REVIEWED = "REVIEWED"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
@@ -50,6 +58,9 @@ class User(Base):
     offers: Mapped[list["Offer"]] = relationship("Offer", back_populates="recruiter")
     recommendations: Mapped[list["SavedRecommendation"]] = relationship(
         "SavedRecommendation", back_populates="candidate"
+    )
+    applications: Mapped[list["Application"]] = relationship(
+        "Application", back_populates="candidate", foreign_keys="Application.candidate_id"
     )
 
 
@@ -94,6 +105,9 @@ class Offer(Base):
     recommendations: Mapped[list["SavedRecommendation"]] = relationship(
         "SavedRecommendation", back_populates="offer"
     )
+    applications: Mapped[list["Application"]] = relationship(
+        "Application", back_populates="offer", foreign_keys="Application.offer_id"
+    )
 
 
 class SavedRecommendation(Base):
@@ -126,3 +140,37 @@ class AdminActivityLog(Base):
     target_user_email: Mapped[str | None] = mapped_column(String, nullable=True)
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Application(Base):
+    __tablename__ = "applications"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "offer_id", name="uq_applications_candidate_offer"),
+        Index("ix_applications_candidate_id", "candidate_id"),
+        Index("ix_applications_offer_id", "offer_id"),
+        Index("ix_applications_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    offer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("offers.id"), nullable=False
+    )
+    status: Mapped[ApplicationStatus] = mapped_column(
+        Enum(ApplicationStatus), default=ApplicationStatus.PENDING, nullable=False
+    )
+    cover_letter: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recruiter_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, onupdate=datetime.utcnow, nullable=True
+    )
+
+    candidate: Mapped[User] = relationship(
+        "User", back_populates="applications", foreign_keys=[candidate_id]
+    )
+    offer: Mapped[Offer] = relationship(
+        "Offer", back_populates="applications", foreign_keys=[offer_id]
+    )

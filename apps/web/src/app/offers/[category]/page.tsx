@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import { ApplyButton } from "@/components/apply-button";
 import { getOffers } from "@/lib/api";
 import { categories, type CategorySlug } from "@/lib/categories";
 import type { Offer } from "@/lib/types";
@@ -292,6 +293,7 @@ export default function CategoryOffersPage() {
             <span>LOCATION</span>
             <span>SALARY</span>
             <span>MODE</span>
+            <span>APPLY</span>
           </div>
 
           {loading ? (
@@ -329,6 +331,9 @@ export default function CategoryOffersPage() {
                   <span className={`${styles.modeChip} ${getModeClass(job.mode, styles)}`}>
                     {job.mode}
                   </span>
+                </div>
+                <div className={styles.colApply}>
+                  <ApplyButton offerId={job.id} />
                 </div>
               </div>
             ))

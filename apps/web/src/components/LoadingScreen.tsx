@@ -5,16 +5,39 @@ import { useEffect, useState } from "react";
 import CoditentLogo from "@/components/CoditentLogo";
 import styles from "@/components/LoadingScreen.module.css";
 
+const STORAGE_KEY = "coditent:loading-seen";
+
 export default function LoadingScreen() {
-  const [phase, setPhase] = useState<"visible" | "fading" | "done">("visible");
+  const [phase, setPhase] = useState<"visible" | "fading" | "done">("done");
 
   useEffect(() => {
-    const fadeTimer = setTimeout(() => setPhase("fading"), 1800);
-    const doneTimer = setTimeout(() => setPhase("done"), 2300);
+    if (typeof window === "undefined") return;
+
+    try {
+      if (sessionStorage.getItem(STORAGE_KEY)) {
+        setPhase("done");
+        return;
+      }
+    } catch {
+      setPhase("done");
+      return;
+    }
+
+    setPhase("visible");
+
+    const fadeTimer = window.setTimeout(() => setPhase("fading"), 1100);
+    const doneTimer = window.setTimeout(() => {
+      setPhase("done");
+      try {
+        sessionStorage.setItem(STORAGE_KEY, "1");
+      } catch {
+        // ignore
+      }
+    }, 1500);
 
     return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(doneTimer);
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(doneTimer);
     };
   }, []);
 

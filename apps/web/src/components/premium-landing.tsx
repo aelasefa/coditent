@@ -166,20 +166,33 @@ export default function PremiumLanding() {
   useEffect(() => {
     let isMounted = true;
 
-    getMe()
-      .then((data) => {
-        if (isMounted) {
-          setUser(data);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setUser(null);
-        }
-      });
+    const loadUser = () => {
+      getMe()
+        .then((data) => {
+          if (isMounted) {
+            setUser(data);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setUser(null);
+          }
+        });
+    };
 
+    // Defer the auth check so it never blocks the landing page's first paint.
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(loadUser, { timeout: 1500 });
+      return () => {
+        isMounted = false;
+        window.cancelIdleCallback(id);
+      };
+    }
+
+    const t = window.setTimeout(loadUser, 400);
     return () => {
       isMounted = false;
+      window.clearTimeout(t);
     };
   }, []);
 

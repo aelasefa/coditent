@@ -71,3 +71,24 @@ export interface AdminActivity {
   details: string | null;
   created_at: string;
 }
+
+export type ApplicationStatus =
+  | "PENDING"
+  | "REVIEWED"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "WITHDRAWN";
+
+export interface Application {
+  id: string;
+  candidate_id: string;
+  offer_id: string;
+  status: ApplicationStatus;
+  cover_letter: string | null;
+  recruiter_note: string | null;
+  applied_at: string;
+  updated_at: string | null;
+  offer?: Offer | null;
+  candidate?: User | null;
+  candidate_profile?: Profile | null;
+}
