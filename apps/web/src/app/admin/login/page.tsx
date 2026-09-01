@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import axios from "axios";
 
 import { MdButton } from "@/components/ui/md-button";
@@ -10,7 +10,7 @@ import { MdField, MdInput } from "@/components/ui/md-field";
 import { adminLogin } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 
-export default function AdminLoginPage() {
+function AdminLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -106,3 +106,12 @@ export default function AdminLoginPage() {
     </main>
   );
 }
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginForm />
+    </Suspense>
+  );
+}
+
