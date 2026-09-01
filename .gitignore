@@ -1,8 +1,141 @@
-node_modules
-nv
-.env.local
-dist
-.next
-.DS_Store
+# ==========================================
+# 1. Environment Variables & Private Secrets
+# ==========================================
 .env
-.en
+.env*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.prod
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+*.token
+token.json
+
+# ==========================================
+# 2. Python & Virtual Environments
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+venv*/
+.venv/
+.venv*/
+env/
+env*/
+ENV/
+env.bak/
+venv.bak/
+apps/api/venv/
+apps/api/.venv/
+
+# Pytest & Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ==========================================
+# 3. Node.js, Web & Next.js
+# ==========================================
+node_modules/
+apps/web/node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Next.js & Build outputs
+.next/
+apps/web/.next/
+out/
+apps/web/out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Debug & npm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# ==========================================
+# 4. Databases & Storage Artifacts
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+*.rdb
+dump.rdb
+*.sql.gz
+*.dump
+/data/
+db_data/
+
+# ==========================================
+# 5. OS & IDE Specific Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# 6. Logs & Temporary Files
+# ==========================================
+logs/
+*.log
+scratch/
+tmp/
+temp/
