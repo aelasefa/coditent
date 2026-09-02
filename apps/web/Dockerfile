@@ -1,25 +1,35 @@
-FROM node:20-alpine
+# Stage 1: Install all dependencies and build Next.js
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
 
-# Install dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Copy source code
 COPY . .
 
-# Build args for Next.js client-side env variables
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Build Next.js for production
 RUN npm run build
+
+# Stage 2: Lean production runner with only runtime dependencies
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
-# Run Next.js production server
 CMD ["npm", "run", "start"]
+
