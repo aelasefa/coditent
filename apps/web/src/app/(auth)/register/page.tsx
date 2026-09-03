@@ -67,8 +67,15 @@ export default function RegisterPage() {
         }
 
         const detailValue = error.response.data?.detail;
-        const detail = typeof detailValue === "string" ? detailValue : "Registration failed.";
-        setErrorMessage(detail);
+        if (typeof detailValue === "string") {
+          setErrorMessage(detailValue);
+          return;
+        }
+        if (Array.isArray(detailValue) && detailValue[0]?.msg) {
+          setErrorMessage(detailValue[0].msg);
+          return;
+        }
+        setErrorMessage("Registration failed.");
         return;
       }
 

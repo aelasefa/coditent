@@ -75,6 +75,8 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001
     container_name: coditent-web
     depends_on:
       api:
