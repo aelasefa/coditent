@@ -13,7 +13,7 @@ import type {
 } from "@/lib/types";
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001",
   withCredentials: true,
 });
 
@@ -103,7 +103,7 @@ export async function completeOauthRegistration(payload: {
   role: "candidate" | "recruiter";
 }): Promise<TokenResponse> {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/oauth/complete-registration`,
+    `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001"}/auth/oauth/complete-registration`,
     {
       method: "POST",
       credentials: "include",
