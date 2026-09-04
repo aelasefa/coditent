@@ -1,19 +1,22 @@
-name: CI (Continuous Integration)
+name: CI/CD Deployment Pipeline
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  test-web:
-    name: Test & Build Frontend (Web)
+  # ========================================================
+  # STAGE 1: CI (Lint & Test Web + API)
+  # ========================================================
+  ci-web:
+    name: CI - Lint & Test Frontend
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/web
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -33,16 +36,15 @@ jobs:
 
       - name: Test production build
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:8001
+          NEXT_PUBLIC_API_URL: http://34.205.255.37
         run: npm run build
 
-  test-api:
-    name: Test & Sanity-Check Backend (API)
+  ci-api:
+    name: CI - Test Backend Imports
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/api
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -68,3 +70,27 @@ jobs:
           FRONTEND_URL: http://localhost:3000
         run: |
           python -c "import app.main; print('API app loaded successfully')"
+
+  # ========================================================
+  # STAGE 2: CD (Deploy to EC2 via SSH - On push to main)
+  # ========================================================
+  deploy:
+    name: CD - Deploy to AWS EC2
+    needs: [ci-web, ci-api]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deployment script on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            /opt/coditent/deploy.sh
+
+      - name: Verify Live Public Health Endpoint
+        run: |
+          echo "Verifying public endpoint http://${{ secrets.EC2_HOST }}/health ..."
+          curl -s -f --retry 5 --retry-delay 3 http://${{ secrets.EC2_HOST }}/health
+          echo "Health check passed!"
