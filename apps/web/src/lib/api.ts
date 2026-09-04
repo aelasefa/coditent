@@ -12,8 +12,20 @@ import type {
   User,
 } from "@/lib/types";
 
+export function getBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const isHttps = window.location.protocol === "https:";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (isHttps && (!apiUrl || apiUrl.startsWith("http://"))) {
+      return "/backend-api";
+    }
+  }
+
+  return process.env.NEXT_PUBLIC_API_URL || "http://34.205.255.37";
+}
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001",
+  baseURL: getBaseUrl(),
   withCredentials: true,
 });
 
@@ -103,7 +115,7 @@ export async function completeOauthRegistration(payload: {
   role: "candidate" | "recruiter";
 }): Promise<TokenResponse> {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001"}/auth/oauth/complete-registration`,
+    `${getBaseUrl()}/auth/oauth/complete-registration`,
     {
       method: "POST",
       credentials: "include",
