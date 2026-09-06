@@ -18,12 +18,21 @@ from app.database import Base
 import app.models  # noqa: F401
 
 
+def _normalize_alembic_url(url: str) -> str:
+    # Alembic handles asyncpg via async_engine_from_config; normalize same as database.py
+    if url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", _normalize_alembic_url(settings.database_url).replace("%", "%%"))
 
 target_metadata = Base.metadata
 

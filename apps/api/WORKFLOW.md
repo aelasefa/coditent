@@ -18,27 +18,21 @@ This file documents the backend setup steps, current progress, and daily command
 - Push backend branch and open PR to main.
 - Configure Railway deployment and production checks.
 
-## One-Time Setup (fresh machine or deleted venv)
+## One-Time Setup (fresh machine — Supabase-only, no local DB)
 
-1. Enter API folder:
-   - `cd /home/ayelasef/Desktop/coditent/apps/api`
-2. Create virtual environment:
-   - `python -m venv venv`
-3. Activate virtual environment:
-   - `source venv/bin/activate`
-4. Install dependencies:
-   - `pip install -r requirements.txt`
-5. Apply database migrations:
-   - `alembic upgrade head`
-6. Start server:
-   - `uvicorn app.main:app --reload --port 3001`
+1. Ensure Supabase project exists and `apps/api/.env` contains `DATABASE_URL=postgresql+asyncpg://postgres.<REF>:<PASS>@db.<REF>.supabase.co:5432/postgres` (see `apps/api/.env.example`).
+2. Enter API folder: `cd apps/api`
+3. Create virtual environment: `python -m venv venv`
+4. Activate: `source venv/bin/activate`
+5. Install: `pip install -r requirements.txt`
+6. Apply schema to Supabase: `alembic upgrade head`
+7. Start server: `uvicorn app.main:app --reload --port 8001`
 
 ## Daily Start (normal development)
 
-1. `cd /home/ayelasef/Desktop/coditent/apps/api`
-2. `source venv/bin/activate`
-3. `alembic upgrade head`
-4. `uvicorn app.main:app --reload --port 3001`
+1. `cd apps/api && source venv/bin/activate`
+2. `alembic upgrade head`  # idempotent — ensures Supabase schema is up to date
+3. `uvicorn app.main:app --reload --port 8001`
 
 ## Frontend Start (web app)
 

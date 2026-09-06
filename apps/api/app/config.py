@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Supabase PostgreSQL is the sole persistent database.
+    # Example direct:  postgresql+asyncpg://postgres.<ref>:<password>@db.<ref>.supabase.co:5432/postgres
+    # Example pooled:  postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true
+    # Dashboard copy is postgresql:// — auto-upgraded to postgresql+asyncpg:// by database.py
     database_url: str
     supabase_url: str | None = None
     supabase_service_key: str | None = None
@@ -40,9 +44,16 @@ class Settings(BaseSettings):
             self.linkedin_client_secret and not self.linkedin_client_id
         ):
             raise ValueError("LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET must both be set")
+        # Enforce Supabase-only DB: reject local DATABASE_URL early with clear error
+        local_markers = ["@db:", "@localhost", "@127.0.0.1", "coditent:coditent@db"]
+        for marker in local_markers:
+            if marker in self.database_url:
+                raise ValueError(
+                    f"DATABASE_URL contains local marker '{marker}'. Local DB removed — use Supabase."
+                )
         return self
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
