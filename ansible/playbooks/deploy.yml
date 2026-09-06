@@ -1,0 +1,17 @@
+---
+# ============================================================
+# Application Deployment Playbook for Coditent
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/deploy.yml
+# ============================================================
+
+- name: Deploy Coditent Application
+  hosts: all:!local
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: coditent
+      tags:
+        - coditent
+        - deploy

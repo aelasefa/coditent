@@ -1,0 +1,20 @@
+---
+- name: Ensure application directory exists
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Ensure app subdirectories exist
+  ansible.builtin.file:
+    path: "{{ app_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+  loop:
+    - apps
+    - apps/api
+    - apps/web

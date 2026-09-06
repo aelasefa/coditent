@@ -1,0 +1,29 @@
+---
+- name: Wait for API service to become healthy
+  ansible.builtin.uri:
+    url: "{{ healthcheck_url }}"
+    method: GET
+    status_code: 200
+    return_content: yes
+  register: api_health
+  until: api_health.status == 200
+  retries: "{{ healthcheck_retries | default(15) }}"
+  delay: "{{ healthcheck_delay | default(5) }}"
+
+- name: Verify API health response content
+  ansible.builtin.assert:
+    that:
+      - api_health.status == 200
+      - "'ok' in api_health.content"
+    fail_msg: "API healthcheck failed: {{ api_health.content }}"
+    success_msg: "API healthcheck passed successfully! Status: {{ api_health.json.status | default('ok') }}"
+
+- name: Record deployment metadata
+  ansible.builtin.copy:
+    dest: "{{ app_dir }}/.deployment_info"
+    mode: '0644'
+    content: |
+      Deployment Timestamp: {{ ansible_date_time.iso8601 }}
+      Branch: {{ repo_branch }}
+      Commit: {{ current_commit.stdout | default('unknown') }}
+      Deployed By: Ansible
