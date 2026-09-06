@@ -8,27 +8,42 @@ Coditent connects candidates and recruiters in one expressive workspace. Candida
 Key features: JWT auth (candidate/recruiter/admin), OAuth Google/LinkedIn, profile builder with avatar upload (`PUT /auth/me/avatar`), offer CRUD, AI recommendations (Gemini + fallback scoring), role-based routing, Supabase SSR session refresh.
 
 ## Instructions
-**Prerequisites:** Docker + Docker Compose, Node 20, Python 3.12 (for local dev without Docker)
+**Prerequisites:** Docker + Docker Compose, Node 20, Python 3.12 (for local dev), active **Supabase project** (sole database — no local PostgreSQL)
+
+**Database — Supabase only (no local DB):**
+- Supabase PostgreSQL is the single source of truth. No `postgres` Docker container, no SQLite, no localhost fallback.
+- Create a Supabase project: https://supabase.com/dashboard
+- Get **DATABASE_URL**: Dashboard → Settings → Database → Connection string (URI). Prepend `postgresql+asyncpg://` (Dashboard shows `postgresql://`).
+  - Direct: `postgresql+asyncpg://postgres.<REF>:<PASS>@db.<REF>.supabase.co:5432/postgres` (use for `alembic upgrade head`)
+  - Pooled (PgBouncer, 6543): `postgresql+asyncpg://postgres.<REF>:<PASS>@aws-0-<REGION>.pooler.supabase.com:6543/postgres?pgbouncer=true` (production API)
+- Get `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (`sb_secret_...` service_role, NOT publishable) → Settings → API
 
 **Run with Docker (single command):**
 ```bash
 cp .env.example .env
-# fill .env with real values (see .env.example)
+# fill .env with real Supabase DATABASE_URL + keys (see .env.example)
 cp apps/web/.env.example apps/web/.env.local
+cp apps/api/.env.example apps/api/.env  # same DATABASE_URL, backend-only secrets
 docker compose up --build
 # web: http://localhost:3001  api: http://localhost:8001  docs: http://localhost:8001/docs
+# alembic upgrade head runs automatically on api start against Supabase
 ```
 
 **Local dev without Docker:**
 ```bash
-# API
+# API — requires Supabase DATABASE_URL, no local DB needed
 cd apps/api && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt
-alembic upgrade head && uvicorn app.main:app --reload --port 8001
+alembic upgrade head  # creates schema in Supabase
+uvicorn app.main:app --reload --port 8001
 # Web
 cd apps/web && npm ci && npm run dev -- --port 3000
 ```
 
-**Env setup:** See `.env.example` at repo root and `apps/web/.env.example`. Required: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (use `sb_secret_...` service_role, not publishable), `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+**Env setup:** See `.env.example` (root) and `apps/api/.env.example`, `apps/web/.env.example`.
+Required: `DATABASE_URL` (Supabase `postgresql+asyncpg://...`), `JWT_SECRET`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (`sb_secret_...` service_role), `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+Backend-only secrets (`DATABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`) are never exposed to the browser. Use `apps/api/.env.example` as reference.
+
+**Migrations:** `alembic upgrade head` applies the full schema to Supabase (9 versions: users, offers, companies, applications, etc.). New dev: clone → configure `.env` with Supabase URL → `alembic upgrade head` → start.
 
 ## Resources
 - Next.js https://nextjs.org/docs, FastAPI https://fastapi.tiangolo.com, SQLAlchemy https://docs.sqlalchemy.org, Supabase https://supabase.com/docs, Gemini https://ai.google.dev
@@ -48,9 +63,9 @@ cd apps/web && npm ci && npm run dev -- --port 3000
 
 ## Technical Stack
 - **Frontend:** Next.js 14.2 (React 18, App Router, SSR), Tailwind CSS, axios, @tanstack/react-query, CSS Modules
-- **Backend:** FastAPI, SQLAlchemy (async) + Alembic, Postgres 16, Redis 7, Celery worker
-- **DB:** Postgres (chosen for relational integrity, transactions, RLS-ready); Supabase Auth/Storage optional
-- **Other:** Supabase SSR (`@supabase/ssr`), Gemini (`google-generativeai`), Docker
+- **Backend:** FastAPI, SQLAlchemy (async, `postgresql+asyncpg`) + Alembic, Redis 7, Celery worker
+- **DB:** **Supabase PostgreSQL** (sole persistent DB — no local Postgres container, no SQLite). SQLAlchemy connects via Supabase direct/pooled URL.
+- **Other:** Supabase SSR (`@supabase/ssr`) + Supabase admin client (`app/db.py`), Gemini (`google-generativeai`), Docker (api/worker/redis/web only)
 
 ## Database Schema
 - `users(id UUID PK, email, password_hash, role ENUM[CANDIDATE,RECRUITER,ADMIN], is_approved, full_name, avatar_url, oauth_provider, oauth_id)` — FK to `candidate_profiles`

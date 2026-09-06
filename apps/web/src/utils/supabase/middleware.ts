@@ -12,9 +12,23 @@ export const createClient = (request: NextRequest) => {
     },
   });
 
+  // Gracefully handle missing env (e.g. build without Supabase keys) — app uses custom JWT as primary auth
+  if (!supabaseUrl || !supabaseKey) {
+    // Return a no-op supabase client that won't throw
+    const noopSupabase = {
+      auth: {
+        getUser: async () => ({ data: { user: null }, error: null }),
+      },
+    } as unknown as ReturnType<typeof createServerClient>;
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[supabase/middleware] NEXT_PUBLIC_SUPABASE_URL or KEY missing — skipping Supabase session refresh");
+    }
+    return { supabase: noopSupabase, supabaseResponse };
+  }
+
   const supabase = createServerClient(
-    supabaseUrl!,
-    supabaseKey!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {

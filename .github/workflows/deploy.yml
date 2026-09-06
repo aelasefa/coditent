@@ -61,15 +61,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Sanity check imports
+      - name: Sanity check imports (Supabase-only, no local DB)
         env:
-          DATABASE_URL: postgresql+asyncpg://user:pass@localhost:5432/test
+          # Use Supabase-shaped URL (no connection attempted on import); real Supabase not needed for this check
+          DATABASE_URL: postgresql+asyncpg://postgres.test:fake@db.test.supabase.co:5432/postgres
           JWT_SECRET: ci-test-jwt-secret-key-1234567890
           GEMINI_API_KEY: ci-test-gemini-key
           REDIS_URL: redis://localhost:6379/0
           FRONTEND_URL: http://localhost:3000
         run: |
-          python -c "import app.main; print('API app loaded successfully')"
+          python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"
 
   # ========================================================
   # STAGE 2: CD (Deploy to EC2 via SSH - On push to main)

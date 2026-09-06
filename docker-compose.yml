@@ -1,19 +1,4 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: coditent-db
-    environment:
-      POSTGRES_DB: coditent
-      POSTGRES_USER: coditent
-      POSTGRES_PASSWORD: coditent
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U coditent -d coditent"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     build:
       context: ./apps/api
@@ -21,14 +6,13 @@ services:
     container_name: coditent-api
     env_file:
       - ./apps/api/.env
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       FRONTEND_URL: http://localhost:3001
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      JWT_SECRET: local-dev-secret
+      JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
       ACCESS_TOKEN_COOKIE_SECURE: "false"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
@@ -57,14 +41,14 @@ services:
     depends_on:
       api:
         condition: service_started
-      db:
-        condition: service_healthy
       redis:
         condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      JWT_SECRET: local-dev-secret
+      JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
     command: celery -A app.tasks worker --loglevel=info
 
@@ -80,6 +64,8 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
     container_name: coditent-web
     depends_on:
       api:
@@ -91,6 +77,3 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "3001:3000"
-
-volumes:
-  db_data:
