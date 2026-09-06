@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import { OfferCard } from "@/components/offer-card";
 import { LogoutButton } from "@/components/logout-button";
+import CoditentLogo from "@/components/CoditentLogo";
 import { MdButton } from "@/components/ui/md-button";
 import { MdCard } from "@/components/ui/md-card";
 import { MdField, MdInput, MdSelect } from "@/components/ui/md-field";
@@ -75,7 +76,21 @@ export default function RecommendationsPage() {
 
   return (
     <main className={styles.shell}>
-      <div aria-hidden className={styles.glowLayer}><div className={styles.glowLeft} /><div className={styles.glowRight} /></div>
+      <div aria-hidden className={styles.heroMesh} />
+      <div aria-hidden className={styles.ambientGlow} />
+      <div aria-hidden className={styles.ambientGlowTwo} />
+      <header className={styles.candidateNav}>
+        <div className={styles.candidateNavInner}>
+          <Link href="/" className={styles.brandLink}><CoditentLogo size={32} useSvg={false} className={styles.logoMark} /></Link>
+          <span className={styles.livePill}><span className={styles.liveDot} />LIVE</span>
+          <nav className={styles.candidateNavLinks}>
+            <Link href="/dashboard/profile" className={styles.candidateNavLink}>Profile</Link>
+            <Link href="/dashboard/recommendations" className={`${styles.candidateNavLink} ${styles.candidateNavActive}`}>Recommendations</Link>
+            <Link href="/offers/all" className={styles.candidateNavLink}>Browse Offers</Link>
+            <Link href="/companies" className={styles.candidateNavLink}>Companies</Link>
+          </nav>
+        </div>
+      </header>
       <div className={styles.splitLayout}>
         <aside className={styles.leftPanel}>
           <div className={styles.panelHeader}>

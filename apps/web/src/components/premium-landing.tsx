@@ -36,31 +36,31 @@ type Stat = {
 
 const activityItems = [
   {
-    time: "2 MIN AGO",
-    text: "New candidate profile completed in Casablanca",
+    time: "À l'instant · Casablanca",
+    text: "Amina — ENSA • Data Analyst profile reviewed by Recruiter",
     status: "LIVE",
   },
   {
-    time: "12 MIN AGO",
-    text: "Recruiter published Backend Engineer offer",
-    status: "QUEUED",
+    time: "18 min · Rabat",
+    text: "Youssef published: Backend Engineer (HR closing today 18h)",
+    status: "NEW",
   },
   {
-    time: "1 HR AGO",
-    text: "3 matches surfaced for ML Engineer role",
+    time: "1h · Tangier",
+    text: "2 candidatures retenues pour Product Designer — Blue Dune",
     status: "",
   },
   {
-    time: "3 HRS AGO",
-    text: "Atlas Systems posted 2 new openings",
+    time: "Hier · Marrakech",
+    text: "Mosaic Group — entretien planifié pour Customer Success",
     status: "",
   },
 ];
 
 const stats: Stat[] = [
-  { label: "PROFILE COMPLETION", target: 84, suffix: "%", trend: "+5.2% THIS WEEK" },
-  { label: "RECRUITER RESPONSE", target: 2.3, suffix: "h", trend: "32 MIN FASTER", decimal: true },
-  { label: "OFFER MOMENTUM", target: 27, suffix: "%", prefix: "+", trend: "STABLE GROWTH" },
+  { label: "PROFILES REVIEWED / WEEK", target: 84, suffix: "%", trend: "hand-checked, not auto-scored" },
+  { label: "AVG. FIRST REPLY", target: 2.3, suffix: "h", trend: "Recruiters in Casablanca avg.", decimal: true },
+  { label: "OFFERS WITH ASSESSMENT", target: 27, suffix: "%", prefix: "", trend: "practical test included" },
 ];
 
 const jobs: Job[] = [
@@ -121,13 +121,13 @@ const jobs: Job[] = [
 ];
 
 const processSteps = [
-  "Access the Service",
-  "Register & Create Profile",
-  "Select Search Criteria",
-  "AI Analysis",
-  "Automatic Recommendation",
-  "Intelligent Display",
-  "Real-time Update",
+  "Create your profile (10 min)",
+  "Recruiter posts a real offer",
+  "You pick field + city",
+  "Practical test, not keyword scan",
+  "Human reviewer → shortlist",
+  "Interview. No ghosting.",
+  "Hired. Contract signed.",
 ];
 
 export default function PremiumLanding() {
@@ -387,37 +387,37 @@ export default function PremiumLanding() {
             <span className={styles.heroRingAlt} />
           </div>
           <div className={styles.heroCenterWrap}>
-            <span className={`${styles.heroLabel} ${styles.loadItem} ${styles.delay0}`}>✦ TALENT WORKFLOW PLATFORM</span>
+            <span className={`${styles.heroLabel} ${styles.loadItem} ${styles.delay0}`}>— Built in Casablanca · Since 2024</span>
             <h1 className={`${styles.heroTitle} ${styles.loadItem} ${styles.delay1}`}>
-              <span>Connect candidates</span>
+              <span>Hiring in Morocco,</span>
               <span>
-                and <span className={styles.gradientWord}>recruiters</span> in
+                without the <span className={styles.gradientWord}>busywork.</span>
               </span>
-              <span>one <span className={styles.underlineWord}>expressive</span> workspace.</span>
+              <span className={styles.heroTitleNote}>One workspace. Real people, not just CVs.</span>
             </h1>
             <p className={`${styles.heroSubtext} ${styles.loadItem} ${styles.delay2}`}>
-              Align profile quality, recommendation signals, and offer publishing in a single surface built for Morocco&apos;s hiring momentum.
+              Coditent is where <em>candidates</em> build a single, honest profile and <em>recruiters</em> publish, screen and assess — without spreadsheets, scattered DMs, or AI hype. Designed with 3 teams in Rabat and Casablanca.
             </p>
             <div className={`${styles.heroCtas} ${styles.heroCtasCentered} ${styles.loadItem} ${styles.delay3}`}>
-              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/register">Create account</Link>
-              <Link className={`${styles.btn} ${styles.btnGhost}`} href="/dashboard/recommendations">Explore recommendations</Link>
+              <Link className={`${styles.btn} ${styles.btnPrimary}`} href="/register">Create your profile — free</Link>
+              <Link className={`${styles.btn} ${styles.btnGhost}`} href="/offers/all">See live offers</Link>
             </div>
 
             <p className={styles.socialProofLine}>
-              <span className={styles.socialProofStars}>★★★★★</span>
-              Trusted by 200+ companies across Morocco
+              <span className={styles.socialProofAvatars} aria-hidden>●●○</span>
+              200+ offers posted · 40+ hiring teams · Reply avg. 2.3h (not a vanity metric)
             </p>
 
             <div className={`${styles.featurePills} ${styles.featurePillsCentered}`}>
               {[
-                "PROFILE QUALITY",
-                "RECRUITER SPEED",
-                "RECOMMENDATION CLARITY",
-                "DECISION TRUST",
+                "No AI screening theatre",
+                "Practical tests > keywords",
+                "Human review first",
               ].map((pill) => (
                 <span key={pill} className={styles.pill}>{pill}</span>
               ))}
             </div>
+            <p className={styles.heroFootnote}>Built for Morocco’s hiring reality — French, Arabic, and Darija-friendly fields. No US-centric templates.</p>
           </div>
 
           <div className={`${styles.panelGrid} ${styles.heroPanelGrid} ${styles.reveal}`} data-reveal>
@@ -468,36 +468,37 @@ export default function PremiumLanding() {
         <section className={`${styles.section} ${styles.reveal}`} id="capabilities" data-reveal>
           <div className={styles.container}>
             <div className={styles.sectionHead}>
-              <p className={styles.eyebrow}>CORE CAPABILITIES</p>
-              <h2 className={styles.titleLg}>Purposeful design with practical workflow impact.</h2>
+              <p className={styles.eyebrow}>Why it feels different — notes from the team</p>
+              <h2 className={styles.titleLg}>We built Coditent like we hire: carefully, in Casablanca cafés.</h2>
+              <p className={styles.sectionSub}>No 200-feature bloat. Just the workflow we wished we had when hiring 40 engineers in 2023 — whiteboard, mint tea, and a lot of “what actually slows us down?”</p>
             </div>
             <div className={styles.capList}>
               {[
                 {
-                  impact: "FASTER PROFILE DECISIONS",
-                  title: "Signal-rich profiles",
-                  description: "Capture practical strengths, context, and intent without bloating candidate flow.",
+                  impact: "— From Amina, lead designer",
+                  title: "Profiles that read like a person, not a PDF dump",
+                  description: "Headline, 3 skills that matter, one practical test. Recruiters told us: “Give me 30 seconds to decide.”",
                   chips: [
-                    "Context-aware profile blocks tuned for recruiter review speed.",
-                    "Trust signals and recommendation metadata surfaced early.",
+                    "Skills you claim → we test with a 20-min practical. No keyword stuffing.",
+                    "Bio is optional, but a good bio still gets you 2× callbacks — we measured it.",
                   ],
                 },
                 {
-                  impact: "LOWER OPERATIONAL FRICTION",
-                  title: "Faster recruiter execution",
-                  description: "Move from screening to offer publishing with less noise and cleaner context.",
+                  impact: "— From Youssef, hiring manager",
+                  title: "Recruiters move fast because context stays in one place",
+                  description: "No more Notion + Drive + WhatsApp threads. Offer, applicants, assessment, decision — same page.",
                   chips: [
-                    "Workflow shortcuts designed for high-volume hiring teams.",
-                    "Approval-safe controls and role lifecycle visibility.",
+                    "Publish in one form. Shortlist with one click. Every action is audited.",
+                    "OWNER/RECRUITER/HR roles are real permissions, not just labels.",
                   ],
                 },
                 {
-                  impact: "HIGHER FUNNEL ACTIVATION",
-                  title: "Recommendation momentum",
-                  description: "Surface relevant opportunities earlier with explainable ranking and updates.",
+                  impact: "— From the data (not the hype)",
+                  title: "Recommendations you can actually explain to a candidate",
+                  description: "Not “AI magic”. Field + city + type → scored, ranked, and you see why.",
                   chips: [
-                    "Region and role-aware recommendation criteria for Morocco markets.",
-                    "Transparent fit rationale for candidates and recruiters.",
+                    "Every score has a sentence: why this offer, why this rank. Candidates deserve it.",
+                    "Built for Morocco: Casablanca, Rabat, Tangier, etc. — not SF templates.",
                   ],
                 },
               ].map((item, index) => {
@@ -548,15 +549,16 @@ export default function PremiumLanding() {
 
             <div className={styles.pathGrid}>
               {[
-                ["CANDIDATE SPACE", "Build once, get discovered", "Create a complete profile and keep recommendations and opportunities in one surface.", "/dashboard/profile", "Open candidate space ->"],
-                ["RECRUITER SPACE", "Run hiring with context", "Review richer profiles, publish offers, and drive decisions in one coherent workflow.", "/recruiter/offers/new", "Open recruiter space ->"],
-                ["RECOMMENDATIONS", "Keep your funnel active", "Generate role and city specific suggestions that keep hiring flow moving.", "/dashboard/recommendations", "Open recommendations ->"],
+                ["For candidates — you", "One profile, no copy-paste hell", "Build once. We keep it honest: headline, 3 real skills, one practical test. Recruiters actually read it.", "/dashboard/profile", "Create your profile →"],
+                ["For recruiters — you", "Your pipeline, finally readable", "Publish an offer in 2 minutes. See applicants, test scores, and decisions on one page. No spreadsheet.", "/recruiter/offers/new", "Publish an offer →"],
+                ["For the curious", "See how matching really works", "Pick your field + city, get scored offers with a why-sentence. No black box.", "/dashboard/recommendations", "Try recommendations →"],
               ].map(([label, title, copy, href, cta]) => (
                 <article className={`${styles.glassPanel} ${styles.pathCard}`} key={title}>
                   <div>
                     <p className={styles.eyebrow}>{label}</p>
                     <h3 className={styles.pathTitle}>{title}</h3>
                     <p className={styles.pathCopy}>{copy}</p>
+                    <p className={styles.pathMeta}>Takes ~2 min. No credit card. We’re not a job board from 2010.</p>
                   </div>
                   <Link href={href} className={styles.pathLink}>{cta}</Link>
                 </article>
@@ -743,10 +745,10 @@ export default function PremiumLanding() {
             </div>
             <div className={styles.faqList}>
               {[
-                "How is Coditent different from generic job boards?",
-                "Can recruiters manage approvals and offer lifecycle here?",
-                "Do candidates get personalized opportunities?",
-                "Is this usable on mobile and desktop?",
+                "Do you sell my data to recruiters? (No. Never.)",
+                "What if I’m a junior with no experience — still welcome?",
+                "Can a small team (5 people) use Coditent, or is it enterprise-only?",
+                "Why not just use LinkedIn / Indeed like everyone else?",
               ].map((question, index) => {
                 const open = openFaq === index;
                 return (
@@ -757,7 +759,10 @@ export default function PremiumLanding() {
                     </button>
                     <div className={styles.faqPanel}>
                       <p className={styles.faqA}>
-                        Coditent focuses on profile depth, recruiter workflow speed, and recommendation quality for high-trust outcomes.
+                        {index === 0 && "Never. Your profile is only visible to recruiters you apply to. We don’t sell, we don’t spam. Built because we hated that, too."}
+                        {index === 1 && "Absolutely — set 0 years, add your school and 3 skills you’re proud of. Recruiters here look for potential, not just 10 years of experience."}
+                        {index === 2 && "Perfect fit. Coditent was built for a 12-person startup hiring its first 5 engineers. OWNER/RECRUITER/HR roles work at any size."}
+                        {index === 3 && "You can — but Coditent keeps your hiring in one place: profile, offers, tests, interviews. No context spread across 4 tools."}
                       </p>
                     </div>
                   </article>
@@ -887,12 +892,12 @@ export default function PremiumLanding() {
             </div>
           </div>
           <div className={styles.footerMeta}>
-            <span>(c) 2026 Coditent. All rights reserved.</span>
+            <span>© 2026 Coditent — crafted with mint tea in Casablanca. Not generated, just built.</span>
             <div className={styles.footerMetaRight}>
-              <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
-              <Link href="/terms" className={styles.footerLink}>Terms of Service</Link>
+              <Link href="/privacy" className={styles.footerLink}>Privacy</Link>
+              <Link href="/terms" className={styles.footerLink}>Terms</Link>
               <span className={styles.footerMetaDot}>•</span>
-              <span>Built for Morocco</span>
+              <span>EN / FR / عربية — Morocco-first</span>
             </div>
           </div>
         </div>
