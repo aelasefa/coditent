@@ -1,0 +1,12 @@
+---
+common_packages:
+  - curl
+  - git
+  - htop
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - ufw
+  - python3-pip
+  - python3-apt
+  - rsync

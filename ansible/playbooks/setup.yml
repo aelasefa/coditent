@@ -1,0 +1,38 @@
+---
+# ============================================================
+# Server Provisioning Playbook: Setup Ubuntu Host for Coditent
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/setup.yml
+# ============================================================
+
+- name: Provision Host Server for Coditent Application
+  hosts: all:!local
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: common
+      tags:
+        - common
+        - base
+
+    - role: docker
+      tags:
+        - docker
+
+    - role: nginx
+      when: nginx_enabled | default(true)
+      tags:
+        - nginx
+        - proxy
+
+  post_tasks:
+    - name: Ensure app directory has correct ownership after provisioning
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+      tags:
+        - setup

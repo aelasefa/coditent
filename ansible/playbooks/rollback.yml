@@ -1,0 +1,54 @@
+---
+# ============================================================
+# Rollback Playbook for Coditent
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/rollback.yml -e "rollback_commit=abcd123"
+# ============================================================
+
+- name: Rollback Coditent Application
+  hosts: all:!local
+  become: yes
+  gather_facts: yes
+
+  vars_prompt:
+    - name: rollback_commit
+      prompt: "Enter git commit SHA, tag, or branch to rollback to"
+      private: no
+
+  tasks:
+    - name: Fail if rollback target is empty
+      ansible.builtin.assert:
+        that:
+          - rollback_commit is defined
+          - rollback_commit | length > 0
+        fail_msg: "You must supply a rollback commit or branch via -e 'rollback_commit=<sha>'"
+
+    - name: Checkout rollback commit
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ rollback_commit }}"
+        force: yes
+
+    - name: Rebuild and start Docker Compose containers
+      ansible.builtin.command:
+        cmd: docker compose up -d --build --remove-orphans
+        chdir: "{{ app_dir }}"
+
+    - name: Wait for API service health
+      ansible.builtin.uri:
+        url: "{{ healthcheck_url }}"
+        method: GET
+        status_code: 200
+        return_content: yes
+      register: rollback_health
+      until: rollback_health.status == 200
+      retries: "{{ healthcheck_retries | default(15) }}"
+      delay: "{{ healthcheck_delay | default(5) }}"
+
+    - name: Assert rollback healthcheck passed
+      ansible.builtin.assert:
+        that:
+          - rollback_health.status == 200
+        fail_msg: "Rollback failed: API did not return status 200"
+        success_msg: "Rollback completed successfully to commit {{ rollback_commit }}"
