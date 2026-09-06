@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
+import { ThemeProvider } from "@/lib/theme-context";
 
 const LoadingScreen = dynamic(() => import("@/components/LoadingScreen"), { ssr: false });
 const DarkVeil = dynamic(() => import("@/components/DarkVeil"), { ssr: false });
@@ -41,7 +42,9 @@ export default function RootLayout({
           />
         </div>
         <QueryProvider>
-          <div className="siteContentLayer">{children}</div>
+          <ThemeProvider>
+            <div className="siteContentLayer">{children}</div>
+          </ThemeProvider>
         </QueryProvider>
       </body>
     </html>

@@ -16,6 +16,23 @@
   --md-surface-low: #0b0d14;
   --md-outline: #3a3450;
   --md-on-surface-variant: #b7b1cc;
+
+  /* Coditent landing design tokens */
+  --ct-primary: #8b5cf6;
+  --ct-secondary: #a78bfa;
+  --ct-accent: #4cb6c4;
+  --ct-live: #22c55e;
+  --ct-border: rgba(148, 122, 220, 0.16);
+  --ct-border-strong: rgba(148, 122, 220, 0.34);
+  --ct-text-primary: #f4f1fb;
+  --ct-text-secondary: #b9b1d6;
+  --ct-text-muted: #847b9e;
+  --ct-gradient: linear-gradient(135deg, #4f46e5 0%, #8b5cf6 48%, #c084fc 100%);
+  --ct-glow: rgba(139, 92, 246, 0.45);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 * {

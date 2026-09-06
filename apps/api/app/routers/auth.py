@@ -15,6 +15,7 @@ from app.models import CandidateProfile, User, UserRole
 from app.limiter import limiter
 from app.observability import get_logger
 from app.schemas import (
+    AvatarUpdate,
     LoginRequest,
     OAuthCompleteRegistrationRequest,
     OAuthCompleteRegistrationResponse,
@@ -373,14 +374,19 @@ async def register(
         logger.warning("register_failed", email=email, reason="email_in_use")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
-    role = UserRole(data.role)
+    # Enforce candidate-only public registration — prevent mass assignment
+    if data.role != "CANDIDATE":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only CANDIDATE registration is public")
+    role = UserRole.CANDIDATE
 
     user = User(
         email=email,
         password_hash=pwd_context.hash(data.password),
         role=role,
-        is_approved=role != UserRole.RECRUITER,
+        is_approved=True,
         full_name=data.full_name,
+        company_id=None,
+        company_role=None,
     )
     db.add(user)
     await db.flush()
@@ -442,6 +448,22 @@ async def login(
     )
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
+
+
+@router.put("/me/avatar", response_model=UserMeOut)
+async def update_avatar(
+    data: AvatarUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserMeOut:
+    current_user.avatar_url = data.avatar_url.strip() or None
+    await db.commit()
+    await db.refresh(current_user)
+    result = await db.execute(
+        select(User).options(joinedload(User.profile)).where(User.id == current_user.id)
+    )
+    user = result.scalar_one()
+    return UserMeOut.model_validate(user)
 
 
 @router.get("/me", response_model=UserMeOut)

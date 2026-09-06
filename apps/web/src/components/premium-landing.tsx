@@ -382,6 +382,10 @@ export default function PremiumLanding() {
 
       <main className={styles.contentLayer}>
         <section className={styles.hero}>
+          <div className={styles.heroBackdrop} aria-hidden>
+            <span className={styles.heroRing} />
+            <span className={styles.heroRingAlt} />
+          </div>
           <div className={styles.heroCenterWrap}>
             <span className={`${styles.heroLabel} ${styles.loadItem} ${styles.delay0}`}>✦ TALENT WORKFLOW PLATFORM</span>
             <h1 className={`${styles.heroTitle} ${styles.loadItem} ${styles.delay1}`}>
@@ -463,8 +467,10 @@ export default function PremiumLanding() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="capabilities" data-reveal>
           <div className={styles.container}>
-            <p className={styles.eyebrow}>CORE CAPABILITIES</p>
-            <h2 className={styles.titleLg}>Purposeful design with practical workflow impact.</h2>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>CORE CAPABILITIES</p>
+              <h2 className={styles.titleLg}>Purposeful design with practical workflow impact.</h2>
+            </div>
             <div className={styles.capList}>
               {[
                 {
@@ -532,11 +538,13 @@ export default function PremiumLanding() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="pathways" data-reveal>
           <div className={styles.container}>
-            <div className={styles.rowHead}>
-              <p className={styles.eyebrow}>ENTRY PATHWAYS</p>
-              <span className={styles.pill}>RETURNING USERS</span>
+            <div className={styles.sectionHead}>
+              <div className={styles.rowHead}>
+                <p className={styles.eyebrow}>ENTRY PATHWAYS</p>
+                <span className={styles.pill}>RETURNING USERS</span>
+              </div>
+              <h2 className={styles.titleLg}>Choose your lane and keep momentum.</h2>
             </div>
-            <h2 className={styles.titleLg}>Choose your lane and keep momentum.</h2>
 
             <div className={styles.pathGrid}>
               {[
@@ -561,8 +569,10 @@ export default function PremiumLanding() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="companies" data-reveal>
           <div className={styles.container}>
-            <p className={styles.eyebrow}>COMPANIES HIRING NOW</p>
-            <h2 className={styles.titleLg}>Discover active teams and their hiring context.</h2>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>COMPANIES HIRING NOW</p>
+              <h2 className={styles.titleLg}>Discover active teams and their hiring context.</h2>
+            </div>
             <div className={styles.companyList}>
               {[
                 ["Atlas Systems", "Enterprise SaaS", "Casablanca", "Scaling product and platform teams to accelerate B2B hiring workflows across the region.", ["Frontend", "Backend", "Product"], "12 OPENINGS"],
@@ -611,15 +621,17 @@ export default function PremiumLanding() {
                 hoverSpeed={0}
                 scaleOnHover
                 fadeOut
-                fadeOutColor="#06070b"
+                fadeOutColor="#0d0b1a"
                 ariaLabel="Technology partners"
               />
             </div>
-            <p className={styles.eyebrow}>EXPLORE BY CATEGORY</p>
-            <h2 className={styles.categoryTitle}>
-              Find your next role in{' '}
-              <span className={styles.underlineWord}>any field.</span>
-            </h2>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>EXPLORE BY CATEGORY</p>
+              <h2 className={styles.categoryTitle}>
+                Find your next role in{' '}
+                <span className={styles.underlineWord}>any field.</span>
+              </h2>
+            </div>
             <div className={styles.categoryGrid}>
               {categories.map((cat, index) => (
                 <button
@@ -651,8 +663,10 @@ export default function PremiumLanding() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="roles" data-reveal>
           <div className={styles.container}>
-            <p className={styles.eyebrow}>ROLE STREAM</p>
-            <h2 className={styles.titleLg}>High-signal opportunities this week.</h2>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>ROLE STREAM</p>
+              <h2 className={styles.titleLg}>High-signal opportunities this week.</h2>
+            </div>
 
             <div className={styles.tabs} role="tablist" aria-label="Role filters">
               {(["all", "engineering", "design", "data", "operations", "success"] as RoleCategory[]).map((item) => (
@@ -698,8 +712,10 @@ export default function PremiumLanding() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="process" data-reveal>
           <div className={styles.container}>
-            <p className={styles.eyebrow}>PROCESS</p>
-            <h2 className={styles.titleLg}>Seven steps from profile to placement.</h2>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>PROCESS</p>
+              <h2 className={styles.titleLg}>Seven steps from profile to placement.</h2>
+            </div>
             <div className={styles.processWrap}>
               <div className={`${styles.processLine} ${styles.processLineAnimate}`} />
               <ol className={styles.steps}>
@@ -721,8 +737,10 @@ export default function PremiumLanding() {
 
         <section className={`${styles.section} ${styles.reveal}`} id="faq" data-reveal>
           <div className={styles.container}>
-            <p className={styles.eyebrow}>FAQ</p>
-            <h2 className={styles.titleLg}>Everything you need before you start.</h2>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>FAQ</p>
+              <h2 className={styles.titleLg}>Everything you need before you start.</h2>
+            </div>
             <div className={styles.faqList}>
               {[
                 "How is Coditent different from generic job boards?",
@@ -871,6 +889,8 @@ export default function PremiumLanding() {
           <div className={styles.footerMeta}>
             <span>(c) 2026 Coditent. All rights reserved.</span>
             <div className={styles.footerMetaRight}>
+              <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
+              <Link href="/terms" className={styles.footerLink}>Terms of Service</Link>
               <span className={styles.footerMetaDot}>•</span>
               <span>Built for Morocco</span>
             </div>

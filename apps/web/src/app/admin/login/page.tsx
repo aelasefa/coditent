@@ -10,7 +10,7 @@ import { MdField, MdInput } from "@/components/ui/md-field";
 import { adminLogin } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 
-function AdminLoginForm() {
+function AdminLoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -29,7 +29,7 @@ function AdminLoginForm() {
 
     try {
       const data = await adminLogin({ email, password });
-      if (data.user.role !== "ADMIN") {
+      if (data.user.role !== "ADMIN" && data.user.role !== "PLATFORM_ADMIN") {
         setErrorMessage("This account is not an admin.");
         return;
       }
@@ -110,8 +110,7 @@ function AdminLoginForm() {
 export default function AdminLoginPage() {
   return (
     <Suspense fallback={null}>
-      <AdminLoginForm />
+      <AdminLoginPageInner />
     </Suspense>
   );
 }
-

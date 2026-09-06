@@ -134,4 +134,4 @@ async def generate_recommendations_for_candidate(
     )
     recommendations = recommendations_result.scalars().all()
 
-    return [RecommendationOut.model_validate(item).model_dump() for item in recommendations]
+    return [RecommendationOut.model_validate(item).model_dump(mode="json") for item in recommendations]

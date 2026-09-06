@@ -11,7 +11,7 @@ from app.schemas import RecommendationRequest
 
 
 genai.configure(api_key=settings.gemini_api_key)
-_model = genai.GenerativeModel("gemini-1.5-flash")
+_model = genai.GenerativeModel("gemini-3-flash-preview")
 logger = get_logger("ai")
 
 
@@ -71,8 +71,8 @@ Retourne un tableau JSON de 10 éléments maximum, du plus pertinent au moins:
             prompt,
             generation_config={"temperature": 0.2, "max_output_tokens": 1000},
         )
-    except Exception:
-        logger.error("ai_request_failed", reason="generation_error")
+    except Exception as exc:
+        logger.error("ai_request_failed", reason="generation_error", error=str(exc)[:500])
         return []
 
     raw_text = (getattr(response, "text", "") or "").strip()

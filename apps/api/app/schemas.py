@@ -16,13 +16,15 @@ class UserOut(APIModel):
     is_approved: bool
     full_name: str
     avatar_url: str | None = None
+    company_id: uuid.UUID | None = None
+    company_role: str | None = None
 
 
 class RegisterRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=2)
-    role: Literal["CANDIDATE", "RECRUITER"]
+    role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
 
 
 class LoginRequest(APIModel):
@@ -80,6 +82,10 @@ class ProfileOut(APIModel):
     updated_at: datetime | None
 
 
+class AvatarUpdate(APIModel):
+    avatar_url: str = Field(max_length=5_000_000)
+
+
 class UserMeOut(APIModel):
     id: uuid.UUID
     email: str
@@ -87,6 +93,8 @@ class UserMeOut(APIModel):
     is_approved: bool
     full_name: str
     avatar_url: str | None = None
+    company_id: uuid.UUID | None = None
+    company_role: str | None = None
     profile: ProfileOut | None
 
 
@@ -141,6 +149,70 @@ class AdminStatsOut(APIModel):
     total_candidates: int
     total_recruiters: int
     total_offers: int
+
+
+class CompanyCreate(APIModel):
+    name: str = Field(min_length=2, max_length=120)
+    region: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+    logo_url: str | None = None
+    industry: str | None = None
+    location: str | None = None
+    website: str | None = None
+    company_size: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+
+
+class CompanyOut(APIModel):
+    id: uuid.UUID
+    name: str
+    region: str | None
+    description: str | None
+    logo_url: str | None = None
+    industry: str | None = None
+    location: str | None = None
+    website: str | None = None
+    company_size: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    status: str
+    owner_id: uuid.UUID | None = None
+    created_at: datetime
+    recruiter_count: int = 0
+
+
+class CandidateRequestCreate(APIModel):
+    company_id: uuid.UUID
+    recruiter_id: uuid.UUID | None = None
+    message: str | None = Field(default=None, max_length=1000)
+
+
+class CandidateRequestOut(APIModel):
+    id: uuid.UUID
+    candidate_id: uuid.UUID
+    company_id: uuid.UUID
+    recruiter_id: uuid.UUID | None
+    message: str | None
+    status: str
+    created_at: datetime
+    candidate: UserOut | None = None
+    company: CompanyOut | None = None
+    recruiter: UserOut | None = None
+
+
+class ChatMessageCreate(APIModel):
+    receiver_id: uuid.UUID
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ChatMessageOut(APIModel):
+    id: uuid.UUID
+    sender_id: uuid.UUID
+    receiver_id: uuid.UUID
+    content: str
+    created_at: datetime
+    sender: UserOut | None = None
 
 
 class AdminActivityOut(APIModel):

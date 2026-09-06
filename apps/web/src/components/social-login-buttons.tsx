@@ -34,18 +34,16 @@ const linkedInIcon = (
   </svg>
 );
 
-import { getBaseUrl } from "@/lib/api";
-
 interface SocialLoginButtonsProps {
   className?: string;
-  separator?: string;
+  separator?: ReactNode;
 }
 
 export function SocialLoginButtons({
   className,
   separator = "OR",
 }: SocialLoginButtonsProps) {
-  const ssoBaseUrl = getBaseUrl();
+  const ssoBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
   const baseButtonClass =
     "inline-flex h-11 w-full items-center justify-center gap-3 rounded-full px-4 text-sm font-semibold transition-all duration-300 ease-md active:scale-95";
 

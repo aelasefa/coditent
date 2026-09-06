@@ -50,7 +50,7 @@ const roleContent: Record<
   },
 };
 
-function LoginForm() {
+function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeRole, setActiveRole] = useState<LoginRole>("candidate");
@@ -83,11 +83,19 @@ function LoginForm() {
           ? nextParam
           : null;
 
-      if (data.user.role === "ADMIN") {
+      // New roles: PLATFORM_ADMIN, COMPANY_USER — keep legacy RECRUITER/ADMIN for compat
+      if (data.user.role === "PLATFORM_ADMIN" || data.user.role === "ADMIN") {
         saveToken(data.token);
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
         router.push(nextPath ?? "/admin");
+        return;
+      }
+      if (data.user.role === "COMPANY_USER") {
+        saveToken(data.token);
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        router.push(nextPath ?? "/company");
         return;
       }
 
@@ -280,8 +288,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
-      <LoginForm />
+      <LoginPageInner />
     </Suspense>
   );
 }
-

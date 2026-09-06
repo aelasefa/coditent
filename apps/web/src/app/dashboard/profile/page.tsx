@@ -8,7 +8,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { LogoutButton } from "@/components/logout-button";
-import { getProfile, updateProfile } from "@/lib/api";
+import { getMe, getProfile, updateAvatar, updateProfile } from "@/lib/api";
 import styles from "./profile-builder.module.css";
 
 const urlField = z.union([z.literal(""), z.string().url()]);
@@ -107,6 +107,17 @@ export default function ProfileBuilderPage() {
     queryFn: getProfile,
   });
 
+  const userQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: getMe,
+  });
+
+  useEffect(() => {
+    if (userQuery.data?.avatar_url && !photoPreview && !photoFile) {
+      setPhotoPreview(userQuery.data.avatar_url);
+    }
+  }, [userQuery.data, photoPreview, photoFile]);
+
   useEffect(() => {
     if (!profileQuery.data) return;
 
@@ -135,12 +146,15 @@ export default function ProfileBuilderPage() {
 
   const watchedValues = form.watch(completionKeys);
 
+  const hasAvatar = Boolean(photoPreview || userQuery.data?.avatar_url);
+
   const completedCount = useMemo(() => {
-    return watchedValues.filter((value) => typeof value === "string" && value.trim().length > 0).length;
-  }, [watchedValues]);
+    const fieldsDone = watchedValues.filter((value) => typeof value === "string" && value.trim().length > 0).length;
+    return fieldsDone + (hasAvatar ? 1 : 0);
+  }, [watchedValues, hasAvatar]);
 
   const completionPercent = useMemo(() => {
-    return Math.round((completedCount / 10) * 100);
+    return Math.round((completedCount / 11) * 100);
   }, [completedCount]);
 
   useEffect(() => {
@@ -165,8 +179,9 @@ export default function ProfileBuilderPage() {
   }, [completionPercent, displayedPercentage]);
 
   const checkedItems = useMemo(() => {
-    return watchedValues.map((value) => typeof value === "string" && value.trim().length > 0);
-  }, [watchedValues]);
+    const fieldChecks = watchedValues.map((value) => typeof value === "string" && value.trim().length > 0);
+    return [hasAvatar, ...fieldChecks];
+  }, [watchedValues, hasAvatar]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -257,27 +272,37 @@ export default function ProfileBuilderPage() {
   };
 
   const handleSave = form.handleSubmit(async (values) => {
-    const years = values.years_of_experience.trim();
-    updateMutation.mutate({
-      headline: values.headline.trim() || null,
-      bio: values.bio.trim() || null,
-      skills: skills.length > 0 ? skills.join(", ") : null,
-      years_of_experience: years ? Number(years) : null,
-      city: values.city.trim() || null,
-      phone: values.phone.trim() || null,
-      field_of_study: values.field_of_study.trim() || null,
-      university: values.university.trim() || null,
-      study_level: values.study_level || null,
-      linkedin_url: values.linkedin_url.trim() || null,
-      portfolio_url: values.portfolio_url.trim() || null,
-    });
+    try {
+      if (photoFile && photoPreview) {
+        await updateAvatar(photoPreview);
+        queryClient.invalidateQueries({ queryKey: ["me"] });
+        setPhotoFile(null);
+      }
+      const years = values.years_of_experience.trim();
+      updateMutation.mutate({
+        headline: values.headline.trim() || null,
+        bio: values.bio.trim() || null,
+        skills: skills.length > 0 ? skills.join(", ") : null,
+        years_of_experience: years ? Number(years) : null,
+        city: values.city.trim() || null,
+        phone: values.phone.trim() || null,
+        field_of_study: values.field_of_study.trim() || null,
+        university: values.university.trim() || null,
+        study_level: values.study_level || null,
+        linkedin_url: values.linkedin_url.trim() || null,
+        portfolio_url: values.portfolio_url.trim() || null,
+      });
+    } catch {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    }
   });
 
-  const bioValue = form.watch("bio");
+  const bioValue = form.watch("bio") ?? "";
   const bioChars = bioValue.length;
   const bioAtMax = bioChars >= 500;
 
-  const stepperValue = form.watch("years_of_experience");
+  const stepperValue = form.watch("years_of_experience") ?? "";
   const expValue = stepperValue ? Number(stepperValue) : 0;
 
   const linkedinUrl = form.watch("linkedin_url");
@@ -306,6 +331,15 @@ export default function ProfileBuilderPage() {
           <p className={styles.subtitle}>Build a recruiter-ready profile</p>
 
           <div className={styles.headerActions}>
+            <Link href="/companies" className={styles.actionBtn}>
+              Companies
+            </Link>
+            <Link href="/requests" className={styles.actionBtn}>
+              Requests
+            </Link>
+            <Link href="/chat" className={styles.actionBtn}>
+              Chat
+            </Link>
             <Link href="/dashboard/recommendations" className={styles.actionBtn}>
               Recommendations
             </Link>
@@ -379,8 +413,10 @@ export default function ProfileBuilderPage() {
               <div className={styles.avatarPreview}>
                 {photoPreview ? (
                   <img src={photoPreview} alt="Avatar" className={styles.avatarImage} />
+                ) : userQuery.data?.avatar_url ? (
+                  <img src={userQuery.data.avatar_url} alt="Avatar" className={styles.avatarImage} />
                 ) : (
-                  getInitials(form.getValues("headline") || "")
+                  getInitials(userQuery.data?.full_name || form.getValues("headline") || "")
                 )}
               </div>
               <label className={styles.uploadZone}>

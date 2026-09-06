@@ -26,7 +26,7 @@ async def seed_admin_user(
         user = User(
             email=normalized_email,
             password_hash=pwd_context.hash(password),
-            role=UserRole.ADMIN,
+            role=UserRole.PLATFORM_ADMIN,
             is_approved=True,
             full_name=normalized_full_name,
         )
@@ -36,8 +36,8 @@ async def seed_admin_user(
         return user, True
 
     updated = False
-    if user.role != UserRole.ADMIN:
-        user.role = UserRole.ADMIN
+    if user.role != UserRole.PLATFORM_ADMIN:
+        user.role = UserRole.PLATFORM_ADMIN
         updated = True
     if not user.is_approved:
         user.is_approved = True

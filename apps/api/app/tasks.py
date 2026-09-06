@@ -39,9 +39,16 @@ def generate_recommendations_task(job_id: str, candidate_id: str, criteria: dict
 
     try:
         candidate_uuid = uuid.UUID(candidate_id)
-        result = asyncio.run(_run_job(candidate_uuid, criteria))
+        # Celery fork pool leaves an event loop from the parent; create a fresh one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(_run_job(candidate_uuid, criteria))
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
         cache_key = make_cache_key(candidate_uuid, criteria)
-        redis_client.set(cache_key, json.dumps(result), ex=settings.recommendation_cache_ttl_seconds)
+        redis_client.set(cache_key, json.dumps(result, default=str), ex=settings.recommendation_cache_ttl_seconds)
         redis_client.set(
             job_key,
             json.dumps(
@@ -50,7 +57,8 @@ def generate_recommendations_task(job_id: str, candidate_id: str, criteria: dict
                     "candidate_id": candidate_id,
                     "criteria": criteria,
                     "result": result,
-                }
+                },
+                default=str,
             ),
             ex=3600,
         )

@@ -11,7 +11,7 @@ from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics
-from app.routers import admin, auth, candidates, offers, recommendations
+from app.routers import admin, applications, assessments, auth, audit, candidates, chat, companies, offers, invitations, recommendations, requests
 
 
 app = FastAPI(
@@ -30,12 +30,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         settings.frontend_url,
-        "https://coditent.com",
-        "https://www.coditent.com",
-        "http://localhost:3000",
         "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ],
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +47,13 @@ app.include_router(admin.router, tags=["Admin"])
 app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 app.include_router(offers.router, prefix="/offers", tags=["Offers"])
 app.include_router(recommendations.router, prefix="/recommendations", tags=["Recommendations"])
+app.include_router(companies.router, prefix="/companies", tags=["Companies"])
+app.include_router(requests.router, prefix="/requests", tags=["Requests"])
+app.include_router(invitations.router, prefix="/invites", tags=["Invitations"])
+app.include_router(applications.router, prefix="/applications", tags=["Applications"])
+app.include_router(assessments.router, prefix="/assessments", tags=["Assessments"])
+app.include_router(audit.router, prefix="/audit", tags=["Audit"])
+app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 
 
 @app.get("/health")

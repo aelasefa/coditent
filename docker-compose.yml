@@ -25,12 +25,15 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://coditent:coditent@db:5432/coditent
+      DATABASE_URL: ${DATABASE_URL}
       FRONTEND_URL: http://localhost:3001
-      GEMINI_API_KEY: local-dev-placeholder
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: local-dev-secret
       REDIS_URL: redis://redis:6379/0
       ACCESS_TOKEN_COOKIE_SECURE: "false"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
     ports:
       - "8001:8001"
     command: >
@@ -59,8 +62,8 @@ services:
       redis:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql+asyncpg://coditent:coditent@db:5432/coditent
-      GEMINI_API_KEY: local-dev-placeholder
+      DATABASE_URL: ${DATABASE_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: local-dev-secret
       REDIS_URL: redis://redis:6379/0
     command: celery -A app.tasks worker --loglevel=info
@@ -83,6 +86,9 @@ services:
         condition: service_started
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8001
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "3001:3000"
 

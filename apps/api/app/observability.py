@@ -43,13 +43,8 @@ async def record_request_metrics(request: Request, call_next: Callable) -> Respo
     start_time = time.perf_counter()
     response = await call_next(request)
     elapsed = time.perf_counter() - start_time
-
-    # Normalize route template (e.g. /offers/{id}) to prevent high cardinality
-    route = request.scope.get("route")
-    path = getattr(route, "path", request.url.path)
-
-    REQUEST_LATENCY.labels(request.method, path).observe(elapsed)
-    REQUEST_COUNT.labels(request.method, path, str(response.status_code)).inc()
+    REQUEST_LATENCY.labels(request.method, request.url.path).observe(elapsed)
+    REQUEST_COUNT.labels(request.method, request.url.path, str(response.status_code)).inc()
     return response
 
 
