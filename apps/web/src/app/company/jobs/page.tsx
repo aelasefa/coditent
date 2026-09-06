@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/company/EmptyState";
 import { Modal } from "@/components/company/Modal";
 import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
-import { createOffer, getMe, toggleOffer, api } from "@/lib/api";
+import { createOffer, getMe, toggleOffer, api, getApiBaseUrl } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import { Offer } from "@/lib/types";
 import {
@@ -49,7 +49,7 @@ export default function CompanyJobsPage() {
     queryKey: ["company-offers"],
     queryFn: async () => {
       const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
-      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/offers/mine`, {
+      const r = await fetch(`${getApiBaseUrl()}/offers/mine`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         credentials: "include",
       }).then((x) => x.json()).catch(() => ({ offers: [] }));

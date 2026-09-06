@@ -16,6 +16,7 @@ import {
   getAuditLogs,
   updateApplicationStatus,
   getCompany,
+  getApiBaseUrl,
 } from "@/lib/api";
 import {
   FiBriefcase,
@@ -71,7 +72,7 @@ export default function CompanyDashboard() {
     queryKey: ["company-offers"],
     queryFn: async () => {
       const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
-      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/offers/mine`, {
+      const r = await fetch(`${getApiBaseUrl()}/offers/mine`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         credentials: "include",
       }).then((x) => x.json()).catch(() => ({ offers: [] }));

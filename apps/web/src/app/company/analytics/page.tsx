@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/company/PageHeader";
 import { StatCard } from "@/components/company/StatCard";
 import { EmptyState } from "@/components/company/EmptyState";
 import { StatCardsSkeleton } from "@/components/company/LoadingSkeleton";
-import { getMe, getApplications, getAssessments, getAuditLogs } from "@/lib/api";
+import { getMe, getApplications, getAssessments, getAuditLogs, getApiBaseUrl } from "@/lib/api";
 import { Offer, ApplicationItem, AssessmentItem, AuditLogItem } from "@/lib/types";
 import {
   FiTrendingUp,
@@ -45,7 +45,7 @@ export default function AnalyticsPage() {
     queryKey: ["company-offers"],
     queryFn: async () => {
       const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
-      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/offers/mine`, {
+      const r = await fetch(`${getApiBaseUrl()}/offers/mine`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         credentials: "include",
       }).then((x) => x.json()).catch(() => ({ offers: [] }));
