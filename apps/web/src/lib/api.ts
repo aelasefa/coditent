@@ -311,6 +311,18 @@ export async function acceptEmployeeInvite(payload: { token: string; password: s
   const { data } = await api.post("/invites/employee/accept", payload);
   return data;
 }
+export async function acceptEmployeeInviteExisting(payload: { token: string }): Promise<{ detail: string; company_id: string; role: string }> {
+  const { data } = await api.post("/invites/employee/accept-existing", payload);
+  return data;
+}
+export async function validateEmployeeInvite(token: string): Promise<{ email: string; role: string; company_name: string; company_id: string; status: string; expires_at: string | null }> {
+  const { data } = await api.get("/invites/employee/validate", { params: { token } });
+  return data;
+}
+export async function resendEmployeeInvite(invitation_id: string): Promise<{ detail: string; invitation_id: string }> {
+  const { data } = await api.post("/invites/employee/resend", { invitation_id });
+  return data;
+}
 export async function getApplications(): Promise<{ applications: { id: string; status: string }[] }> {
   const { data } = await api.get("/applications");
   return data;

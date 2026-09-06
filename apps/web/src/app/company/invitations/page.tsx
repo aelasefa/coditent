@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/company/StatusBadge";
 import { EmptyState } from "@/components/company/EmptyState";
 import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
-import { getMe, inviteEmployee, listEmployeeInvitations, revokeEmployeeInvitation } from "@/lib/api";
+import { getMe, inviteEmployee, listEmployeeInvitations, revokeEmployeeInvitation, resendEmployeeInvite } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import { EmployeeInvitation } from "@/lib/types";
 import {
@@ -19,6 +19,7 @@ import {
   FiCheckCircle,
   FiTrash2,
   FiInfo,
+  FiRefreshCw,
 } from "react-icons/fi";
 
 export default function CompanyInvitationsPage() {
@@ -70,6 +71,21 @@ export default function CompanyInvitationsPage() {
     onError: (e: any) => {
       setStatusMessage({
         text: e?.response?.data?.detail || "Failed to revoke invitation",
+        isError: true,
+      });
+    },
+  });
+
+  const resendMut = useMutation({
+    mutationFn: (id: string) => resendEmployeeInvite(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employee-invites"] });
+      setStatusMessage({ text: "New invitation sent — old link invalidated, expires in 72h." });
+      setTimeout(() => setStatusMessage(null), 4000);
+    },
+    onError: (e: any) => {
+      setStatusMessage({
+        text: e?.response?.data?.detail || "Failed to resend invitation",
         isError: true,
       });
     },
@@ -240,14 +256,27 @@ export default function CompanyInvitationsPage() {
                       </td>
                       <td className="px-6 py-3.5 text-right">
                         {inv.status === "PENDING" && canInvite ? (
-                          <button
-                            type="button"
-                            onClick={() => setRevokeTarget(inv)}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition-colors"
-                          >
-                            <FiTrash2 className="h-3.5 w-3.5" />
-                            <span>Revoke</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => resendMut.mutate(inv.id)}
+                              disabled={resendMut.isPending}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white disabled:opacity-50"
+                              title="Invalidate old link and send new email"
+                            >
+                              <FiRefreshCw className={`h-3.5 w-3.5 ${resendMut.isPending ? "animate-spin" : ""}`} />
+                              <span>Resend</span>
+                            </button>
+                            <span className="text-zinc-300">·</span>
+                            <button
+                              type="button"
+                              onClick={() => setRevokeTarget(inv)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition-colors"
+                            >
+                              <FiTrash2 className="h-3.5 w-3.5" />
+                              <span>Revoke</span>
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-zinc-400">—</span>
                         )}

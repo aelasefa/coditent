@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import Link from "next/link";
 import { getOffers } from "@/lib/api";
 import { categories, type CategorySlug } from "@/lib/categories";
 import type { Offer } from "@/lib/types";
+import CoditentLogo from "@/components/CoditentLogo";
 import styles from "./page.module.css";
 
 type OffersJob = {
@@ -224,6 +226,20 @@ export default function CategoryOffersPage() {
 
   return (
     <main className={styles.page}>
+      <div className={styles.heroMesh} aria-hidden />
+      <div className={styles.ambientGlow} aria-hidden />
+      <div className={styles.ambientGlowTwo} aria-hidden />
+      <header className={styles.candidateNav}>
+        <div className={styles.candidateNavInner}>
+          <Link href="/" className={styles.brandLink}><CoditentLogo size={32} useSvg={false} className={styles.logoMark} /></Link>
+          <span className={styles.livePill}><span className={styles.liveDot} />LIVE</span>
+          <nav className={styles.candidateNavLinks}>
+            <Link href="/dashboard/profile" className={styles.candidateNavLink}>Profile</Link>
+            <Link href="/dashboard/recommendations" className={styles.candidateNavLink}>Recommendations</Link>
+            <Link href="/offers/all" className={`${styles.candidateNavLink} ${styles.candidateNavActive}`}>Browse Offers</Link>
+          </nav>
+        </div>
+      </header>
       <div className={styles.container}>
         <button className={styles.backBtn} onClick={() => router.back()} type="button">
           ← Back to categories

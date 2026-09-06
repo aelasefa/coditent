@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { LogoutButton } from "@/components/logout-button";
 import { getMe, getProfile, updateAvatar, updateProfile } from "@/lib/api";
+import CoditentLogo from "@/components/CoditentLogo";
 import styles from "./profile-builder.module.css";
 
 const urlField = z.union([z.literal(""), z.string().url()]);
@@ -322,30 +323,48 @@ export default function ProfileBuilderPage() {
     : "Not updated";
 
   return (
-    <div className={styles.builderShell}>
-      {/* LEFT PANEL */}
-      <aside className={styles.builderLeft}>
-        <div className={styles.leftHeader}>
-          <p className={styles.eyebrow}>CANDIDATE WORKSPACE</p>
-          <h1 className={styles.title}>Profile builder</h1>
-          <p className={styles.subtitle}>Build a recruiter-ready profile</p>
-
-          <div className={styles.headerActions}>
-            <Link href="/companies" className={styles.actionBtn}>
-              Companies
-            </Link>
-            <Link href="/requests" className={styles.actionBtn}>
-              Requests
-            </Link>
-            <Link href="/chat" className={styles.actionBtn}>
-              Chat
-            </Link>
-            <Link href="/dashboard/recommendations" className={styles.actionBtn}>
-              Recommendations
-            </Link>
-            <LogoutButton />
-          </div>
+    <div className={styles.pageShell}>
+      <div className={styles.heroMesh} aria-hidden />
+      <div className={styles.ambientGlow} aria-hidden />
+      <div className={styles.ambientGlowTwo} aria-hidden />
+      <header className={styles.candidateNav}>
+        <div className={styles.candidateNavInner}>
+          <Link href="/" className={styles.brandLink}>
+            <CoditentLogo size={32} useSvg={false} className={styles.logoMark} />
+          </Link>
+          <span className={styles.livePill}><span className={styles.liveDot} />LIVE</span>
+          <nav className={styles.candidateNavLinks}>
+            <Link href="/dashboard/profile" className={`${styles.candidateNavLink} ${styles.candidateNavActive}`}>Profile</Link>
+            <Link href="/dashboard/recommendations" className={styles.candidateNavLink}>Recommendations</Link>
+            <Link href="/offers/all" className={styles.candidateNavLink}>Browse Offers</Link>
+            <Link href="/companies" className={styles.candidateNavLink}>Companies</Link>
+          </nav>
         </div>
+      </header>
+      <div className={styles.builderShell}>
+        {/* LEFT PANEL */}
+        <aside className={styles.builderLeft}>
+          <div className={styles.leftHeader}>
+            <p className={styles.eyebrow}>CANDIDATE WORKSPACE</p>
+            <h1 className={styles.title}>Profile builder</h1>
+            <p className={styles.subtitle}>Build a recruiter-ready profile</p>
+
+            <div className={styles.headerActions}>
+              <Link href="/companies" className={styles.actionBtn}>
+                Companies
+              </Link>
+              <Link href="/requests" className={styles.actionBtn}>
+                Requests
+              </Link>
+              <Link href="/chat" className={styles.actionBtn}>
+                Chat
+              </Link>
+              <Link href="/dashboard/recommendations" className={styles.actionBtn}>
+                Recommendations
+              </Link>
+              <LogoutButton />
+            </div>
+          </div>
 
         <div className={styles.ringContainer}>
           <div className={styles.ringWrapper}>
@@ -622,14 +641,15 @@ export default function ProfileBuilderPage() {
         </form>
       </main>
 
-      {/* FLOATING SAVE BUTTON */}
-      <button
-        onClick={handleSave}
-        disabled={updateMutation.isPending}
-        className={`${styles.saveBtn} ${saveStatus === "success" ? styles.saveBtnSuccess : ""} ${saveStatus === "error" ? styles.saveBtnError : ""} ${updateMutation.isPending ? styles.saveBtnLoading : ""}`}
-      >
-        {updateMutation.isPending ? "⏳ Saving..." : saveStatus === "success" ? "✓ Saved" : saveStatus === "error" ? "✗ Error" : "Save profile"}
-      </button>
+        {/* FLOATING SAVE BUTTON */}
+        <button
+          onClick={handleSave}
+          disabled={updateMutation.isPending}
+          className={`${styles.saveBtn} ${saveStatus === "success" ? styles.saveBtnSuccess : ""} ${saveStatus === "error" ? styles.saveBtnError : ""} ${updateMutation.isPending ? styles.saveBtnLoading : ""}`}
+        >
+          {updateMutation.isPending ? "⏳ Saving..." : saveStatus === "success" ? "✓ Saved" : saveStatus === "error" ? "✗ Error" : "Save profile"}
+        </button>
+      </div>
     </div>
   );
 }

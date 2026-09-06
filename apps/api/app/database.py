@@ -35,18 +35,14 @@ def _normalize_database_url(url: str) -> str:
 
 _normalized_url = _normalize_database_url(settings.database_url)
 
-# Supabase pooler (6543, transaction mode) requires careful pool handling.
-# For PgBouncer transaction mode, disable prepared statements and use NullPool behavior
-# is not needed with asyncpg + transaction mode if we keep default pooling — Supabase
-# recommends session mode for full compatibility. We use default pooling which works
-# with both direct (5432) and session pooler (5432). If using transaction pooler (6543),
-# SQLAlchemy's prepared statement cache can cause issues; asyncpg handles it.
+# Supabase pooler requires disabling prepared statements for PgBouncer compatibility
+# (both 5432 session and 6543 transaction). Without this, asyncpg raises
+# "cannot perform operation: another operation is in progress" under concurrent load.
 engine = create_async_engine(
     _normalized_url,
     future=True,
-    # Supabase always requires SSL; asyncpg will negotiate if server requires it.
-    # Passing connect_args as empty keeps compatibility with both direct and pooled URLs.
-    connect_args={},
+    connect_args={"statement_cache_size": 0, "prepared_statement_cache_size": 0},
+    pool_pre_ping=True,
 )
 AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
