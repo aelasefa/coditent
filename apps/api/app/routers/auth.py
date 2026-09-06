@@ -124,8 +124,9 @@ def _build_sso_response(request: Request, token: str, user: User) -> Response:
     wants_html = "text/html" in accept_header
 
     if wants_html:
+        callback_url = f"{settings.frontend_url.rstrip('/')}/auth/sso/callback?token={token}"
         response: Response = RedirectResponse(
-            url=build_frontend_dashboard_url(),
+            url=callback_url,
             status_code=status.HTTP_302_FOUND,
         )
     else:

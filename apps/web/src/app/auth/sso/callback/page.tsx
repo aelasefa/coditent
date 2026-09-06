@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { MdCard } from "@/components/ui/md-card";
 import { getMe } from "@/lib/api";
+import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
 export default function SsoCallbackPage() {
   const router = useRouter();
@@ -15,6 +16,11 @@ export default function SsoCallbackPage() {
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
+    const token = query.get("token");
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+      document.cookie = `${AUTH_TOKEN_KEY}=${token}; path=/; max-age=2592000; SameSite=Lax; secure`;
+    }
     setErrorCode(query.get("error"));
     setIsParsed(true);
   }, []);
