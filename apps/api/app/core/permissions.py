@@ -10,21 +10,25 @@ CompanyRole = Literal["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]
 
 VALID_COMPANY_ROLES = {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"}
 
-# Permission matrix — centralized, not scattered in handlers
+# Permission matrix — centralized, not scattered in handlers.
+# HR holds recruitment permissions (create/manage offers, review applications,
+# move stages) so the Company → HR → Offer → Application → Chat workflow is
+# possible. Company administration (invite/remove/change roles, delete offers,
+# edit company) stays OWNER/ADMIN-only.
 PERMISSIONS = {
     "view_company": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
     "edit_company": {"OWNER", "ADMIN"},
     "invite_employees": {"OWNER", "ADMIN"},
     "change_employee_roles": {"OWNER", "ADMIN"},
     "remove_employees": {"OWNER", "ADMIN"},
-    "create_offers": {"OWNER", "ADMIN", "RECRUITER"},
-    "edit_offers": {"OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"},  # hiring_manager: assigned/allowed — allow for now
+    "create_offers": {"OWNER", "ADMIN", "HR", "RECRUITER"},
+    "edit_offers": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},  # hiring_manager: assigned/allowed — allow for now
     "delete_offers": {"OWNER", "ADMIN"},
-    "view_applications": {"OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"},
-    "evaluate_candidates": {"OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"},
-    "move_recruitment_stage": {"OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"},
-    "view_assessments": {"OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"},
-    "company_analytics": {"OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"},
+    "view_applications": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
+    "evaluate_candidates": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
+    "move_recruitment_stage": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
+    "view_assessments": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
+    "company_analytics": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
     "manage_subscription": {"OWNER"},
 }
 

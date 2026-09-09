@@ -15,7 +15,11 @@ async def test_rbac_matrix():
     assert can("OWNER", "create_offers") is True
     assert can("ADMIN", "create_offers") is True
     assert can("RECRUITER", "create_offers") is True
-    assert can("HR", "create_offers") is False
+    # HR holds recruitment permissions so the Company → HR → Offer →
+    # Application → Chat workflow is possible (recruitment-chat feature).
+    assert can("HR", "create_offers") is True
+    assert can("HR", "view_applications") is True
+    assert can("HR", "move_recruitment_stage") is True
     assert can("HIRING_MANAGER", "create_offers") is False
     assert can("OWNER", "invite_employees") is True
     assert can("ADMIN", "invite_employees") is True

@@ -405,3 +405,32 @@ export async function getCompanyRecruiters(companyId: string): Promise<{ id: str
   const { data } = await api.get(`/companies/${companyId}/recruiters`);
   return (data.members ?? data.recruiters ?? []) as { id: string; email: string; full_name: string; company_role: string; avatar_url?: string | null }[];
 }
+
+export async function setResponsibleHr(offerId: string, responsibleHrId: string): Promise<import("@/lib/types").Offer> {
+  const { data } = await api.patch<import("@/lib/types").Offer>(`/offers/${offerId}/responsible-hr`, { responsible_hr_id: responsibleHrId });
+  return data;
+}
+
+export async function getRecruitmentChat(applicationId: string): Promise<import("@/lib/types").RecruitmentChatContext> {
+  const { data } = await api.get(`/chat/recruitment/${applicationId}`);
+  return data;
+}
+
+export async function sendRecruitmentMessage(applicationId: string, content: string): Promise<import("@/lib/types").ChatMessage> {
+  const { data } = await api.post<import("@/lib/types").ChatMessage>(`/chat/recruitment/${applicationId}`, { content });
+  return data;
+}
+
+export async function listRecruitmentChats(): Promise<import("@/lib/types").RecruitmentChatListItem[]> {
+  const { data } = await api.get<{ recruitment_chats: import("@/lib/types").RecruitmentChatListItem[] }>("/chat/recruitment");
+  return data.recruitment_chats;
+}
+
+export function getRecruitmentWsUrl(applicationId: string): string {
+  const base = getApiBaseUrl();
+  const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
+  const wsBase = base.startsWith("/api-proxy")
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api-proxy`
+    : base.replace(/^http/, "ws");
+  return `${wsBase}/chat/recruitment/${applicationId}/ws?token=${encodeURIComponent(token ?? "")}`;
+}

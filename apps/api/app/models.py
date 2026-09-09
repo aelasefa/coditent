@@ -133,6 +133,10 @@ class Offer(Base):
     company: Mapped[str] = mapped_column(String, nullable=False)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    # Recruiter responsible for this offer's hiring pipeline. Nullable for
+    # backward compat; resolved via created_by/recruiter_id fallback when unset.
+    # Never trust client input — set server-side, changeable only by company admins.
+    responsible_hr_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     region: Mapped[str] = mapped_column(String, nullable=False)
     field: Mapped[str] = mapped_column(String, nullable=False)
     type: Mapped[OfferType] = mapped_column(Enum(OfferType), nullable=False)
@@ -152,6 +156,7 @@ class Offer(Base):
     posted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     recruiter: Mapped[User] = relationship("User", back_populates="offers", foreign_keys=[recruiter_id])
+    responsible_hr: Mapped["User | None"] = relationship("User", foreign_keys=[responsible_hr_id])
     company_obj: Mapped["Company | None"] = relationship("Company", foreign_keys=[company_id])
     recommendations: Mapped[list["SavedRecommendation"]] = relationship(
         "SavedRecommendation", back_populates="offer"
@@ -233,16 +238,24 @@ class ChatMessage(Base):
     __table_args__ = (
         Index("ix_chat_messages_sender", "sender_id"),
         Index("ix_chat_messages_receiver", "receiver_id"),
+        Index("ix_chat_messages_application_id", "application_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sender_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     receiver_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # Nullable: set only for recruitment chats. NULL = pre-existing general chat.
+    # The application is the source of truth for who may talk (candidate ↔
+    # responsible HR resolved through offer), so no separate conversation table
+    # is needed — one application maps to exactly one logical conversation,
+    # which makes duplicates impossible by construction.
+    application_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     sender: Mapped[User] = relationship("User", foreign_keys=[sender_id])
     receiver: Mapped[User] = relationship("User", foreign_keys=[receiver_id])
+    application: Mapped["Application | None"] = relationship("Application", foreign_keys=[application_id])
 
 
 class Application(Base):

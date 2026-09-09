@@ -10,6 +10,7 @@ from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Application, Offer, User
+from app.services.recruitment_chat import is_chat_enabled_for_status
 
 router = APIRouter()
 
@@ -22,7 +23,7 @@ async def list_applications(
     if current_user.role.value == "CANDIDATE":
         result = await db.execute(select(Application).where(Application.candidate_id == current_user.id).order_by(Application.created_at.desc()))
         apps = result.scalars().all()
-        return {"applications": [{"id": str(a.id), "opportunity_id": str(a.opportunity_id), "status": a.status, "created_at": a.created_at.isoformat()} for a in apps]}
+        return {"applications": [{"id": str(a.id), "opportunity_id": str(a.opportunity_id), "status": a.status, "chat_enabled": is_chat_enabled_for_status(a.status), "created_at": a.created_at.isoformat()} for a in apps]}
     if current_user.role.value == "COMPANY_USER":
         if not current_user.company_id or not can(current_user.company_role, "view_applications"):
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -30,11 +31,11 @@ async def list_applications(
             select(Application).join(Offer, Application.opportunity_id == Offer.id).where(Offer.company_id == current_user.company_id).order_by(Application.created_at.desc())
         )
         apps = result.scalars().all()
-        return {"applications": [{"id": str(a.id), "candidate_id": str(a.candidate_id), "opportunity_id": str(a.opportunity_id), "status": a.status} for a in apps]}
+        return {"applications": [{"id": str(a.id), "candidate_id": str(a.candidate_id), "opportunity_id": str(a.opportunity_id), "status": a.status, "chat_enabled": is_chat_enabled_for_status(a.status)} for a in apps]}
     if current_user.role.value == "PLATFORM_ADMIN":
         result = await db.execute(select(Application).order_by(Application.created_at.desc()))
         apps = result.scalars().all()
-        return {"applications": [{"id": str(a.id), "status": a.status} for a in apps]}
+        return {"applications": [{"id": str(a.id), "status": a.status, "chat_enabled": is_chat_enabled_for_status(a.status)} for a in apps]}
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
@@ -48,18 +49,18 @@ async def get_application(
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     if current_user.role.value == "PLATFORM_ADMIN":
-        return {"id": str(app.id), "candidate_id": str(app.candidate_id), "opportunity_id": str(app.opportunity_id), "status": app.status}
+        return {"id": str(app.id), "candidate_id": str(app.candidate_id), "opportunity_id": str(app.opportunity_id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
     if current_user.role.value == "CANDIDATE":
         if app.candidate_id != current_user.id:
             raise HTTPException(status_code=404, detail="Application not found")
-        return {"id": str(app.id), "opportunity_id": str(app.opportunity_id), "status": app.status}
+        return {"id": str(app.id), "opportunity_id": str(app.opportunity_id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "view_applications"):
             raise HTTPException(status_code=403, detail="Forbidden")
         offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
         if not offer or offer.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Application not found")
-        return {"id": str(app.id), "candidate_id": str(app.candidate_id), "opportunity_id": str(app.opportunity_id), "status": app.status}
+        return {"id": str(app.id), "candidate_id": str(app.candidate_id), "opportunity_id": str(app.opportunity_id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
@@ -110,21 +111,29 @@ async def update_application_status(
     if current_user.role.value == "CANDIDATE":
         raise HTTPException(status_code=403, detail="Forbidden")
     if current_user.role.value == "PLATFORM_ADMIN":
+        was_enabled = is_chat_enabled_for_status(app.status)
         app.status = new_status
         await db.commit()
         await db.refresh(app)
         await log_audit(db, action="APPLICATION_STATUS_CHANGED", actor=current_user, resource_type="application", resource_id=app.id, details=new_status)
-        return {"id": str(app.id), "status": app.status}
+        if is_chat_enabled_for_status(new_status) and not was_enabled:
+            await log_audit(db, action="RECRUITMENT_CHAT_ENABLED", actor=current_user, resource_type="application", resource_id=app.id, details=new_status)
+        return {"id": str(app.id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "move_recruitment_stage"):
             raise HTTPException(status_code=403, detail="Forbidden")
         offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
         if not offer or offer.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Application not found")
+        was_enabled = is_chat_enabled_for_status(app.status)
         app.status = new_status
         await db.commit()
         await db.refresh(app)
         action = "CANDIDATE_SHORTLISTED" if new_status == "shortlisted" else "CANDIDATE_REJECTED" if new_status == "rejected" else "APPLICATION_STATUS_CHANGED"
         await log_audit(db, action=action, actor=current_user, company_id=current_user.company_id, resource_type="application", resource_id=app.id, details=new_status)
-        return {"id": str(app.id), "status": app.status}
+        if is_chat_enabled_for_status(new_status) and not was_enabled:
+            # Recruitment chat becomes available — surfaced to the candidate via
+            # chat_enabled and to the company via the audit/notification feed.
+            await log_audit(db, action="RECRUITMENT_CHAT_ENABLED", actor=current_user, company_id=current_user.company_id, resource_type="application", resource_id=app.id, details=new_status)
+        return {"id": str(app.id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
     raise HTTPException(status_code=403, detail="Forbidden")

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
 import { PageHeader } from "@/components/company/PageHeader";
@@ -357,6 +358,26 @@ export default function CompanyCandidatesPage() {
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Recruitment chat with the candidate for THIS application */}
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <FiUserCheck className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Recruiter Chat</span>
+                </div>
+                {["shortlisted", "assessment_required", "assessment_completed", "interview", "accepted"].includes(selectedCandidate.status) ? (
+                  <Link
+                    href={`/chat/recruitment/${selectedCandidate.id}`}
+                    className="inline-flex items-center rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 transition-colors"
+                  >
+                    Open Chat with Candidate
+                  </Link>
+                ) : (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
+                    Chat becomes available once the candidate moves to the next recruitment stage.
+                  </p>
+                )}
               </div>
 
               {/* CODITENT Workflow Evaluation: Screening + Assessment + Decision */}

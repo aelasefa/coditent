@@ -86,6 +86,7 @@ export default function RecommendationsPage() {
           <nav className={styles.candidateNavLinks}>
             <Link href="/dashboard/profile" className={styles.candidateNavLink}>Profile</Link>
             <Link href="/dashboard/recommendations" className={`${styles.candidateNavLink} ${styles.candidateNavActive}`}>Recommendations</Link>
+            <Link href="/dashboard/applications" className={styles.candidateNavLink}>My Applications</Link>
             <Link href="/offers/all" className={styles.candidateNavLink}>Browse Offers</Link>
             <Link href="/companies" className={styles.candidateNavLink}>Companies</Link>
           </nav>
