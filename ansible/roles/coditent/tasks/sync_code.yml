@@ -1,0 +1,19 @@
+---
+- name: Sync repository from Git
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ app_dir }}"
+    version: "{{ repo_branch }}"
+    force: "{{ repo_force | default(yes) }}"
+  register: git_result
+
+- name: Retrieve current Git commit hash
+  ansible.builtin.command:
+    cmd: git rev-parse --short HEAD
+    chdir: "{{ app_dir }}"
+  register: current_commit
+  changed_when: false
+
+- name: Display deployed Git commit
+  ansible.builtin.debug:
+    msg: "Deployed commit {{ current_commit.stdout }} on branch {{ repo_branch }}"

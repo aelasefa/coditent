@@ -127,12 +127,22 @@ export async function completeOauthRegistration(payload: {
     }
   );
 
-  const data = (await response.json()) as
-    | (TokenResponse & { access_token?: string })
-    | { detail?: string };
+  let data: (TokenResponse & { access_token?: string }) | { detail?: string } | null = null;
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      data = (await response.json()) as (TokenResponse & { access_token?: string }) | { detail?: string };
+    } catch {
+      data = null;
+    }
+  }
+
   if (!response.ok) {
     const detail = typeof data === "object" && data && "detail" in data ? data.detail : null;
-    const error = new Error(typeof detail === "string" ? detail : "Complete registration failed");
+    const textBody = !detail ? await response.text().catch(() => "") : "";
+    const error = new Error(
+      typeof detail === "string" ? detail : textBody || "Complete registration failed"
+    );
     (error as { status?: number }).status = response.status;
     throw error;
   }

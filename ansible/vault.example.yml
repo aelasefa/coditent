@@ -1,0 +1,23 @@
+---
+# ============================================================
+# Ansible Vault Example (Secrets)
+# To create an encrypted vault:
+#   ansible-vault create ansible/inventory/group_vars/production/vault.yml
+# To encrypt an existing file:
+#   ansible-vault encrypt ansible/inventory/group_vars/production/vault.yml
+# ============================================================
+
+vault_database_url: "postgresql+asyncpg://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres"
+vault_supabase_url: "https://YOUR_PROJECT_REF.supabase.co"
+vault_supabase_service_key: "sb_secret_YOUR_SERVICE_ROLE_KEY"
+vault_next_public_supabase_url: "https://YOUR_PROJECT_REF.supabase.co"
+vault_next_public_supabase_publishable_key: "sb_publishable_YOUR_PUBLISHABLE_KEY"
+
+vault_jwt_secret: "change-me-to-a-super-secret-32-char-string"
+vault_gemini_api_key: "AIzaSy..."
+
+vault_resend_api_key: ""
+vault_google_client_id: ""
+vault_google_client_secret: ""
+vault_linkedin_client_id: ""
+vault_linkedin_client_secret: ""

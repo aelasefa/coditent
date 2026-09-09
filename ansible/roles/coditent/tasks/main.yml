@@ -1,0 +1,35 @@
+---
+- name: Set up directory structure
+  ansible.builtin.include_tasks: setup_dirs.yml
+  tags:
+    - setup
+    - dirs
+
+- name: Synchronize repository code
+  ansible.builtin.include_tasks: sync_code.yml
+  tags:
+    - sync
+    - code
+
+- name: Configure environment files
+  ansible.builtin.include_tasks: configure_env.yml
+  tags:
+    - env
+    - config
+
+- name: Build and launch Docker Compose services
+  ansible.builtin.include_tasks: compose_up.yml
+  tags:
+    - compose
+    - deploy
+
+- name: Verify application health
+  ansible.builtin.include_tasks: verify.yml
+  tags:
+    - verify
+    - health
+
+- name: Clean up unused Docker resources
+  ansible.builtin.include_tasks: cleanup.yml
+  tags:
+    - cleanup

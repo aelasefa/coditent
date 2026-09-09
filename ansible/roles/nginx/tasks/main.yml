@@ -1,0 +1,36 @@
+---
+- name: Install Nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Deploy Coditent Nginx virtual host configuration
+  ansible.builtin.template:
+    src: coditent.conf.j2
+    dest: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Enable Coditent Nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
+    dest: /etc/nginx/sites-enabled/{{ nginx_site_name }}.conf
+    state: link
+  notify: Reload nginx
+
+- name: Remove default Nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Test Nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Ensure Nginx is enabled and started
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: yes

@@ -1,0 +1,17 @@
+---
+# ============================================================
+# Staging Environment Variables
+# ============================================================
+
+env_name: staging
+repo_branch: develop
+
+database_url: "{{ vault_database_url | default(lookup('env', 'DATABASE_URL')) | default('') }}"
+supabase_url: "{{ vault_supabase_url | default(lookup('env', 'SUPABASE_URL')) | default('') }}"
+supabase_service_key: "{{ vault_supabase_service_key | default(lookup('env', 'SUPABASE_SERVICE_KEY')) | default('') }}"
+next_public_supabase_url: "{{ vault_next_public_supabase_url | default(lookup('env', 'NEXT_PUBLIC_SUPABASE_URL')) | default(supabase_url) }}"
+next_public_supabase_publishable_key: "{{ vault_next_public_supabase_publishable_key | default(lookup('env', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')) | default('') }}"
+
+jwt_secret: "{{ vault_jwt_secret | default(lookup('env', 'JWT_SECRET')) | default('') }}"
+gemini_api_key: "{{ vault_gemini_api_key | default(lookup('env', 'GEMINI_API_KEY')) | default('') }}"
+redis_url: "redis://redis:6379/0"

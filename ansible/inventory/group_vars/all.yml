@@ -1,0 +1,53 @@
+---
+# ============================================================
+# Global Application & Infrastructure Defaults
+# ============================================================
+
+app_name: coditent
+app_dir: /opt/coditent
+app_user: ubuntu
+app_group: ubuntu
+
+# Git repository settings
+repo_url: "https://github.com/aelasefa/coditent.git"
+repo_branch: main
+repo_force: yes
+
+# Service Ports
+api_port: 8001
+web_port: 3001
+redis_port: 6379
+http_port: 80
+https_port: 443
+
+# Docker configuration
+docker_compose_file: "{{ app_dir }}/docker-compose.yml"
+docker_prune_images: true
+
+# Nginx reverse proxy configuration
+nginx_enabled: true
+server_name: "{{ ansible_host | default('_') }}"
+
+# Application URLs
+frontend_url: "http://{{ ansible_host | default('localhost') }}"
+next_public_api_url: "http://{{ ansible_host | default('localhost') }}"
+invitation_expiration_hours: 72
+
+# Resend Mail Configuration
+resend_api_key: ""
+resend_from_email: "coditent@yourdomain.com"
+resend_from_name: "CODITENT"
+
+# OAuth Defaults (optional)
+google_client_id: ""
+google_client_secret: ""
+google_redirect_uri: "http://{{ ansible_host | default('localhost') }}:8001/auth/sso/google/callback"
+
+linkedin_client_id: ""
+linkedin_client_secret: ""
+linkedin_redirect_uri: "http://{{ ansible_host | default('localhost') }}:8001/auth/sso/linkedin/callback"
+
+# Healthcheck configuration
+healthcheck_url: "http://127.0.0.1:8001/health"
+healthcheck_retries: 15
+healthcheck_delay: 5

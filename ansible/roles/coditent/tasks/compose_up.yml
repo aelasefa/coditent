@@ -1,0 +1,18 @@
+---
+- name: Build and start application containers with Docker Compose
+  ansible.builtin.command:
+    cmd: "docker compose up -d {% if compose_build | default(true) %}--build{% endif %} {% if compose_remove_orphans | default(true) %}--remove-orphans{% endif %}"
+    chdir: "{{ app_dir }}"
+  register: compose_output
+  changed_when: "'Creating' in compose_output.stderr or 'Recreating' in compose_output.stderr or 'Building' in compose_output.stderr"
+
+- name: Retrieve container status
+  ansible.builtin.command:
+    cmd: "docker compose ps --format 'table {{'{{'}}.Name{{'}}'}}\t{{'{{'}}.Status{{'}}'}}\t{{'{{'}}.Ports{{'}}'}}'"
+    chdir: "{{ app_dir }}"
+  register: container_status
+  changed_when: false
+
+- name: Display running containers
+  ansible.builtin.debug:
+    var: container_status.stdout_lines

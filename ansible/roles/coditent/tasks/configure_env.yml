@@ -1,0 +1,50 @@
+---
+- name: Check if remote .env already exists
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/.env"
+  register: remote_root_env
+
+- name: Render root .env file from template
+  ansible.builtin.template:
+    src: root.env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0600'
+  when: (database_url is defined and database_url != '') or not remote_root_env.stat.exists
+
+- name: Check if remote apps/api/.env already exists
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/apps/api/.env"
+  register: remote_api_env
+
+- name: Render apps/api/.env file from template
+  ansible.builtin.template:
+    src: api.env.j2
+    dest: "{{ app_dir }}/apps/api/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0600'
+  when: (database_url is defined and database_url != '') or not remote_api_env.stat.exists
+
+- name: Check if remote apps/web/.env.local already exists
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/apps/web/.env.local"
+  register: remote_web_env
+
+- name: Render apps/web/.env.local file from template
+  ansible.builtin.template:
+    src: web.env.local.j2
+    dest: "{{ app_dir }}/apps/web/.env.local"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0600'
+  when: (next_public_supabase_url is defined and next_public_supabase_url != '') or not remote_web_env.stat.exists
+
+- name: Deploy standalone deploy.sh script to server
+  ansible.builtin.template:
+    src: deploy.sh.j2
+    dest: "{{ app_dir }}/deploy.sh"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'

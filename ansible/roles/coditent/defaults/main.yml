@@ -1,0 +1,22 @@
+---
+app_name: coditent
+app_dir: /opt/coditent
+app_user: ubuntu
+app_group: ubuntu
+
+repo_url: "https://github.com/aelasefa/coditent.git"
+repo_branch: main
+repo_force: yes
+
+# Docker Compose options
+compose_build: true
+compose_pull: false
+compose_remove_orphans: true
+
+# Healthcheck
+healthcheck_url: "http://127.0.0.1:8001/health"
+healthcheck_retries: 15
+healthcheck_delay: 5
+
+# Prune options
+docker_prune_images: true

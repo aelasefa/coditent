@@ -73,25 +73,47 @@ jobs:
           python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"
 
   # ========================================================
-  # STAGE 2: CD (Deploy to EC2 via SSH - On push to main)
+  # STAGE 2: CD (Deploy to AWS EC2 via Ansible - On push to main)
   # ========================================================
   deploy:
-    name: CD - Deploy to AWS EC2
+    name: CD - Deploy to AWS EC2 (Ansible)
     needs: [ci-web, ci-api]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger deployment script on EC2
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            /opt/coditent/deploy.sh
+          python-version: "3.12"
+
+      - name: Install Ansible & Galaxy Collections
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Configure SSH Private Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run Ansible Deployment Playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/deploy.yml \
+            -e "ansible_host=${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }}" \
+            -e "ansible_ssh_private_key_file=~/.ssh/id_rsa" \
+            -e "repo_branch=${{ github.ref_name }}"
 
       - name: Verify Live Public Health Endpoint
         run: |
           echo "Verifying public endpoint http://${{ secrets.EC2_HOST }}/health ..."
           curl -s -f --retry 5 --retry-delay 3 http://${{ secrets.EC2_HOST }}/health
           echo "Health check passed!"
+

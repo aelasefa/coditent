@@ -139,3 +139,13 @@ logs/
 scratch/
 tmp/
 temp/
+
+# ==========================================
+# 7. Ansible Temporary & Secret Files
+# ==========================================
+*.retry
+.vault-password*
+ansible/.vault-password*
+ansible/**/vault.yml
+!ansible/vault.example.yml
+

@@ -1,0 +1,6 @@
+---
+- name: Prune dangling Docker images
+  ansible.builtin.command:
+    cmd: docker image prune -f
+  when: docker_prune_images | default(true)
+  changed_when: false
