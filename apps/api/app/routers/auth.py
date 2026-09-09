@@ -132,7 +132,7 @@ def _build_sso_response(request: Request, token: str, user: User) -> Response:
     else:
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content=TokenResponse(token=token, user=UserOut.model_validate(user)).model_dump(),
+            content=TokenResponse(token=token, user=UserOut.model_validate(user)).model_dump(mode="json"),
         )
 
     response.set_cookie(
@@ -340,7 +340,7 @@ async def complete_oauth_registration(
         content=OAuthCompleteRegistrationResponse(
             access_token=token,
             user=UserOut.model_validate(user),
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
     response.set_cookie(
         key=settings.access_token_cookie_name,
