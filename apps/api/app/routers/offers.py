@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
-from app.dependencies import get_current_user, get_pagination, require_company_member
+from app.dependencies import get_current_user, get_pagination, require_company_admin, require_company_member
 from app.models import Company, Offer, OfferType, User
-from app.schemas import OfferCreate, OfferOut
+from app.schemas import OfferCreate, OfferOut, ResponsibleHrUpdate
 
 
 router = APIRouter()
@@ -52,6 +52,8 @@ async def create_offer(
         recruiter_id=current_user.id,
         company_id=current_user.company_id,
         created_by=current_user.id,
+        # Creator is the default responsible HR; company admins may reassign.
+        responsible_hr_id=current_user.id,
         title=data.title,
         company=company_name,
         region=data.region,
@@ -82,6 +84,47 @@ async def list_my_offers(
     )
     offers = result.scalars().all()
     return {"offers": [OfferOut.model_validate(offer) for offer in offers]}
+
+
+@router.patch("/{offer_id}/responsible-hr", response_model=OfferOut)
+async def set_responsible_hr(
+    offer_id: uuid.UUID,
+    data: ResponsibleHrUpdate,
+    current_user: Annotated[User, Depends(require_company_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OfferOut:
+    """Assign the responsible HR for an offer. OWNER/ADMIN only.
+
+    The new responsible HR must be an eligible member of the SAME company —
+    enforced here on the backend, never just in the frontend. Previous HR
+    loses recruitment-chat access automatically (authorization re-resolves
+    the current responsible HR on every request).
+    """
+    result = await db.execute(
+        select(Offer).where(
+            Offer.id == offer_id, Offer.company_id == current_user.company_id
+        )
+    )
+    offer = result.scalar_one_or_none()
+    if offer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
+    target_res = await db.execute(select(User).where(User.id == data.responsible_hr_id))
+    target = target_res.scalar_one_or_none()
+    if (
+        target is None
+        or target.role.value != "COMPANY_USER"
+        or not target.company_id
+        or target.company_id != current_user.company_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Responsible HR must be a member of the same company",
+        )
+    offer.responsible_hr_id = target.id
+    await db.commit()
+    await db.refresh(offer)
+    await log_audit(db, action="OFFER_RESPONSIBLE_HR_CHANGED", actor=current_user, company_id=current_user.company_id, resource_type="offer", resource_id=offer.id, details=str(target.id))
+    return OfferOut.model_validate(offer)
 
 
 @router.patch("/{offer_id}/toggle", response_model=OfferOut)

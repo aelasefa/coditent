@@ -129,6 +129,14 @@ class OfferOut(APIModel):
     requirements: str
     active: bool
     posted_at: datetime
+    # Company scope + responsible recruiter (optional: backward compatible).
+    company_id: uuid.UUID | None = None
+    created_by: uuid.UUID | None = None
+    responsible_hr_id: uuid.UUID | None = None
+
+
+class ResponsibleHrUpdate(APIModel):
+    responsible_hr_id: uuid.UUID
 
 
 class RecommendationRequest(APIModel):
@@ -213,6 +221,31 @@ class ChatMessageOut(APIModel):
     content: str
     created_at: datetime
     sender: UserOut | None = None
+    application_id: uuid.UUID | None = None
+
+
+class RecruitmentMessageCreate(APIModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class RecruitmentPeer(APIModel):
+    id: uuid.UUID
+    full_name: str
+    avatar_url: str | None = None
+    role: str | None = None
+    company_role: str | None = None
+
+
+class RecruitmentChatContext(APIModel):
+    application_id: uuid.UUID
+    status: str
+    chat_enabled: bool
+    offer_id: uuid.UUID
+    offer_title: str
+    company_id: uuid.UUID | None = None
+    company_name: str | None = None
+    peer: RecruitmentPeer | None = None
+    messages: list[ChatMessageOut] = []
 
 
 class AdminActivityOut(APIModel):

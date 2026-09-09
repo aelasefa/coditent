@@ -33,6 +33,8 @@ export interface Offer {
   id: string;
   recruiter_id: string;
   company_id?: string | null;
+  created_by?: string | null;
+  responsible_hr_id?: string | null;
   title: string;
   company: string;
   region: string;
@@ -130,6 +132,7 @@ export interface ApplicationItem {
   opportunity_id: string;
   company_id?: string | null;
   status: "applied" | "under_review" | "shortlisted" | "assessment_required" | "assessment_completed" | "interview" | "accepted" | "rejected" | string;
+  chat_enabled?: boolean;
   cv_url?: string | null;
   cover_letter?: string | null;
   ai_score?: number | null;
@@ -138,6 +141,38 @@ export interface ApplicationItem {
   updated_at?: string | null;
   candidate?: User;
   opportunity?: Offer;
+}
+
+export interface RecruitmentPeer {
+  id: string;
+  full_name: string;
+  avatar_url?: string | null;
+  role?: string | null;
+  company_role?: string | null;
+}
+
+export interface RecruitmentChatContext {
+  application_id: string;
+  status: string;
+  chat_enabled: boolean;
+  offer_id: string;
+  offer_title: string;
+  company_id?: string | null;
+  company_name?: string | null;
+  peer?: RecruitmentPeer | null;
+  messages: ChatMessage[];
+}
+
+export interface RecruitmentChatListItem {
+  application_id: string;
+  status: string;
+  chat_enabled: boolean;
+  offer_id: string;
+  offer_title: string;
+  company_name?: string | null;
+  peer?: RecruitmentPeer | null;
+  last_message?: string | null;
+  last_at?: string | null;
 }
 
 export interface AssessmentItem {

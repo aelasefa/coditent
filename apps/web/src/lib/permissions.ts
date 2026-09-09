@@ -6,12 +6,16 @@ const PERMISSIONS: Record<string, Set<CompanyRole>> = {
   invite_employees: new Set(["OWNER", "ADMIN"]),
   change_employee_roles: new Set(["OWNER", "ADMIN"]),
   remove_employees: new Set(["OWNER", "ADMIN"]),
-  create_offers: new Set(["OWNER", "ADMIN", "RECRUITER"]),
-  edit_offers: new Set(["OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"]),
+  // Mirrors apps/api/app/core/permissions.py. HR holds recruitment permissions
+  // so the Company → HR → Offer → Application → Chat workflow is possible.
+  create_offers: new Set(["OWNER", "ADMIN", "HR", "RECRUITER"]),
+  edit_offers: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
   delete_offers: new Set(["OWNER", "ADMIN"]),
-  view_applications: new Set(["OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"]),
-  view_assessments: new Set(["OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"]),
-  company_analytics: new Set(["OWNER", "ADMIN", "RECRUITER", "HIRING_MANAGER"]),
+  view_applications: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
+  evaluate_candidates: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
+  move_recruitment_stage: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
+  view_assessments: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
+  company_analytics: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
   manage_subscription: new Set(["OWNER"]),
 };
 

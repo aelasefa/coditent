@@ -9,8 +9,8 @@ import { EmptyState } from "@/components/company/EmptyState";
 import { Modal } from "@/components/company/Modal";
 import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
-import { createOffer, getMe, toggleOffer, api, getApiBaseUrl } from "@/lib/api";
-import { can } from "@/lib/permissions";
+import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, setResponsibleHr } from "@/lib/api";
+import { can, hasCompanyRole } from "@/lib/permissions";
 import { Offer } from "@/lib/types";
 import {
   FiBriefcase,
@@ -25,6 +25,7 @@ import {
   FiCalendar,
   FiAlertCircle,
   FiCheckCircle,
+  FiUserCheck,
 } from "react-icons/fi";
 
 function getErrorMessage(err: unknown): string {
@@ -44,6 +45,13 @@ export default function CompanyJobsPage() {
   const canCreate = can(me ?? null, "create_offers");
   const canEdit = can(me ?? null, "edit_offers");
   const canDelete = can(me ?? null, "delete_offers");
+  const canAssignHr = hasCompanyRole(me ?? null, ["OWNER", "ADMIN"]);
+
+  const { data: members } = useQuery({
+    queryKey: ["company-members", me?.company_id],
+    queryFn: () => getCompanyMembers(me!.company_id as string),
+    enabled: !!me?.company_id,
+  });
 
   const { data: offers, isLoading, isError } = useQuery({
     queryKey: ["company-offers"],
@@ -84,6 +92,19 @@ export default function CompanyJobsPage() {
     type: "JOB" as "JOB" | "INTERNSHIP",
     description: "",
     requirements: "",
+  });
+  const [responsibleHrId, setResponsibleHrId] = useState("");
+
+  const hrMut = useMutation({
+    mutationFn: ({ offerId, hrId }: { offerId: string; hrId: string }) => setResponsibleHr(offerId, hrId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["company-offers"] });
+      setStatusMessage({ text: "Responsible recruiter updated." });
+      setTimeout(() => setStatusMessage(null), 4000);
+    },
+    onError: (e: unknown) => {
+      setStatusMessage({ text: getErrorMessage(e), isError: true });
+    },
   });
 
   const createMut = useMutation({
@@ -168,6 +189,7 @@ export default function CompanyJobsPage() {
 
   const openEdit = (o: Offer) => {
     setEditTarget(o);
+    setResponsibleHrId(o.responsible_hr_id ?? "");
     setEditForm({
       title: o.title,
       company: o.company,
@@ -337,6 +359,12 @@ export default function CompanyJobsPage() {
                       <span className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
                         <FiCalendar className="h-3 w-3" />
                         <span>Posted {new Date(offer.posted_at).toLocaleDateString()}</span>
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+                        <FiUserCheck className="h-3 w-3" />
+                        <span>
+                          Recruiter: {(members ?? []).find((m) => m.id === offer.responsible_hr_id)?.full_name ?? "Assigned on hire"}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -633,6 +661,36 @@ export default function CompanyJobsPage() {
                 className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:border-zinc-900 dark:focus:border-zinc-500 focus:outline-none"
               />
             </div>
+
+            {canAssignHr && editTarget && (
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Responsible recruiter (same company only)
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={responsibleHrId}
+                    onChange={(e) => setResponsibleHrId(e.target.value)}
+                    className="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:border-zinc-900 dark:focus:border-zinc-500 focus:outline-none"
+                  >
+                    <option value="">Keep current</option>
+                    {(members ?? []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name} · {m.company_role}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!responsibleHrId || hrMut.isPending}
+                    onClick={() => hrMut.mutate({ offerId: editTarget.id, hrId: responsibleHrId })}
+                    className="rounded-lg bg-zinc-900 dark:bg-zinc-100 px-3 py-2 text-xs font-semibold text-white dark:text-zinc-900 disabled:opacity-50"
+                  >
+                    {hrMut.isPending ? "Saving…" : "Assign"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
 
