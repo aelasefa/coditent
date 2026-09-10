@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+python-multipart
 sqlalchemy[asyncio]
 asyncpg
 alembic
@@ -17,3 +18,5 @@ redis
 celery
 prometheus-client
 structlog
+pypdf
+python-docx

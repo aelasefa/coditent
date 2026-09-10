@@ -76,6 +76,12 @@ If no important local data exists (typical for this repo — dev data is seeded)
 - JWT secret stays in `JWT_SECRET` (backend). Cookies are `httpOnly` (`app/routers/auth.py`).
 - All 12 routers continue using `get_db:AsyncSession` against Supabase; no code path uses a second DB.
 
+## CV Storage (Supabase Storage, private bucket)
+
+- Candidate CVs live in private bucket `candidate-cvs` (create once: Storage → New bucket → private).
+- Object path `{user_id}/{uuid}_{name}.pdf|docx`. Backend uses service-role key only.
+- Download/delete enforce `path.startswith(user_id)`. No public URLs. Profile `cv_url` stores path only.
+
 ## Docker / Deployment
 
 - `docker-compose.yml` now runs **3 services**: `api`, `worker` (Celery), `redis` (ephemeral) + `web`. No `db`, no `db_data`.

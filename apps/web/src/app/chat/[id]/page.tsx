@@ -1,33 +1,58 @@
 "use client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { getConversation, sendMessage } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getConversation, getConversations, getMe, sendMessage } from "@/lib/api";
+import { PageContainer } from "@/components/shell/page-container";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/toast";
+import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
 
 export default function ChatRoomPage({ params }: { params: { id: string } }) {
   const qc = useQueryClient();
-  const { data: messages } = useQuery({ queryKey: ["chat", params.id], queryFn: () => getConversation(params.id), refetchInterval: 3000 });
-  const [content, setContent] = useState("");
+  const { toast } = useToast();
+  const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const convQuery = useQuery({ queryKey: ["conversations"], queryFn: getConversations, staleTime: 60_000 });
+  const msgQuery = useQuery({
+    queryKey: ["chat", params.id],
+    queryFn: () => getConversation(params.id),
+    refetchInterval: 3000,
+  });
+
+  const peer = (convQuery.data ?? []).find((c) => c.user.id === params.id)?.user ?? null;
+  const title = peer?.full_name ?? "Conversation";
+  const subtitle = peer ? peer.role : undefined;
 
   const sendMut = useMutation({
-    mutationFn: () => sendMessage(params.id, content),
-    onSuccess: () => { setContent(""); qc.invalidateQueries({ queryKey: ["chat", params.id] }); },
+    mutationFn: (text: string) => sendMessage(params.id, text),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat", params.id] }),
+    onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
   });
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-lg font-semibold">Chat with {params.id.slice(0,8)}…</h1>
-      <div className="mt-4 space-y-2 rounded-lg border border-zinc-800 bg-zinc-900 p-4 max-h-[60vh] overflow-auto">
-        {messages?.map(m=>(
-          <div key={m.id} className={`flex ${m.receiver_id===params.id ? "justify-end" : "justify-start"}`}>
-            <span className={`rounded-2xl px-3 py-2 text-sm ${m.receiver_id===params.id ? "bg-violet-600 text-white" : "bg-zinc-800 text-zinc-100"}`}>{m.content}</span>
+    <PageContainer variant="full" className="max-w-3xl">
+      <div className="overflow-hidden rounded-xl border border-border-subtle bg-surface">
+        <ChatHeader title={title} subtitle={subtitle} backHref="/chat" />
+        {msgQuery.isLoading ? (
+          <div className="space-y-2 p-4" role="status" aria-label="Loading messages">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-12" />
+            ))}
           </div>
-        ))}
-        {messages?.length===0 && <p className="text-sm text-zinc-500">No messages yet.</p>}
+        ) : msgQuery.isError ? (
+          <div role="alert" className="p-6 text-center">
+            <p className="text-sm font-semibold text-danger">Conversation unavailable.</p>
+            <button type="button" onClick={() => msgQuery.refetch()} className="mt-2 text-sm font-semibold text-danger underline">
+              Retry
+            </button>
+          </div>
+        ) : (
+          <MessageList messages={msgQuery.data ?? []} myId={meQuery.data?.id} />
+        )}
+        <Composer
+          peerName={peer?.full_name ?? "recruiter"}
+          pending={sendMut.isPending}
+          onSend={(text) => sendMut.mutate(text)}
+        />
       </div>
-      <div className="mt-4 flex gap-2">
-        <input value={content} onChange={e=>setContent(e.target.value)} placeholder="Type a message" className="flex-1 rounded-full bg-zinc-800 px-4 py-2 text-sm" onKeyDown={e=>e.key==="Enter" && content.trim() && sendMut.mutate()} />
-        <button onClick={()=>sendMut.mutate()} disabled={!content.trim()} className="rounded-full bg-violet-600 px-5 py-2 text-sm text-white disabled:opacity-50">Send</button>
-      </div>
-    </main>
+    </PageContainer>
   );
 }

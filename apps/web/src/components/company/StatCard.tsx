@@ -29,33 +29,33 @@ export function StatCard({
   return (
     <div
       onClick={onClick}
-      className={`relative rounded-xl border p-5 transition-all duration-150 ${
+      className={`relative rounded-xl border border-border-subtle bg-surface p-5 transition-colors duration-fast ${
         highlight
-          ? "bg-white dark:bg-[#121215] border-zinc-900 dark:border-zinc-100 shadow-sm ring-1 ring-zinc-900/5 dark:ring-zinc-100/10"
-          : "bg-white dark:bg-[#121215] border-zinc-200/90 dark:border-zinc-800/90 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:border-zinc-300 dark:hover:border-zinc-700"
+          ? "border-border-strong shadow-sm"
+          : "hover:border-border-strong"
       } ${onClick ? "cursor-pointer hover:shadow-md" : ""}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
         {Icon && (
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-750 text-zinc-600 dark:text-zinc-300">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-border-subtle bg-surface-secondary text-muted-foreground">
             <Icon className="h-4 w-4" />
           </div>
         )}
       </div>
 
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 leading-none">
+        <span className="text-3xl font-bold tracking-tight text-foreground leading-none">
           {value}
         </span>
         {trend && (
           <span
             className={`inline-flex items-center text-xs font-semibold ${
               trend.isPositive
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-zinc-500 dark:text-zinc-400"
+                ? "text-success"
+                : "text-muted-foreground"
             }`}
           >
             {trend.value}
@@ -64,7 +64,7 @@ export function StatCard({
       </div>
 
       {subValue && (
-        <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-medium">{subValue}</p>
+        <p className="mt-1.5 text-xs text-muted-foreground font-medium">{subValue}</p>
       )}
     </div>
   );

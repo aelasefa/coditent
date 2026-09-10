@@ -26,7 +26,34 @@ export interface Profile {
   years_of_experience: number | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
+  cv_url?: string | null;
   updated_at: string | null;
+}
+
+export interface CVExtracted {
+  skills: string[];
+  years_of_experience: number | null;
+  field_of_study: string | null;
+  university: string | null;
+  study_level: "BAC" | "LICENCE" | "MASTER" | "DOCTORAT" | null;
+  city: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  portfolio_url: string | null;
+}
+
+export interface CVParseResult {
+  extracted: CVExtracted;
+  warnings: string[];
+  has_cv: boolean;
+  meta?: Record<string, number>;
+}
+
+export interface CVMeta {
+  cv_url: string;
+  filename?: string | null;
+  content_type?: string | null;
+  size_bytes?: number | null;
 }
 
 export interface Offer {

@@ -1,18 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
+import { AuthLayout } from "@/components/auth/auth-layout";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
-import { MdButton } from "@/components/ui/md-button";
-import { MdCard } from "@/components/ui/md-card";
-import { MdField, MdInput, MdSelect } from "@/components/ui/md-field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { register } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 
@@ -25,18 +25,16 @@ const registerSchema = z.object({
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
-export default function RegisterPage() {
+function RegisterInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialRole = searchParams.get("role") === "recruiter" ? "recruiter" : "candidate";
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      full_name: "",
-      role: "candidate",
-    },
+    defaultValues: { email: "", password: "", full_name: "", role: initialRole },
   });
 
   const registerMutation = useMutation({
@@ -44,34 +42,26 @@ export default function RegisterPage() {
     onSuccess: (data) => {
       setErrorMessage(null);
       saveToken(data.token);
-
       if (data.user.role === "RECRUITER") {
         if (!data.user.is_approved) {
           router.push("/pending-approval");
           return;
         }
-
         router.push("/recruiter");
         return;
       }
-
       router.push("/profile");
     },
     onError: (error) => {
       if (axios.isAxiosError(error)) {
         if (!error.response) {
-          setErrorMessage(
-            "Cannot reach backend API. Start the backend and verify NEXT_PUBLIC_API_URL in .env.local"
-          );
+          setErrorMessage("Cannot reach server. Check connection and try again.");
           return;
         }
-
         const detailValue = error.response.data?.detail;
-        const detail = typeof detailValue === "string" ? detailValue : "Registration failed.";
-        setErrorMessage(detail);
+        setErrorMessage(typeof detailValue === "string" ? detailValue : "Registration failed.");
         return;
       }
-
       setErrorMessage("Registration failed.");
     },
   });
@@ -79,124 +69,65 @@ export default function RegisterPage() {
   const isSubmitting = registerMutation.isPending;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-md-background px-4 py-8 sm:px-6 lg:px-10">
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="md-glow absolute -left-20 top-8 h-72 w-72 rounded-full bg-md-primary/20 blur-3xl" />
-        <div className="md-glow absolute right-0 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-md-tertiary/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-md-secondaryContainer/45 blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
-        <section className="md-fade-up space-y-6">
-          <p className="inline-flex rounded-full bg-md-secondaryContainer px-4 py-1.5 text-xs font-medium uppercase tracking-[0.12em] text-md-onSecondaryContainer">
-            Join Coditent
-          </p>
-          <h1 className="max-w-xl text-4xl font-medium leading-tight sm:text-5xl">
-            Build one profile. Move faster through the hiring cycle.
-          </h1>
-          <p className="max-w-2xl text-base leading-7 text-md-onSurfaceVariant sm:text-lg">
-            Create your workspace as a candidate or recruiter and keep recommendations, offers, and
-            conversations in one expressive interface.
-          </p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <MdCard interactive className="p-5">
-              <p className="text-sm text-md-onSurfaceVariant">Recommendations generated</p>
-              <p className="mt-2 text-2xl font-medium text-md-primary">In minutes</p>
-            </MdCard>
-            <MdCard interactive className="p-5">
-              <p className="text-sm text-md-onSurfaceVariant">Recruiter publishing flow</p>
-              <p className="mt-2 text-2xl font-medium text-md-primary">One form</p>
-            </MdCard>
-          </div>
-        </section>
-
-        <MdCard className="md-fade-up md-fade-delay-1 rounded-md-2xl border-md-outline/20 bg-md-surface p-6 sm:p-8">
-          <div className="mb-6">
-            <p className="text-xs uppercase tracking-[0.12em] text-md-onSurfaceVariant">
-              New account
-            </p>
-            <h2 className="mt-2 text-3xl font-medium">Create account</h2>
-            <p className="mt-1 text-sm text-md-onSurfaceVariant">Set your role and start your workspace.</p>
-          </div>
-
-          <form
-            className="space-y-5"
-            onSubmit={form.handleSubmit((values) => {
-              setErrorMessage(null);
-              registerMutation.mutate({
-                ...values,
-                role: values.role === "candidate" ? "CANDIDATE" : "RECRUITER",
-              });
-            })}
+    <AuthLayout title="Create account" subtitle="One account for opportunities, profile and applications.">
+      <form
+        className="space-y-4"
+        onSubmit={form.handleSubmit((values) => {
+          setErrorMessage(null);
+          registerMutation.mutate({ ...values, role: values.role === "candidate" ? "CANDIDATE" : "RECRUITER" });
+        })}
+      >
+        <SocialLoginButtons separator="or continue with email" />
+        <Input label="Full name" id="full_name" autoComplete="name" placeholder="Your name" disabled={isSubmitting} error={form.formState.errors.full_name?.message} {...form.register("full_name")} />
+        <Input label="Email" id="email" type="email" autoComplete="email" placeholder="you@example.com" disabled={isSubmitting} error={form.formState.errors.email?.message} {...form.register("email")} />
+        <div>
+          <Input
+            label="Password"
+            id="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            disabled={isSubmitting}
+            error={form.formState.errors.password?.message}
+            {...form.register("password")}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-pressed={showPassword}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="mt-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground"
           >
-            <SocialLoginButtons separator="OR" />
+            {showPassword ? "Hide password" : "Show password"}
+          </button>
+        </div>
+        <Select label="I am joining as" id="role" disabled={isSubmitting} error={form.formState.errors.role?.message} {...form.register("role")} helper="Candidates find work. Recruiters hire. Company team access comes only by invitation.">
+          <option value="candidate">Looking for opportunities</option>
+          <option value="recruiter">Hiring talent</option>
+        </Select>
+        {errorMessage ? (
+          <p role="alert" className="text-sm font-medium text-danger">
+            {errorMessage}
+          </p>
+        ) : null}
+        <Button type="submit" loading={isSubmitting} className="w-full">
+          Create account
+        </Button>
+        <p className="text-center text-sm text-muted-foreground">
+          Already registered?{" "}
+          <Link href="/login" className="font-semibold text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </form>
+    </AuthLayout>
+  );
+}
 
-            <MdField error={form.formState.errors.full_name?.message} htmlFor="full_name" label="Full name">
-              <MdInput
-                autoComplete="name"
-                disabled={isSubmitting}
-                id="full_name"
-                placeholder="Your name"
-                {...form.register("full_name")}
-              />
-            </MdField>
-
-            <MdField error={form.formState.errors.email?.message} htmlFor="email" label="Email">
-              <MdInput
-                autoComplete="email"
-                disabled={isSubmitting}
-                id="email"
-                placeholder="you@company.com"
-                type="email"
-                {...form.register("email")}
-              />
-            </MdField>
-
-            <MdField
-              error={form.formState.errors.password?.message}
-              htmlFor="password"
-              label="Password"
-            >
-              <MdInput
-                autoComplete="new-password"
-                disabled={isSubmitting}
-                id="password"
-                placeholder="At least 8 characters"
-                type="password"
-                {...form.register("password")}
-              />
-            </MdField>
-
-            <MdField error={form.formState.errors.role?.message} htmlFor="role" label="Role">
-              <MdSelect disabled={isSubmitting} id="role" {...form.register("role")}>
-                <option value="candidate">Candidate</option>
-                <option value="recruiter">Recruiter</option>
-              </MdSelect>
-            </MdField>
-
-            {errorMessage ? (
-              <div className="rounded-md border border-rose-300 bg-rose-100/60 px-4 py-3 text-sm text-rose-800">
-                {errorMessage}
-              </div>
-            ) : null}
-
-            <MdButton className="w-full" disabled={isSubmitting} type="submit" variant="filled">
-              {isSubmitting ? "Creating account..." : "Create account"}
-            </MdButton>
-
-            <p className="text-center text-sm text-md-onSurfaceVariant">
-              Already registered?{" "}
-              <Link
-                className="font-medium text-md-primary underline decoration-md-primary/40 underline-offset-4"
-                href="/login"
-              >
-                Sign in
-              </Link>
-            </p>
-          </form>
-        </MdCard>
-      </div>
-    </main>
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterInner />
+    </Suspense>
   );
 }

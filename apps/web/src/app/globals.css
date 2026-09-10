@@ -5,30 +5,118 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;800&display=swap");
 
 :root {
-  --md-background: #06070b;
-  --md-foreground: #f5f2ff;
-  --md-primary: #8f75c7;
-  --md-on-primary: #ffffff;
-  --md-secondary-container: #1d1730;
-  --md-on-secondary-container: #ddd3ff;
-  --md-tertiary: #4cb6c4;
-  --md-surface: #0f1118;
-  --md-surface-low: #0b0d14;
-  --md-outline: #3a3450;
-  --md-on-surface-variant: #b7b1cc;
+  /* CODITENT semantic tokens — single source of truth (light) */
+  --background: #fafaf8;
+  --surface: #ffffff;
+  --surface-secondary: #f4f4f2;
+  --surface-hover: #eeeeec;
 
-  /* Coditent landing design tokens */
-  --ct-primary: #8b5cf6;
-  --ct-secondary: #a78bfa;
-  --ct-accent: #4cb6c4;
-  --ct-live: #22c55e;
-  --ct-border: rgba(148, 122, 220, 0.16);
-  --ct-border-strong: rgba(148, 122, 220, 0.34);
-  --ct-text-primary: #f4f1fb;
-  --ct-text-secondary: #b9b1d6;
-  --ct-text-muted: #847b9e;
-  --ct-gradient: linear-gradient(135deg, #4f46e5 0%, #8b5cf6 48%, #c084fc 100%);
-  --ct-glow: rgba(139, 92, 246, 0.45);
+  --foreground: #18181b;
+  --foreground-secondary: #3f3f46;
+  --muted: #71717a;
+  --muted-foreground: #71717a;
+
+  --border: #e4e4e7;
+  --border-subtle: #e9e7e2;
+  --border-strong: #d4d4d8;
+
+  --primary: #6d28d9;
+  --primary-hover: #5b21b6;
+  --primary-active: #4c1d95;
+  --primary-foreground: #ffffff;
+
+  --accent: #6d28d9;
+  --accent-foreground: #ffffff;
+
+  --success: #15803d;
+  --success-background: #dcfce7;
+  --warning: #b45309;
+  --warning-background: #fef3c7;
+  --danger: #dc2626;
+  --danger-background: #fee2e2;
+  --info: #1d4ed8;
+  --info-background: #dbeafe;
+
+  --focus-ring: #6d28d9;
+  --overlay: rgba(9, 9, 11, 0.5);
+  --shadow-color: rgba(24, 24, 27, 0.08);
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --duration-slow: 400ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+
+  /* Legacy aliases — deprecated, map to semantic tokens */
+  --md-background: var(--background);
+  --md-foreground: var(--foreground);
+  --md-primary: var(--primary);
+  --md-on-primary: var(--primary-foreground);
+  --md-secondary-container: var(--surface-secondary);
+  --md-on-secondary-container: var(--foreground-secondary);
+  --md-tertiary: var(--accent);
+  --md-surface: var(--surface);
+  --md-surface-low: var(--surface-secondary);
+  --md-outline: var(--border);
+  --md-on-surface-variant: var(--muted-foreground);
+
+  /* Landing tokens — isolated, deprecated for product UI */
+  --ct-primary: var(--primary);
+  --ct-secondary: #7c3aed;
+  --ct-accent: var(--accent);
+  --ct-live: var(--success);
+  --ct-border: var(--border-subtle);
+  --ct-border-strong: var(--border);
+  --ct-text-primary: var(--foreground);
+  --ct-text-secondary: var(--foreground-secondary);
+  --ct-text-muted: var(--muted);
+  --ct-gradient: linear-gradient(135deg, #5b21b6 0%, #6d28d9 48%, #7c3aed 100%);
+  --ct-glow: rgba(109, 40, 217, 0.25);
+}
+
+.dark {
+  --background: #09090b;
+  --surface: #121215;
+  --surface-secondary: #18181c;
+  --surface-hover: #202026;
+
+  --foreground: #fafafa;
+  --foreground-secondary: #d4d4d8;
+  --muted: #a1a1aa;
+  --muted-foreground: #a1a1aa;
+
+  --border: #27272a;
+  --border-subtle: #1f1f23;
+  --border-strong: #3f3f46;
+
+  --primary: #8b5cf6;
+  --primary-hover: #7c3aed;
+  --primary-active: #6d28d9;
+  --primary-foreground: #ffffff;
+
+  --accent: #8b5cf6;
+  --accent-foreground: #ffffff;
+
+  --success: #4ade80;
+  --success-background: rgba(34, 197, 94, 0.14);
+  --warning: #fbbf24;
+  --warning-background: rgba(251, 191, 36, 0.14);
+  --danger: #f87171;
+  --danger-background: rgba(248, 113, 113, 0.14);
+  --info: #93c5fd;
+  --info-background: rgba(147, 197, 253, 0.14);
+
+  --focus-ring: #8b5cf6;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-color: rgba(0, 0, 0, 0.4);
 }
 
 html {
@@ -45,14 +133,57 @@ body {
   padding: 0;
   min-height: 100%;
   overflow-x: clip;
-  background: #0d0b1a;
+  background: var(--background);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  color: var(--md-foreground);
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Type scale: display 48-84 clamp, h1 48-64, page 28-36, section 20-24, card 16-18 */
+.ct-display {
+  font-size: clamp(48px, 7vw, 84px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+.ct-h1 {
+  font-size: clamp(36px, 5vw, 56px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+.ct-page-title {
+  font-size: clamp(28px, 3vw, 36px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.ct-section-title {
+  font-size: clamp(20px, 2vw, 24px);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.ct-card-title {
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+.ct-body { font-size: 15px; line-height: 1.6; }
+.ct-small, .ct-meta { font-size: 13px; line-height: 1.5; }
+
+/* Consistent focus */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 a {
@@ -61,7 +192,7 @@ a {
 }
 
 ::selection {
-  background: rgba(143, 117, 199, 0.3);
+  background: rgba(109, 40, 217, 0.22);
 }
 
 @keyframes md-fade-up {

@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
 import { ThemeProvider } from "@/lib/theme-context";
-
-const LoadingScreen = dynamic(() => import("@/components/LoadingScreen"), { ssr: false });
-const DarkVeil = dynamic(() => import("@/components/DarkVeil"), { ssr: false });
+import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
-  title: "Coditent",
-  description: "Coditent talent workflows",
+  title: "CODITENT — AI-Powered Careers & Recruiting",
+  description:
+    "Discover relevant jobs and internships, prove skills through practical evaluations, and connect with recruiters. Companies publish roles, review candidates and hire.",
+  openGraph: {
+    title: "CODITENT — AI-Powered Careers & Recruiting",
+    description:
+      "Opportunities matched to your profile, practical skill evaluations, and a clear path from application to hire.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -19,31 +23,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className="min-h-full bg-md-background text-md-foreground">
-        <LoadingScreen />
-        <div
-          className="darkVeilWrapper"
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 0,
-            pointerEvents: "none",
-            opacity: 0.55,
-          }}
-        >
-          <DarkVeil
-            hueShift={270}
-            noiseIntensity={0.03}
-            scanlineIntensity={0}
-            speed={0.25}
-            scanlineFrequency={0}
-            warpAmount={0.015}
-            resolutionScale={0.65}
-          />
-        </div>
+      <body className="min-h-full bg-background text-foreground">
         <QueryProvider>
           <ThemeProvider>
-            <div className="siteContentLayer">{children}</div>
+            <ToastProvider>
+              <div className="siteContentLayer">{children}</div>
+            </ToastProvider>
           </ThemeProvider>
         </QueryProvider>
       </body>
