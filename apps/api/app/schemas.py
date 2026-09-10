@@ -79,6 +79,7 @@ class ProfileOut(APIModel):
     years_of_experience: int | None
     linkedin_url: str | None
     portfolio_url: str | None
+    cv_url: str | None = None
     updated_at: datetime | None
 
 
@@ -257,3 +258,29 @@ class AdminActivityOut(APIModel):
     target_user_email: str | None
     details: str | None
     created_at: datetime
+
+
+class CVExtractedOut(APIModel):
+    skills: list[str] = []
+    years_of_experience: int | None = None
+    field_of_study: str | None = None
+    university: str | None = None
+    study_level: str | None = None
+    city: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
+    portfolio_url: str | None = None
+
+
+class CVParseOut(APIModel):
+    extracted: CVExtractedOut
+    warnings: list[str] = []
+    has_cv: bool = True
+    meta: dict[str, int] = Field(default_factory=dict)
+
+
+class CVMetaOut(APIModel):
+    cv_url: str
+    filename: str | None = None
+    content_type: str | None = None
+    size_bytes: int | None = None

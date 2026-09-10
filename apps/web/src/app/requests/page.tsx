@@ -72,7 +72,7 @@ function RequestsInner() {
           const chatTarget = me?.role === "CANDIDATE" ? (r.recruiter_id || r.candidate_id) : r.candidate_id;
           return (
           <div key={r.id} className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
-            <p className="text-sm"><span className="font-medium">{r.candidate?.full_name || r.candidate_id.slice(0,8)}</span> → <span className="font-medium">{r.company?.name || r.company_id.slice(0,8)}</span> {r.recruiter ? `· recruiter ${r.recruiter.full_name}` : ""}</p>
+            <p className="text-sm"><span className="font-medium">{r.candidate?.full_name || "Candidate"}</span> → <span className="font-medium">{r.company?.name || "Company"}</span> {r.recruiter ? `· recruiter ${r.recruiter.full_name}` : ""}</p>
             <p className="text-xs text-zinc-500">{r.message || "No message"} · <span className={r.status==="pending" ? "text-yellow-500" : r.status==="accepted" ? "text-green-500" : "text-red-500"}>{r.status}</span> · {new Date(r.created_at).toLocaleString()}</p>
             {r.status==="pending" && canAct && (
               <div className="mt-2 flex gap-2">

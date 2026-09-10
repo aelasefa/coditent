@@ -177,6 +177,41 @@ export async function updateProfile(payload: Partial<Profile>): Promise<Profile>
   return data;
 }
 
+export async function uploadCV(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<import("@/lib/types").CVMeta> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<import("@/lib/types").CVMeta>("/candidates/cv", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (e) => {
+      if (!onProgress) return;
+      const total = e.total ?? file.size ?? 1;
+      onProgress(Math.round(((e.loaded ?? 0) / total) * 100));
+    },
+  });
+  return data;
+}
+
+export async function getCVMeta(): Promise<import("@/lib/types").CVMeta> {
+  const { data } = await api.get<import("@/lib/types").CVMeta>("/candidates/cv/meta");
+  return data;
+}
+
+export async function parseCV(): Promise<import("@/lib/types").CVParseResult> {
+  const { data } = await api.post<import("@/lib/types").CVParseResult>("/candidates/cv/parse");
+  return data;
+}
+
+export async function deleteCV(): Promise<void> {
+  await api.delete("/candidates/cv");
+}
+
+export function getCVDownloadUrl(): string {
+  return `${getApiBaseUrl()}/candidates/cv`;
+}
+
 export async function getOffers(): Promise<Offer[]> {
   const { data } = await api.get<{ offers: Offer[] }>("/offers");
   return data.offers;

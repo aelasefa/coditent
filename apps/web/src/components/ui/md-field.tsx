@@ -8,6 +8,8 @@ import {
 
 import { cn } from "@/lib/cn";
 
+/** @deprecated Use `Input`/`Textarea`/`Select` from `@/components/ui`. Compat wrapper kept. */
+
 interface MdFieldProps {
   label: string;
   error?: string;
@@ -19,15 +21,27 @@ interface MdFieldProps {
 export function MdField({ label, error, hint, htmlFor, children }: MdFieldProps) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-md-onSurfaceVariant" htmlFor={htmlFor}>
+      <label className="block text-sm font-medium text-foreground" htmlFor={htmlFor}>
         {label}
       </label>
       {children}
-      {error ? <p className="text-xs font-medium text-rose-700">{error}</p> : null}
-      {!error && hint ? <p className="text-xs text-md-onSurfaceVariant/80">{hint}</p> : null}
+      {error ? (
+        <p role="alert" className="text-[13px] font-medium text-danger">
+          {error}
+        </p>
+      ) : null}
+      {!error && hint ? <p className="text-[13px] text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
+
+const fieldInputBase = cn(
+  "h-11 w-full rounded-lg border border-border bg-surface px-3.5",
+  "text-[15px] text-foreground placeholder:text-muted-foreground/70",
+  "transition-colors duration-fast ease-standard",
+  "focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+  "disabled:cursor-not-allowed disabled:opacity-60 disabled:bg-surface-secondary"
+);
 
 type MdInputProps = InputHTMLAttributes<HTMLInputElement>;
 
@@ -38,14 +52,7 @@ export const MdInput = forwardRef<HTMLInputElement, MdInputProps>(function MdInp
   return (
     <input
       ref={ref}
-      className={cn(
-        "h-14 w-full rounded-t-md-sm rounded-b-none border-0 border-b-2 border-md-outline/70 bg-md-surfaceLow px-4",
-        "text-sm text-md-foreground placeholder:text-md-onSurfaceVariant/70",
-        "transition-all duration-200 ease-md",
-        "focus:border-md-primary focus:outline-none focus:ring-2 focus:ring-md-primary/25",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-        className
-      )}
+      className={cn(fieldInputBase, className)}
       {...props}
     />
   );
@@ -60,14 +67,7 @@ export const MdTextArea = forwardRef<HTMLTextAreaElement, MdTextAreaProps>(funct
   return (
     <textarea
       ref={ref}
-      className={cn(
-        "min-h-28 w-full rounded-t-md-sm rounded-b-none border-0 border-b-2 border-md-outline/70 bg-md-surfaceLow px-4 py-3",
-        "text-sm text-md-foreground placeholder:text-md-onSurfaceVariant/70",
-        "transition-all duration-200 ease-md",
-        "focus:border-md-primary focus:outline-none focus:ring-2 focus:ring-md-primary/25",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-        className
-      )}
+      className={cn(fieldInputBase, "min-h-28 h-auto py-3", className)}
       {...props}
     />
   );
@@ -82,14 +82,7 @@ export const MdSelect = forwardRef<HTMLSelectElement, MdSelectProps>(function Md
   return (
     <select
       ref={ref}
-      className={cn(
-        "h-14 w-full rounded-t-md-sm rounded-b-none border-0 border-b-2 border-md-outline/70 bg-md-surfaceLow px-4",
-        "text-sm text-md-foreground",
-        "transition-all duration-200 ease-md",
-        "focus:border-md-primary focus:outline-none focus:ring-2 focus:ring-md-primary/25",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-        className
-      )}
+      className={cn(fieldInputBase, className)}
       {...props}
     >
       {children}

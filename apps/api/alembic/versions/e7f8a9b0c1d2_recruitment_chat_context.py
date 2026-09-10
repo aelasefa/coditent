@@ -22,30 +22,62 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _column_exists(table: str, column: str) -> bool:
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    cols = [c["name"] for c in inspect(bind).get_columns(table)]
+    return column in cols
+
+
+def _index_exists(table: str, index: str) -> bool:
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    return any(i["name"] == index for i in inspect(bind).get_indexes(table))
+
+
+def _fk_exists(table: str, fk: str) -> bool:
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    return any(f["name"] == fk for f in inspect(bind).get_foreign_keys(table))
+
+
 def upgrade() -> None:
-    op.add_column("offers", sa.Column("responsible_hr_id", sa.Uuid(), nullable=True))
-    op.create_foreign_key(
-        "fk_offers_responsible_hr_id", "offers", "users", ["responsible_hr_id"], ["id"]
-    )
-    op.create_index("ix_offers_responsible_hr_id", "offers", ["responsible_hr_id"])
+    # Idempotent: this revision was partially applied out-of-band in some
+    # environments (columns/FKs/indexes exist but alembic_version was left at
+    # d5e6f7a8b9c0). Guard each step so `alembic upgrade head` succeeds there
+    # and on fresh databases.
+    if not _column_exists("offers", "responsible_hr_id"):
+        op.add_column("offers", sa.Column("responsible_hr_id", sa.Uuid(), nullable=True))
+    if not _fk_exists("offers", "fk_offers_responsible_hr_id"):
+        op.create_foreign_key(
+            "fk_offers_responsible_hr_id", "offers", "users", ["responsible_hr_id"], ["id"]
+        )
+    if not _index_exists("offers", "ix_offers_responsible_hr_id"):
+        op.create_index("ix_offers_responsible_hr_id", "offers", ["responsible_hr_id"])
     # Backfill: creator is the best-known recruiter for existing offers.
     op.execute(
         "UPDATE offers SET responsible_hr_id = COALESCE(created_by, recruiter_id) "
         "WHERE responsible_hr_id IS NULL"
     )
 
-    op.add_column("chat_messages", sa.Column("application_id", sa.Uuid(), nullable=True))
-    op.create_foreign_key(
-        "fk_chat_messages_application_id",
-        "chat_messages",
-        "applications",
-        ["application_id"],
-        ["id"],
-        ondelete="CASCADE",
-    )
-    op.create_index(
-        "ix_chat_messages_application_id", "chat_messages", ["application_id"]
-    )
+    if not _column_exists("chat_messages", "application_id"):
+        op.add_column("chat_messages", sa.Column("application_id", sa.Uuid(), nullable=True))
+    if not _fk_exists("chat_messages", "fk_chat_messages_application_id"):
+        op.create_foreign_key(
+            "fk_chat_messages_application_id",
+            "chat_messages",
+            "applications",
+            ["application_id"],
+            ["id"],
+            ondelete="CASCADE",
+        )
+    if not _index_exists("chat_messages", "ix_chat_messages_application_id"):
+        op.create_index(
+            "ix_chat_messages_application_id", "chat_messages", ["application_id"]
+        )
 
 
 def downgrade() -> None:

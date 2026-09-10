@@ -2,9 +2,9 @@ import Image from "next/image";
 
 export default function CoditentLogo({
   size = 48,
-  color = "#7C3AED",
+  color = "#6D28D9",
   className = "",
-  useSvg = false,
+  useSvg = true,
 }: {
   size?: number;
   color?: string;
