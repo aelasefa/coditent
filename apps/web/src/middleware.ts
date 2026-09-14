@@ -5,7 +5,7 @@ import { createClient as createSupabaseClient } from "@/utils/supabase/middlewar
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
 function isProtectedPath(pathname: string): boolean {
-  if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login" || pathname.startsWith("/invite")) return false;
+  if (pathname === "/login" || pathname === "/register" || pathname === "/verify-email" || pathname === "/admin/login" || pathname.startsWith("/invite") || pathname === "/company/invite/accept") return false;
   return (
     pathname.startsWith("/profile") ||
     pathname.startsWith("/dashboard") ||
@@ -44,7 +44,7 @@ function roleLogic(request: NextRequest): NextResponse {
     return NextResponse.redirect(buildLoginRedirect(request));
   }
 
-  if ((pathname === "/login" || pathname === "/register" || pathname === "/admin/login") && token) {
+  if ((pathname === "/login" || pathname === "/register" || pathname === "/verify-email" || pathname === "/admin/login") && token) {
     if (role === "PLATFORM_ADMIN" || role === "ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
     if (role === "RECRUITER") return NextResponse.redirect(new URL("/recruiter", request.url));
@@ -63,7 +63,7 @@ function roleLogic(request: NextRequest): NextResponse {
     if (role === "RECRUITER") return NextResponse.redirect(new URL("/recruiter", request.url));
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
-  if (pathname.startsWith("/company") && role !== "COMPANY_USER" && role !== "PLATFORM_ADMIN") {
+  if (pathname.startsWith("/company") && pathname !== "/company/invite/accept" && role !== "COMPANY_USER" && role !== "PLATFORM_ADMIN") {
     if (!token) return NextResponse.redirect(buildLoginRedirect(request));
     return NextResponse.redirect(new URL("/profile", request.url));
   }

@@ -2,13 +2,13 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_pagination, require_admin
-from app.models import AdminActivityLog, Offer, User, UserRole
+from app.models import AdminActivityLog, Company, CompanyStatus, Offer, User, UserRole
 from app.observability import get_logger
 from app.schemas import AdminActivityOut, AdminStatsOut, OfferOut, RecruiterApprovalOut, TokenResponse, UserOut
 from app.utils.jwt import create_access_token
@@ -127,12 +127,22 @@ async def get_admin_stats(
     total_candidates = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.CANDIDATE))
     total_recruiters = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.RECRUITER))
     total_offers = await db.scalar(select(func.count(Offer.id)))
+    total_companies = await db.scalar(select(func.count(Company.id)))
+    active_companies = await db.scalar(select(func.count(Company.id)).where(Company.status == CompanyStatus.active))
+    pending_invites = await db.scalar(select(func.count(text("1"))).select_from(text("company_invitations")).where(text("status = 'pending'")))
+    expired_invites = await db.scalar(select(func.count(text("1"))).select_from(text("company_invitations")).where(text("status = 'expired'")))
+    active_offers = await db.scalar(select(func.count(Offer.id)).where(Offer.active == True))
 
     return AdminStatsOut(
         total_users=int(total_users or 0),
         total_candidates=int(total_candidates or 0),
         total_recruiters=int(total_recruiters or 0),
         total_offers=int(total_offers or 0),
+        total_companies=int(total_companies or 0),
+        active_companies=int(active_companies or 0),
+        pending_company_invitations=int(pending_invites or 0),
+        expired_company_invitations=int(expired_invites or 0),
+        active_offers=int(active_offers or 0),
     )
 
 

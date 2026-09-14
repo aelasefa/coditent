@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     oauth_onboarding_expire_minutes: int = 10
     oauth_onboarding_cookie_secure: bool = False
     oauth_onboarding_cookie_samesite: str = "lax"
+    otp_expire_minutes: int = 10
+    otp_max_attempts: int = 5
+    otp_resend_cooldown_seconds: int = 60
     redis_url: str = "redis://localhost:6379/0"
     recommendation_cache_ttl_seconds: int = 900
     log_level: str = "INFO"
