@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import type { CVExtracted } from "@/lib/types";
 import { api } from "@/lib/api";
+import { isQualityBio } from "@/lib/bio-utils";
 import { PageContainer, PageHeader } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -219,12 +220,20 @@ export default function ProfileBuilderPage() {
     }
   };
 
+  const BIO_REQUEST_TIMEOUT_MS = 45000;
+  const bioGenRef = useRef(false);
+
   const handleGenerateBio = async () => {
+    // Duplicate guard: ref blocks same-tick double clicks, state blocks later ones
+    if (aiLoading || bioGenRef.current) return;
+    bioGenRef.current = true;
     if (skills.length === 0) {
       toast("Add skills first", { description: "AI bio needs at least one skill.", variant: "warning" });
       return;
     }
     setAiLoading("bio");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), BIO_REQUEST_TIMEOUT_MS);
     try {
       const res = await fetch("/api/ai/generate-bio", {
         method: "POST",
@@ -234,13 +243,34 @@ export default function ProfileBuilderPage() {
           fieldOfStudy: form.getValues("field_of_study"),
           headline: form.getValues("headline"),
         }),
+        signal: controller.signal,
       });
-      const data = await res.json();
-      if (data.bio) form.setValue("bio", String(data.bio).slice(0, 500), { shouldDirty: true });
-      else toast("AI bio failed", { description: "No bio returned.", variant: "error" });
-    } catch {
-      toast("AI bio failed", { description: "Retry or write bio manually.", variant: "error" });
+      let data: { success?: boolean; bio?: unknown; error?: unknown } | null = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      // Contract: { success: true, bio } — legacy keys normalized intentionally.
+      // Client-side quality defense: server already validates, never trust blindly.
+      const raw = data && typeof data === "object" ? (data.bio ?? (data as Record<string, unknown>)["text"] ?? (data as Record<string, unknown>)["result"] ?? (data as Record<string, unknown>)["content"] ?? "") : "";
+      const bio = typeof raw === "string" ? raw.trim() : "";
+      if (res.ok && data && (data as { success?: boolean }).success !== false && isQualityBio(bio)) {
+        form.setValue("bio", bio.slice(0, 500), { shouldDirty: true });
+        form.clearErrors("bio");
+      } else {
+        const serverMsg = data && typeof data === "object" && typeof (data as Record<string, unknown>)["error"] === "string" ? String((data as Record<string, unknown>)["error"]) : "";
+        toast("Could not generate your bio. Please try again.", { description: serverMsg || undefined, variant: "error" });
+      }
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      const offline = error instanceof TypeError;
+      toast(timedOut ? "Bio generation timed out. Please try again." : offline ? "Unable to connect to the server. Please check your connection and try again." : "Could not generate your bio. Please try again.", {
+        variant: "error",
+      });
     } finally {
+      clearTimeout(timeout);
+      bioGenRef.current = false;
       setAiLoading(null);
     }
   };
