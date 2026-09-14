@@ -25,6 +25,9 @@ def send_email(to_email: str, subject: str, html: str) -> dict:
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            # Resend sits behind bot protection that blocks default
+            # library user-agents (HTTP 403 error 1010). Identify the app.
+            "User-Agent": "CODITENT/1.0",
         },
         method="POST",
     )
@@ -34,5 +37,6 @@ def send_email(to_email: str, subject: str, html: str) -> dict:
             body = response.read().decode("utf-8")
             return json.loads(body) if body else {"status": "queued"}
     except error.HTTPError as exc:
-        details = exc.read().decode("utf-8") if exc.fp else exc.reason
-        raise RuntimeError(f"Resend API error: {details}") from exc
+        # Never include the API key: only status + provider message reach logs.
+        raw = exc.read().decode("utf-8") if exc.fp else str(exc.reason)
+        raise RuntimeError(f"Resend API error {exc.code}: {raw[:300]}") from exc

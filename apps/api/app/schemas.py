@@ -27,6 +27,15 @@ class RegisterRequest(APIModel):
     role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
 
 
+class VerifyEmailRequest(APIModel):
+    email: EmailStr
+    otp: str = Field(min_length=4, max_length=12)
+
+
+class ResendVerificationRequest(APIModel):
+    email: EmailStr
+
+
 class LoginRequest(APIModel):
     email: EmailStr
     password: str
@@ -158,6 +167,11 @@ class AdminStatsOut(APIModel):
     total_candidates: int
     total_recruiters: int
     total_offers: int
+    total_companies: int = 0
+    active_companies: int = 0
+    pending_company_invitations: int = 0
+    expired_company_invitations: int = 0
+    active_offers: int = 0
 
 
 class CompanyCreate(APIModel):

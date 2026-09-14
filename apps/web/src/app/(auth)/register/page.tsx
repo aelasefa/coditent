@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { register } from "@/lib/api";
-import { saveToken } from "@/lib/auth";
 
 const registerSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -40,17 +39,9 @@ function RegisterInner() {
   const registerMutation = useMutation({
     mutationFn: register,
     onSuccess: (data) => {
+      // No account or token exists yet: verify the emailed code first.
       setErrorMessage(null);
-      saveToken(data.token);
-      if (data.user.role === "RECRUITER") {
-        if (!data.user.is_approved) {
-          router.push("/pending-approval");
-          return;
-        }
-        router.push("/recruiter");
-        return;
-      }
-      router.push("/profile");
+      router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
     },
     onError: (error) => {
       if (axios.isAxiosError(error)) {

@@ -48,6 +48,11 @@ export function Dialog({
   const descId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
+  // Latest onClose without re-running setup when parent re-renders.
+  // Otherwise every keystroke inside the dialog would re-trigger initial
+  // focus and steal focus back to the first field.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -62,7 +67,7 @@ export function Dialog({
       }
     }, 0);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
       if (e.key === "Tab" && panelRef.current) {
         const items = focusable(panelRef.current);
         if (items.length === 0) return;
@@ -84,7 +89,7 @@ export function Dialog({
       window.removeEventListener("keydown", onKey);
       prevFocus.current?.focus?.();
     };
-  }, [open, onClose, initialFocusRef]);
+  }, [open, initialFocusRef]);
 
   if (!open || typeof document === "undefined") return null;
 

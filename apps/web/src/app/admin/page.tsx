@@ -2,87 +2,132 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { AdminShell } from "@/components/admin/admin-shell";
+import { PageHeader } from "@/components/shell/page-container";
+import { StatCard } from "@/components/company/StatCard";
+import { StatusBadge } from "@/components/company/StatusBadge";
+import { EmptyState } from "@/components/company/EmptyState";
+import { StatCardsSkeleton } from "@/components/company/LoadingSkeleton";
+import { Button } from "@/components/ui/button";
+import { getAdminActivity, getAdminStats, getCompanies, listCompanyInvitations } from "@/lib/api";
+import { FiBriefcase, FiMail, FiPlus, FiUsers } from "react-icons/fi";
 
-import { LogoutButton } from "@/components/logout-button";
-import { MdCard } from "@/components/ui/md-card";
-import { getAdminActivity, getAdminStats } from "@/lib/api";
+export default function AdminOverviewPage() {
+  const statsQ = useQuery({ queryKey: ["admin", "stats"], queryFn: getAdminStats });
+  const activityQ = useQuery({ queryKey: ["admin", "activity"], queryFn: getAdminActivity });
+  const companiesQ = useQuery({ queryKey: ["companies"], queryFn: getCompanies });
+  const invitesQ = useQuery({ queryKey: ["admin-company-invites"], queryFn: listCompanyInvitations });
 
-export default function AdminDashboardPage() {
-  const statsQuery = useQuery({
-    queryKey: ["admin", "stats"],
-    queryFn: getAdminStats,
-  });
-
-  const activityQuery = useQuery({
-    queryKey: ["admin", "activity"],
-    queryFn: getAdminActivity,
-  });
-
-  const stats = statsQuery.data;
+  const stats = statsQ.data;
+  const loading = statsQ.isLoading;
+  const failed = statsQ.isError;
+  const companies = (companiesQ.data ?? []).slice(0, 5);
+  const invites = (invitesQ.data?.invitations ?? []).slice(0, 5);
+  const activity = (activityQ.data ?? []).slice(0, 6);
 
   return (
-    <main className="min-h-screen bg-md-background pb-14">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">Admin workspace</p>
-            <h1 className="mt-1 text-3xl font-medium tracking-tight sm:text-4xl">Super admin dashboard</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link className="rounded-full border border-md-outline/60 px-4 py-2 text-sm text-md-primary" href="/admin/recruiters">
-              Recruiters
+    <AdminShell>
+      <div className="space-y-8">
+        <PageHeader
+          title="Overview"
+          description="Platform health across companies, invitations, candidates and offers."
+          actions={
+            <Link href="/admin/company-invitations" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover">
+              <FiPlus aria-hidden className="h-3.5 w-3.5" /> Invite company
             </Link>
-            <Link className="rounded-full border border-md-outline/60 px-4 py-2 text-sm text-md-primary" href="/admin/users">
-              Users
-            </Link>
-            <Link className="rounded-full border border-md-outline/60 px-4 py-2 text-sm text-md-primary" href="/admin/offers">
-              Offers
-            </Link>
-            <LogoutButton />
-          </div>
-        </header>
+          }
+        />
 
-        {statsQuery.isLoading ? <MdCard className="mt-6 p-6">Loading stats...</MdCard> : null}
-
-        {stats ? (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MdCard className="p-5">
-              <p className="text-sm text-md-onSurfaceVariant">Total users</p>
-              <p className="mt-2 text-2xl font-medium text-md-primary">{stats.total_users}</p>
-            </MdCard>
-            <MdCard className="p-5">
-              <p className="text-sm text-md-onSurfaceVariant">Total candidates</p>
-              <p className="mt-2 text-2xl font-medium text-md-primary">{stats.total_candidates}</p>
-            </MdCard>
-            <MdCard className="p-5">
-              <p className="text-sm text-md-onSurfaceVariant">Total recruiters</p>
-              <p className="mt-2 text-2xl font-medium text-md-primary">{stats.total_recruiters}</p>
-            </MdCard>
-            <MdCard className="p-5">
-              <p className="text-sm text-md-onSurfaceVariant">Total offers</p>
-              <p className="mt-2 text-2xl font-medium text-md-primary">{stats.total_offers}</p>
-            </MdCard>
-          </div>
-        ) : null}
-
-        <MdCard className="mt-6 p-6">
-          <h2 className="text-xl font-medium">Recent admin activity</h2>
-          {activityQuery.isLoading ? <p className="mt-3 text-sm text-md-onSurfaceVariant">Loading activity...</p> : null}
-          {activityQuery.data?.length ? (
-            <div className="mt-4 space-y-3">
-              {activityQuery.data.map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-md-outline/30 px-4 py-3">
-                  <p className="text-sm font-medium">{entry.action}</p>
-                  <p className="mt-1 text-xs text-md-onSurfaceVariant">
-                    {entry.admin_email}
-                    {entry.target_user_email ? ` -> ${entry.target_user_email}` : ""}
-                  </p>
-                </div>
-              ))}
+        <section aria-label="Platform statistics">
+          {loading ? (
+            <StatCardsSkeleton />
+          ) : failed || !stats ? (
+            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
+              <p className="text-sm font-semibold text-danger">Could not load platform statistics.</p>
+              <Button size="sm" variant="outline" onClick={() => statsQ.refetch()} className="mt-2">Retry</Button>
             </div>
-          ) : null}
-        </MdCard>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Companies" value={stats.total_companies} subValue={`${stats.active_companies} active`} icon={FiBriefcase} />
+              <StatCard label="Pending invites" value={stats.pending_company_invitations} subValue={`${stats.expired_company_invitations} expired`} icon={FiMail} />
+              <StatCard label="Candidates" value={stats.total_candidates} subValue={`${stats.total_users} total users`} icon={FiUsers} />
+              <StatCard label="Active offers" value={stats.active_offers} subValue={`${stats.total_offers} total offers`} icon={FiBriefcase} highlight />
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section aria-label="Recent companies">
+            <div className="flex items-baseline justify-between">
+              <h2 className="ct-section-title">Recent companies</h2>
+              <Link href="/admin/companies" className="text-[13px] font-semibold text-primary hover:underline">View all</Link>
+            </div>
+            {companiesQ.isError ? (
+              <p role="alert" className="mt-3 text-sm text-danger">Could not load companies.</p>
+            ) : companies.length === 0 ? (
+              <div className="mt-3">
+                <EmptyState title="No companies yet" description="Invite first organization to create its workspace." primaryAction={{ label: "Invite company", href: "/admin/company-invitations" }} />
+              </div>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {companies.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface px-4 py-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-foreground">{c.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{c.industry || "No industry set"}</span>
+                    </span>
+                    <StatusBadge status={c.status || "active"} size="sm" showDot={false} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section aria-label="Recent invitations">
+            <div className="flex items-baseline justify-between">
+              <h2 className="ct-section-title">Recent invitations</h2>
+              <Link href="/admin/company-invitations" className="text-[13px] font-semibold text-primary hover:underline">Manage</Link>
+            </div>
+            {invitesQ.isError ? (
+              <p role="alert" className="mt-3 text-sm text-danger">Could not load invitations.</p>
+            ) : invites.length === 0 ? (
+              <div className="mt-3">
+                <EmptyState title="No invitations sent" description="Pending and recent company invitations appear here." />
+              </div>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {invites.map((inv) => (
+                  <li key={inv.id} className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface px-4 py-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-foreground">{inv.company_name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{inv.email}</span>
+                    </span>
+                    <StatusBadge status={inv.status} size="sm" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <section aria-label="Platform activity">
+          <h2 className="ct-section-title">Platform activity</h2>
+          {activityQ.isError ? (
+            <p role="alert" className="mt-3 text-sm text-danger">Could not load activity.</p>
+          ) : activity.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">No recent platform events.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {activity.map((log) => (
+                <li key={log.id} className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface px-4 py-2.5">
+                  <span className="truncate text-sm text-foreground-secondary">{log.action.replace(/_/g, " ").toLowerCase()}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{new Date(log.created_at).toLocaleDateString()}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
-    </main>
+    </AdminShell>
   );
 }

@@ -1,10 +1,13 @@
 import secrets
+from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from passlib.context import CryptContext
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -20,9 +23,21 @@ from app.schemas import (
     OAuthCompleteRegistrationRequest,
     OAuthCompleteRegistrationResponse,
     RegisterRequest,
+    ResendVerificationRequest,
     TokenResponse,
     UserMeOut,
     UserOut,
+    VerifyEmailRequest,
+)
+from app.services.email_verification import (
+    attempts_exceeded,
+    cooldown_remaining_seconds,
+    generate_otp,
+    hash_otp,
+    is_expired,
+    otp_expiry,
+    send_otp_email,
+    verify_otp,
 )
 from app.services.oauth_service import (
     OAuthIdentity,
@@ -360,40 +375,162 @@ async def complete_oauth_registration(
     return response
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("10/minute")
 async def register(
     data: RegisterRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> TokenResponse:
+) -> dict:
+    """Start password registration: validate, create/refresh a pending OTP
+    record, email the code. No user account and no token exist until
+    POST /auth/verify-email succeeds."""
     email = data.email.strip().lower()
 
     result = await db.execute(select(User).where(User.email == email))
-    existing_user = result.scalar_one_or_none()
-    if existing_user is not None:
+    if result.scalar_one_or_none() is not None:
         logger.warning("register_failed", email=email, reason="email_in_use")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
     # Enforce candidate-only public registration — prevent mass assignment
     if data.role != "CANDIDATE":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only CANDIDATE registration is public")
-    role = UserRole.CANDIDATE
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    res = await db.execute(
+        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+    )
+    pending = res.mappings().first()
+    if pending is not None:
+        if not is_expired(pending["otp_expires_at"], now):
+            remaining = cooldown_remaining_seconds(pending["last_otp_sent_at"], now)
+            if remaining > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail={"message": "Verification already sent", "retry_after_seconds": remaining},
+                )
+        else:
+            await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+            pending = None
+
+    otp = generate_otp()
+    expires_at = otp_expiry()
+    if pending is None:
+        try:
+            await db.execute(
+                text(
+                    "INSERT INTO pending_registrations (id, email, full_name, password_hash, otp_hash, otp_expires_at, otp_attempts, last_otp_sent_at, created_at)"
+                    " VALUES (:id, :email, :name, :pw, :otp, :exp, 0, :now, :now)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "email": email,
+                    "name": data.full_name.strip(),
+                    "pw": pwd_context.hash(data.password),
+                    "otp": hash_otp(otp),
+                    "exp": expires_at,
+                    "now": now,
+                },
+            )
+            await db.commit()
+        except IntegrityError:
+            # Lost a concurrent race: another request created the row first.
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A verification is already in progress for this email",
+            )
+    else:
+        await db.execute(
+            text(
+                "UPDATE pending_registrations SET otp_hash=:otp, otp_expires_at=:exp,"
+                " otp_attempts=0, last_otp_sent_at=:now WHERE email=:email"
+            ),
+            {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
+        )
+        await db.commit()
+
+    try:
+        send_otp_email(email, data.full_name.strip(), otp, expires_at)
+    except RuntimeError:
+        # Never leave a pending record the user cannot complete.
+        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.commit()
+        logger.warning("register_failed", email=email, reason="otp_email_failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not send verification email. Please try again.",
+        )
+
+    logger.info("register_otp_sent", email=email)
+    return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
+
+
+@router.post("/verify-email", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def verify_email(
+    data: VerifyEmailRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TokenResponse:
+    """Verify the OTP and atomically create the real user account."""
+    from app.models import CandidateProfile
+
+    email = data.email.strip().lower()
+    code = data.otp.strip()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    res = await db.execute(
+        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+    )
+    pending = res.mappings().first()
+    if pending is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+
+    if is_expired(pending["otp_expires_at"], now):
+        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code expired. Please register again.",
+        )
+
+    if attempts_exceeded(pending["otp_attempts"]):
+        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Too many attempts. Please register again.",
+        )
+
+    if not verify_otp(code, pending["otp_hash"]):
+        await db.execute(
+            text("UPDATE pending_registrations SET otp_attempts = otp_attempts + 1 WHERE email=:email"),
+            {"email": email},
+        )
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
+
+    result = await db.execute(select(User).where(User.email == email))
+    if result.scalar_one_or_none() is not None:
+        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
     user = User(
         email=email,
-        password_hash=pwd_context.hash(data.password),
-        role=role,
+        password_hash=pending["password_hash"],
+        role=UserRole.CANDIDATE,
         is_approved=True,
-        full_name=data.full_name,
+        full_name=pending["full_name"],
         company_id=None,
         company_role=None,
     )
     db.add(user)
     await db.flush()
 
-    if user.role == UserRole.CANDIDATE:
-        profile = CandidateProfile(
+    db.add(
+        CandidateProfile(
             user_id=user.id,
             city=None,
             phone=None,
@@ -401,8 +538,8 @@ async def register(
             university=None,
             study_level=None,
         )
-        db.add(profile)
-
+    )
+    await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
     await db.commit()
     await db.refresh(user)
 
@@ -416,6 +553,65 @@ async def register(
         }
     )
     return TokenResponse(token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("5/minute")
+async def resend_verification(
+    data: ResendVerificationRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Issue a fresh OTP, invalidating the previous one. Cooldown enforced."""
+    email = data.email.strip().lower()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    res = await db.execute(
+        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+    )
+    pending = res.mappings().first()
+    if pending is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending verification for this email")
+
+    if is_expired(pending["otp_expires_at"], now):
+        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code expired. Please register again.",
+        )
+
+    remaining = cooldown_remaining_seconds(pending["last_otp_sent_at"], now)
+    if remaining > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"message": "Please wait before requesting a new code", "retry_after_seconds": remaining},
+        )
+
+    otp = generate_otp()
+    expires_at = otp_expiry()
+    await db.execute(
+        text(
+            "UPDATE pending_registrations SET otp_hash=:otp, otp_expires_at=:exp,"
+            " otp_attempts=0, last_otp_sent_at=:now WHERE email=:email"
+        ),
+        {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
+    )
+    await db.flush()
+
+    try:
+        send_otp_email(email, pending["full_name"], otp, expires_at)
+    except RuntimeError:
+        # Roll back to the previous code so the user is not locked out.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not send verification email. Please try again.",
+        )
+    await db.commit()
+
+    logger.info("register_otp_resent", email=email)
+    return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
 
 
 @router.post("/login", response_model=TokenResponse)
