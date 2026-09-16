@@ -1,0 +1,331 @@
+[
+  {
+    "route": "/",
+    "title": "Career canopy",
+    "group": "Public",
+    "concept": "People grow a career network beneath a branching tree.",
+    "file": "svg/01-home.svg"
+  },
+  {
+    "route": "/offers/[category]",
+    "title": "Opportunity horizon",
+    "group": "Public",
+    "concept": "A winding path connects distinct job markers.",
+    "file": "svg/02-offers.svg"
+  },
+  {
+    "route": "/privacy",
+    "title": "Sheltered data",
+    "group": "Public",
+    "concept": "A leaf-bearing shield protects a private profile.",
+    "file": "svg/03-privacy.svg"
+  },
+  {
+    "route": "/terms",
+    "title": "Shared ground",
+    "group": "Public",
+    "concept": "Two hands meet around a common agreement.",
+    "file": "svg/04-terms.svg"
+  },
+  {
+    "route": "/login",
+    "title": "Open threshold",
+    "group": "Access",
+    "concept": "A returning member steps through a welcoming arch.",
+    "file": "svg/05-login.svg"
+  },
+  {
+    "route": "/register",
+    "title": "First steps",
+    "group": "Access",
+    "concept": "A new sprout rises beside a newly created profile.",
+    "file": "svg/06-register.svg"
+  },
+  {
+    "route": "/auth/login",
+    "title": "Returning path",
+    "group": "Access",
+    "concept": "Legacy login entry follows a single clear path home.",
+    "file": "svg/07-auth-login.svg"
+  },
+  {
+    "route": "/auth/register",
+    "title": "New branch",
+    "group": "Access",
+    "concept": "Legacy registration entry becomes a fresh branch.",
+    "file": "svg/08-auth-register.svg"
+  },
+  {
+    "route": "/auth/sso/callback",
+    "title": "Joined identity",
+    "group": "Access",
+    "concept": "Two account paths resolve into one secure identity.",
+    "file": "svg/09-sso-callback.svg"
+  },
+  {
+    "route": "/choose-role",
+    "title": "Forked trails",
+    "group": "Access",
+    "concept": "Candidate and recruiter paths branch from one starting point.",
+    "file": "svg/10-choose-role.svg"
+  },
+  {
+    "route": "/pending-approval",
+    "title": "Growing bud",
+    "group": "Access",
+    "concept": "A protected bud holds promise while approval is pending.",
+    "file": "svg/11-pending-approval.svg"
+  },
+  {
+    "route": "/invite/company",
+    "title": "Company seed",
+    "group": "Access",
+    "concept": "A company invitation plants the first shared workspace.",
+    "file": "svg/12-invite-company.svg"
+  },
+  {
+    "route": "/invite/employee",
+    "title": "Joining branch",
+    "group": "Access",
+    "concept": "An invited teammate joins the organization's tree.",
+    "file": "svg/13-invite-employee.svg"
+  },
+  {
+    "route": "/accept-invitation",
+    "title": "Paths connected",
+    "group": "Access",
+    "concept": "An accepted invitation closes an open connection.",
+    "file": "svg/14-accept-invitation.svg"
+  },
+  {
+    "route": "/dashboard",
+    "title": "Career compass",
+    "group": "Candidate",
+    "concept": "A candidate orients toward the next useful step.",
+    "file": "svg/15-dashboard.svg"
+  },
+  {
+    "route": "/profile",
+    "title": "Living portrait",
+    "group": "Candidate",
+    "concept": "A professional identity grows around its person.",
+    "file": "svg/16-profile.svg"
+  },
+  {
+    "route": "/dashboard/profile",
+    "title": "Profile layers",
+    "group": "Candidate",
+    "concept": "Skills, experience, and story form a layered portrait.",
+    "file": "svg/17-dashboard-profile.svg"
+  },
+  {
+    "route": "/dashboard/recommendations",
+    "title": "Matching constellation",
+    "group": "Candidate",
+    "concept": "Profile and jobs connect through a thoughtful match graph.",
+    "file": "svg/18-recommendations.svg"
+  },
+  {
+    "route": "/dashboard/applications",
+    "title": "Journey ribbon",
+    "group": "Candidate",
+    "concept": "An application progresses along a gentle career trajectory.",
+    "file": "svg/19-applications.svg"
+  },
+  {
+    "route": "/chat",
+    "title": "Conversation grove",
+    "group": "Candidate",
+    "concept": "Many useful conversations branch from one inbox.",
+    "file": "svg/20-chat.svg"
+  },
+  {
+    "route": "/chat/[id]",
+    "title": "A human exchange",
+    "group": "Candidate",
+    "concept": "Two people face one clear conversation thread.",
+    "file": "svg/21-chat-thread.svg"
+  },
+  {
+    "route": "/chat/recruitment/[applicationId]",
+    "title": "Hiring dialogue",
+    "group": "Candidate",
+    "concept": "Candidate and recruiter exchange a role-centered message.",
+    "file": "svg/22-recruitment-chat.svg"
+  },
+  {
+    "route": "/recruiter",
+    "title": "Talent orchard",
+    "group": "Recruiter",
+    "concept": "A recruiter cultivates a varied field of opportunities.",
+    "file": "svg/23-recruiter.svg"
+  },
+  {
+    "route": "/recruiter/offers/new",
+    "title": "Planting a role",
+    "group": "Recruiter",
+    "concept": "A new job posting begins like a planted seed.",
+    "file": "svg/24-recruiter-new-offer.svg"
+  },
+  {
+    "route": "/companies",
+    "title": "Company skyline",
+    "group": "Networking",
+    "concept": "Distinct workplaces form one approachable landscape.",
+    "file": "svg/25-companies.svg"
+  },
+  {
+    "route": "/requests",
+    "title": "Connection handoff",
+    "group": "Networking",
+    "concept": "A request travels respectfully between professionals.",
+    "file": "svg/26-requests.svg"
+  },
+  {
+    "route": "/company",
+    "title": "Enterprise canopy",
+    "group": "Company",
+    "concept": "A strong team supports the wider talent ecosystem.",
+    "file": "svg/27-company.svg"
+  },
+  {
+    "route": "/company/jobs",
+    "title": "Opportunity beds",
+    "group": "Company",
+    "concept": "Several roles grow from one coherent hiring plan.",
+    "file": "svg/28-company-jobs.svg"
+  },
+  {
+    "route": "/company/candidates",
+    "title": "People mosaic",
+    "group": "Company",
+    "concept": "Individual profiles form a diverse talent picture.",
+    "file": "svg/29-company-candidates.svg"
+  },
+  {
+    "route": "/company/assessments",
+    "title": "Skill rings",
+    "group": "Company",
+    "concept": "Practical skills are measured with care and clarity.",
+    "file": "svg/30-company-assessments.svg"
+  },
+  {
+    "route": "/company/messages",
+    "title": "Conversation bridge",
+    "group": "Company",
+    "concept": "Messages bridge candidates and hiring teams.",
+    "file": "svg/31-company-messages.svg"
+  },
+  {
+    "route": "/company/invitations",
+    "title": "Opening circle",
+    "group": "Company",
+    "concept": "Each invitation adds another person to the team.",
+    "file": "svg/32-company-invitations.svg"
+  },
+  {
+    "route": "/company/team",
+    "title": "Collective canopy",
+    "group": "Company",
+    "concept": "People share responsibility beneath a common canopy.",
+    "file": "svg/33-company-team.svg"
+  },
+  {
+    "route": "/company/analytics",
+    "title": "Data terrain",
+    "group": "Company",
+    "concept": "Hiring outcomes rise from quiet topographic curves.",
+    "file": "svg/34-company-analytics.svg"
+  },
+  {
+    "route": "/company/settings",
+    "title": "Control garden",
+    "group": "Company",
+    "concept": "Organization settings are stable dials within a living system.",
+    "file": "svg/35-company-settings.svg"
+  },
+  {
+    "route": "/admin",
+    "title": "Systems map",
+    "group": "Admin",
+    "concept": "Platform areas connect through a readable oversight map.",
+    "file": "svg/36-admin.svg"
+  },
+  {
+    "route": "/admin/login",
+    "title": "Secure portal",
+    "group": "Admin",
+    "concept": "An uncluttered entrance protects platform operations.",
+    "file": "svg/37-admin-login.svg"
+  },
+  {
+    "route": "/admin/users",
+    "title": "Community lattice",
+    "group": "Admin",
+    "concept": "Many individual accounts form a legible community.",
+    "file": "svg/38-admin-users.svg"
+  },
+  {
+    "route": "/admin/offers",
+    "title": "Role archive",
+    "group": "Admin",
+    "concept": "Published opportunities are organized as clear records.",
+    "file": "svg/39-admin-offers.svg"
+  },
+  {
+    "route": "/admin/recruiters",
+    "title": "Review lens",
+    "group": "Admin",
+    "concept": "A fair review focuses on the person and their work.",
+    "file": "svg/40-admin-recruiters.svg"
+  },
+  {
+    "route": "/admin/activity",
+    "title": "Audit current",
+    "group": "Admin",
+    "concept": "Recorded events flow along a visible timeline.",
+    "file": "svg/41-admin-activity.svg"
+  },
+  {
+    "route": "/admin/companies",
+    "title": "Organization landscape",
+    "group": "Admin",
+    "concept": "Distinct companies sit in one accountable platform view.",
+    "file": "svg/42-admin-companies.svg"
+  },
+  {
+    "route": "/admin/company-invitations",
+    "title": "Invitations in flight",
+    "group": "Admin",
+    "concept": "Company invitations move toward new workspaces.",
+    "file": "svg/43-admin-company-invitations.svg"
+  },
+  {
+    "route": "/admin/settings",
+    "title": "Steady controls",
+    "group": "Admin",
+    "concept": "Administrator controls remain calm and intentional.",
+    "file": "svg/44-admin-settings.svg"
+  },
+  {
+    "route": "/company/invite/accept",
+    "title": "Owner threshold",
+    "group": "Company",
+    "concept": "A new owner enters a protected company workspace.",
+    "file": "svg/45-company-invite-accept.svg"
+  },
+  {
+    "route": "/company/onboarding",
+    "title": "Workspace roots",
+    "group": "Company",
+    "concept": "Company details establish roots for a growing team.",
+    "file": "svg/46-company-onboarding.svg"
+  },
+  {
+    "route": "/verify-email",
+    "title": "Proof of arrival",
+    "group": "Access",
+    "concept": "A secure email check opens the next career step.",
+    "file": "svg/47-verify-email.svg"
+  }
+]

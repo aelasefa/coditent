@@ -15,6 +15,7 @@ interface SheetProps {
   footer?: React.ReactNode;
   side?: "right" | "left" | "bottom";
   size?: "sm" | "md" | "lg";
+  panelClassName?: string;
 }
 
 const widths: Record<string, string> = {
@@ -23,7 +24,7 @@ const widths: Record<string, string> = {
   lg: "max-w-2xl",
 };
 
-export function Sheet({ open, onClose, title, description, children, footer, side = "right", size = "md" }: SheetProps) {
+export function Sheet({ open, onClose, title, description, children, footer, side = "right", size = "md", panelClassName }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
   // Latest onClose without re-running setup on parent re-renders,
@@ -38,7 +39,25 @@ export function Sheet({ open, onClose, title, description, children, footer, sid
     document.body.style.overflow = "hidden";
     const t = window.setTimeout(() => panelRef.current?.focus(), 0);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Escape") {
+        onCloseRef.current();
+      } else if (e.key === "Tab" && panelRef.current) {
+        const focusable = Array.from(
+          panelRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (!focusable.length) {
+          e.preventDefault();
+          panelRef.current.focus();
+        } else if (e.shiftKey && document.activeElement === focusable[0]) {
+          e.preventDefault();
+          focusable[focusable.length - 1].focus();
+        } else if (!e.shiftKey && document.activeElement === focusable[focusable.length - 1]) {
+          e.preventDefault();
+          focusable[0].focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -63,6 +82,7 @@ export function Sheet({ open, onClose, title, description, children, footer, sid
         style={side === "bottom" ? { paddingBottom: "env(safe-area-inset-bottom)" } : undefined}
         className={cn(
           "fixed flex flex-col border bg-surface text-foreground shadow-lg focus:outline-none",
+          panelClassName,
           side === "right" && `inset-y-0 right-0 w-screen ${widths[size]} max-w-full border-l border-border`,
           side === "left" && `inset-y-0 left-0 w-screen ${widths[size]} max-w-full border-r border-border`,
           side === "bottom" && "inset-x-0 bottom-0 max-h-[90vh] rounded-t-2xl border-t border-border"
