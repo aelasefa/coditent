@@ -7,7 +7,7 @@
 
 - name: Deploy Coditent Application
   hosts: all:!local
-  become: yes
+  become: no
   gather_facts: yes
 
   roles:
