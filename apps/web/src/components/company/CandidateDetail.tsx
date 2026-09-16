@@ -1,13 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { AiScore } from "./CandidateCard";
 import { candidateName, jobTitleFor } from "./hiring";
+import { retryApplicationScreening } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
+
+function parseScreeningReport(report?: string | null): { summary: string; strengths: string[]; gaps: string[] } | null {
+  if (!report) return null;
+  try {
+    const parsed = JSON.parse(report) as { summary?: unknown; strengths?: unknown; gaps?: unknown };
+    if (typeof parsed.summary !== "string") return null;
+    return {
+      summary: parsed.summary,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
+      gaps: Array.isArray(parsed.gaps) ? parsed.gaps.map(String) : [],
+    };
+  } catch {
+    return { summary: report, strengths: [], gaps: [] };
+  }
+}
 
 function dateTime(iso?: string | null): string {
   if (!iso) return "Unknown date";
@@ -36,6 +54,17 @@ export function CandidateDetail({
   onReject: () => void;
 }) {
   const [rejectConfirm, setRejectConfirm] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const screening = parseScreeningReport(app.ai_report);
+  const screenMut = useMutation({
+    mutationFn: () => retryApplicationScreening(app.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      toast("Screening restarted", { variant: "success" });
+    },
+    onError: () => toast("Could not restart screening", { variant: "error" }),
+  });
   const c = app.candidate;
   const skills = (c as { skills?: string | null } | undefined)?.skills
     ? String((c as { skills?: string }).skills)
@@ -138,7 +167,39 @@ export function CandidateDetail({
             {
               id: "assessments",
               label: "Assessments",
-              content: assessment ? (
+              content: (
+                <div className="space-y-4">
+                  <div className="mb-4 rounded-xl border border-border-subtle p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-foreground">AI screening</p>
+                    <AiScore app={app} />
+                  </div>
+                  {app.ai_status === "failed" ? (
+                    <div className="mt-2">
+                      <p className="text-[13px] text-muted-foreground">Screening did not complete. Retry runs it again.</p>
+                      {canMoveStage ? (
+                        <Button size="sm" variant="outline" loading={screenMut.isPending} onClick={() => screenMut.mutate()} className="mt-2">
+                          Retry screening
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : screening ? (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-[13px] leading-relaxed text-foreground-secondary">{screening.summary}</p>
+                      {screening.strengths.length > 0 ? (
+                        <p className="text-[13px] text-foreground-secondary"><span className="font-semibold text-foreground">Strengths: </span>{screening.strengths.join("; ")}</p>
+                      ) : null}
+                      {screening.gaps.length > 0 ? (
+                        <p className="text-[13px] text-foreground-secondary"><span className="font-semibold text-foreground">Gaps: </span>{screening.gaps.join("; ")}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[13px] text-muted-foreground">
+                      {app.ai_status === "processing" ? "Screening is running." : "Screening has not run yet."}
+                    </p>
+                  )}
+                </div>
+                  {assessment ? (
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Status</span>
@@ -167,6 +228,8 @@ export function CandidateDetail({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No practical assessment registered for this application.</p>
+              )}
+                </div>
               ),
             },
             {

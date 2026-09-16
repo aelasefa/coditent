@@ -22,6 +22,13 @@ export function AiScore({ app }: { app: ApplicationItem }) {
       </span>
     );
   }
+  if (state === "failed") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-danger-background px-2 py-0.5 text-[11px] font-medium text-danger">
+        Screening failed
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
       <span aria-hidden className="h-1 w-1 animate-pulse rounded-full bg-current" />

@@ -276,6 +276,7 @@ class Application(Base):
     cover_letter: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ai_report: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=datetime.utcnow, nullable=True)
 
