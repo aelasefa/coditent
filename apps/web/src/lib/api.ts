@@ -496,6 +496,13 @@ export async function updateApplicationStatus(
   return data;
 }
 
+export async function retryApplicationScreening(
+  id: string
+): Promise<{ id: string; ai_status: string }> {
+  const { data } = await api.post(`/applications/${id}/screen`);
+  return data;
+}
+
 export async function getAssessment(id: string): Promise<import("@/lib/types").AssessmentItem> {
   const { data } = await api.get(`/assessments/${id}`);
   return data;

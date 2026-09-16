@@ -184,6 +184,7 @@ export interface ApplicationItem {
   cover_letter?: string | null;
   ai_score?: number | null;
   ai_report?: string | null;
+  ai_status?: "pending" | "processing" | "completed" | "failed" | string;
   created_at?: string;
   updated_at?: string | null;
   candidate?: User;
