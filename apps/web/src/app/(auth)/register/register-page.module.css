@@ -1,4 +1,37 @@
+.page {
+  position: relative;
+  width: 100%;
+  min-height: 100svh;
+  height: auto;
+  overflow-x: clip;
+  overflow-y: auto;
+}
+
+.backgroundVideo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100vw;
+  height: 100svh;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+}
+
+.signupContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-height: 100svh;
+  height: auto;
+  flex-direction: column;
+}
+
 .shell {
+  flex: 1 0 auto;
+  min-height: auto;
   align-items: start;
   padding-top: clamp(3rem, 6vw, 5.5rem);
 }
@@ -100,6 +133,40 @@
 
 .artwork { object-position: center 52%; }
 
+@media (max-height: 780px) and (min-width: 761px) {
+  .shell {
+    align-items: flex-start;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .form { gap: 0.35rem; }
+  .form :global(.my-5) { margin-block: 0.65rem; }
+
+  .roleFieldset legend { margin-bottom: 0.25rem; }
+  .roleOptions { gap: 0.4rem; }
+
+  .roleContent {
+    min-height: 60px;
+    padding: 0.45rem 0.7rem;
+  }
+
+  .roleContent small {
+    margin-top: 0.15rem;
+    line-height: 1.25;
+  }
+
+  .roleHelper {
+    margin-top: 0.2rem;
+    line-height: 1.3;
+  }
+
+  .form > p:last-child {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
 @media (max-width: 1000px) {
   .fieldGrid { grid-template-columns: 1fr; }
 }
@@ -114,4 +181,8 @@
   .fieldGrid, .roleOptions { grid-template-columns: 1fr; }
   .roleContent { min-height: 0; }
   .artwork { object-position: center 64%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backgroundVideo { display: none; }
 }

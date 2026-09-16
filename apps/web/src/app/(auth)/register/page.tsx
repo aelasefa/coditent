@@ -63,7 +63,24 @@ function RegisterInner() {
   const selectedRole = form.watch("role");
 
   return (
-    <main className={authStyles.page}>
+    <main className={`${authStyles.page} ${styles.page}`}>
+      <video
+        className={styles.backgroundVideo}
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        poster="/images/auth/sign-in-background.png"
+        aria-hidden="true"
+        tabIndex={-1}
+      >
+        <source
+          src="/images/auth/Create-a-subtle-polished-3-second-silen.mp4"
+          type="video/mp4"
+        />
+      </video>
+
+      <div className={styles.signupContent}>
       <a href="#auth-form" className={authStyles.skipLink}>Skip to registration form</a>
       <header className={authStyles.header}>
         <Link href="/" aria-label="Coditent home">
@@ -176,23 +193,7 @@ function RegisterInner() {
             </div>
           </div>
         </section>
-
-        <aside className={`${authStyles.artColumn} ${styles.artColumn}`} aria-label="A new professional path begins">
-          <div className={authStyles.artFrame}>
-            <Image
-              src="/images/auth/sign-up-journey.png"
-              alt="Professionals beginning a path beside a branching green tree"
-              fill
-              priority
-              sizes="(max-width: 760px) 88vw, (max-width: 1000px) 42vw, 45vw"
-              className={`${authStyles.artwork} ${styles.artwork}`}
-            />
-          </div>
-          <div className={authStyles.artCaption} aria-hidden="true">
-            <span>CODITENT / FIRST STEPS</span>
-            <span>Your path begins</span>
-          </div>
-        </aside>
+      </div>
       </div>
     </main>
   );
