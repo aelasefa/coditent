@@ -1,0 +1,117 @@
+.shell {
+  align-items: start;
+  padding-top: clamp(3rem, 6vw, 5.5rem);
+}
+
+.formInner { width: min(100%, 560px); }
+.form { gap: 0.95rem; }
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.roleFieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.roleFieldset legend {
+  margin-bottom: 0.45rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.roleOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.roleOption,
+.roleOptionActive {
+  position: relative;
+  display: block;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.roleOption:hover { border-color: var(--border-strong); }
+.roleOptionActive { border-color: #8db09a; background: var(--surface-secondary); box-shadow: inset 0 0 0 1px rgb(25 77 56 / 8%); }
+
+.roleOption input,
+.roleOptionActive input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.roleContent {
+  display: block;
+  min-height: 76px;
+  padding: 0.8rem 0.85rem;
+  border-radius: 6px;
+}
+
+.roleOption input:focus-visible + .roleContent,
+.roleOptionActive input:focus-visible + .roleContent {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.roleContent strong {
+  display: block;
+  color: var(--primary);
+  font-size: 0.85rem;
+}
+
+.roleContent small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.roleHelper,
+.fieldError {
+  margin: 0.4rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.roleHelper { color: var(--muted); }
+.fieldError { color: #a33b25; font-weight: 600; }
+
+.artColumn {
+  position: sticky;
+  top: 2rem;
+}
+
+.artwork { object-position: center 52%; }
+
+@media (max-width: 1000px) {
+  .fieldGrid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .shell { padding-top: 2.4rem; }
+  .artColumn { position: relative; top: auto; }
+  .artwork { object-position: center 66%; }
+}
+
+@media (max-width: 500px) {
+  .fieldGrid, .roleOptions { grid-template-columns: 1fr; }
+  .roleContent { min-height: 0; }
+  .artwork { object-position: center 64%; }
+}
