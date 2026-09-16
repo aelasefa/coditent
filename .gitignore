@@ -99,6 +99,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 lerna-debug.log*
+.gitignore
 
 # ==========================================
 # 4. Databases & Storage Artifacts
@@ -116,6 +117,7 @@ db_data/
 # ==========================================
 # 5. OS & IDE Specific Files
 # ==========================================
+docs/frontend-revision-guide.md
 .DS_Store
 .DS_Store?
 ._*
@@ -148,4 +150,3 @@ temp/
 ansible/.vault-password*
 ansible/**/vault.yml
 !ansible/vault.example.yml
-
