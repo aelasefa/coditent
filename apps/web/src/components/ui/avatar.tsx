@@ -23,8 +23,12 @@ function initials(name: string): string {
 }
 
 export function Avatar({ src, name, size = "md", className }: AvatarProps) {
+  // Single accessible name on the wrapper: avoids announcing or copying
+  // the name twice next to an adjacent visible name label.
   return (
     <span
+      role="img"
+      aria-label={name}
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-secondary font-semibold text-foreground-secondary",
         sizes[size],
@@ -32,11 +36,10 @@ export function Avatar({ src, name, size = "md", className }: AvatarProps) {
       )}
     >
       {src ? (
-        <Image src={src} alt={name} width={64} height={64} className="h-full w-full object-cover" />
+        <Image src={src} alt="" width={64} height={64} className="h-full w-full object-cover" />
       ) : (
         <span aria-hidden>{initials(name)}</span>
       )}
-      <span className="sr-only">{name}</span>
     </span>
   );
 }

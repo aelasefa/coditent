@@ -259,16 +259,28 @@ export async function getRecommendations(): Promise<Recommendation[]> {
   return data.recommendations;
 }
 
+export interface RecommendationJob {
+  job_id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  cached?: boolean;
+  error?: string;
+}
+
 export async function generateRecommendations(payload: {
   field: string;
   region: string;
   type: "JOB" | "INTERNSHIP";
-}): Promise<Recommendation[]> {
-  const { data } = await api.post<{ recommendations: Recommendation[] }>(
+}): Promise<RecommendationJob> {
+  const { data } = await api.post<RecommendationJob>(
     "/recommendations/generate",
     payload
   );
-  return data.recommendations;
+  return data;
+}
+
+export async function getRecommendationJob(jobId: string): Promise<RecommendationJob> {
+  const { data } = await api.get<RecommendationJob>(`/recommendations/jobs/${jobId}`);
+  return data;
 }
 
 export async function getAdminStats(): Promise<AdminStats> {

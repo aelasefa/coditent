@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { api, generateRecommendations, getProfile, getRecommendations } from "@/lib/api";
+import { api, generateRecommendations, getProfile, getRecommendationJob, getRecommendations } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { PageContainer, PageHeader } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Sheet } from "@/components/ui/sheet";
@@ -45,9 +46,51 @@ function RecommendationsContent() {
   }, []);
 
   const recsQuery = useQuery({ queryKey: ["recommendations"], queryFn: getRecommendations });
+  const { toast } = useToast();
+  const [jobFailed, setJobFailed] = useState(false);
+  const [pollingJob, setPollingJob] = useState(false);
   const generateMutation = useMutation({
     mutationFn: generateRecommendations,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recommendations"] }),
+    onSuccess: async (job) => {
+      // Backend scores asynchronously; follow the job instead of assuming instant results.
+      if (job.status === "completed") {
+        await queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+        toast("Recommendations refreshed", { variant: "success" });
+        return;
+      }
+      setPollingJob(true);
+      const deadline = Date.now() + 90000;
+      try {
+        for (;;) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const state = await getRecommendationJob(job.job_id);
+          if (state.status === "completed") {
+            await queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+            toast("Recommendations refreshed", { variant: "success" });
+            return;
+          }
+          if (state.status === "failed") {
+            setJobFailed(true);
+            toast("Match scoring failed", { description: "The scoring job did not complete. Retry to run it again.", variant: "error" });
+            return;
+          }
+          if (Date.now() > deadline) {
+            setJobFailed(true);
+            toast("Match scoring timed out", { description: "Results are not ready yet. Retry to run scoring again.", variant: "error" });
+            return;
+          }
+        }
+      } catch {
+        setJobFailed(true);
+        toast("Could not follow scoring job", { description: "Check connection, then retry.", variant: "error" });
+      } finally {
+        setPollingJob(false);
+      }
+    },
+    onError: () => {
+      setJobFailed(true);
+      toast("Could not start scoring", { description: "Check connection, then retry.", variant: "error" });
+    },
   });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: getProfile });
   const appsQuery = useQuery({
@@ -95,6 +138,7 @@ function RecommendationsContent() {
   const selectedApplied = selected ? appliedOfferIds.has(selected.offer.id) : false;
 
   function handleGenerate() {
+    setJobFailed(false);
     const profile = (profileQuery.data ?? {}) as { field_of_study?: string | null; city?: string | null };
     generateMutation.mutate({
       field: filters.field || profile.field_of_study || "Informatique",
@@ -103,7 +147,7 @@ function RecommendationsContent() {
     });
   }
 
-  const loading = recsQuery.isLoading || generateMutation.isPending;
+  const loading = recsQuery.isLoading || generateMutation.isPending || pollingJob;
   const error = recsQuery.isError;
 
   return (
@@ -123,6 +167,14 @@ function RecommendationsContent() {
           <p className="text-[13px] text-muted-foreground" role="status">
             {loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}
           </p>
+          {jobFailed ? (
+            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
+              <p className="text-sm font-semibold text-danger">Match scoring did not complete.</p>
+              <button type="button" onClick={handleGenerate} className="mt-2 text-sm font-semibold text-danger underline">
+                Retry scoring
+              </button>
+            </div>
+          ) : null}
           {error ? (
             <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
               <p className="text-sm font-semibold text-danger">Could not load opportunities.</p>
