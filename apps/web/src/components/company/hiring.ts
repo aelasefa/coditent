@@ -52,9 +52,13 @@ export function jobTitleFor(app: ApplicationItem, offersById?: Map<string, strin
   return "Open role";
 }
 
-export type AiState = "scored" | "pending" | "unavailable";
+export type AiState = "scored" | "pending" | "processing" | "failed" | "unavailable";
 
 export function aiState(app: ApplicationItem): AiState {
+  const status = (app.ai_status || "").toLowerCase();
+  if (status === "failed") return "failed";
+  if (status === "processing") return "processing";
   if (typeof app.ai_score === "number" && app.ai_score > 0) return "scored";
+  if (status === "completed") return "unavailable";
   return "pending";
 }

@@ -77,6 +77,45 @@ def _send_employee_invite_email_safe(email: str, company_name: str, role: str, t
             pass
 
 # ---------- Platform Admin -> Company ----------
+COMPANY_INVITE_EXPIRY_DAYS = 7
+
+
+def _company_invite_email(company_name: str, token: str, expires_at: datetime) -> tuple[str, str]:
+    """Return (subject, html) for company invite — CODITENT branded."""
+    frontend = settings.frontend_url.rstrip("/")
+    invite_url = f"{frontend}/company/invite/accept?token={token}"
+    subject = "You're invited to join CODITENT"
+    exp = expires_at.strftime('%b %d, %Y')
+    html = f"""
+    <div style="font-family:Inter,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181B;">
+      <div style="border:1px solid #E4E4E7;border-radius:16px;overflow:hidden;">
+        <div style="background:#18181B;color:#fff;padding:20px 24px;">
+          <div style="font-weight:800;letter-spacing:-0.02em;font-size:18px;">CODITENT</div>
+          <div style="font-size:12px;opacity:0.7;letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;">Talent Workflow Platform</div>
+        </div>
+        <div style="padding:24px;">
+          <h2 style="margin:0 0 8px;font-size:18px;">You&apos;ve been invited to join CODITENT</h2>
+          <p style="margin:0 0 12px;color:#52525B;font-size:14px;line-height:1.6;">
+            A CODITENT administrator invited <strong>{company_name}</strong> to create a company workspace.
+            Create the first company account — you will become the company OWNER.
+          </p>
+          <a href="{invite_url}" style="display:inline-block;background:#18181B;color:#fff;text-decoration:none;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;margin:8px 0;">Create company account</a>
+          <p style="font-size:12px;color:#71717A;margin:8px 0 0;">Or paste this link: <a href="{invite_url}" style="color:#18181B;word-break:break-all;">{invite_url}</a></p>
+          <p style="font-size:12px;color:#71717A;margin:16px 0 0;">This invitation expires on {exp} and is single-use. If you were not expecting this, you can safely ignore this email.</p>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#A1A1AA;text-align:center;margin-top:12px;">CODITENT · Talent Workflow Platform</p>
+    </div>
+    """
+    return subject, html
+
+
+def _send_company_invite_email(email: str, company_name: str, token: str, expires_at: datetime) -> None:
+    from app.services.email import send_email
+    subject, html = _company_invite_email(company_name, token, expires_at)
+    send_email(email, subject, html)
+
+
 @router.post("/company/invite", response_model=dict)
 async def invite_company(
     data: dict,
@@ -85,38 +124,70 @@ async def invite_company(
 ):
     email = data.get("email", "").strip().lower()
     company_name = data.get("company_name", "").strip()
+    contact_name = str(data.get("contact_name", "") or "").strip() or None
+    contact_role = str(data.get("contact_role", "") or "").strip() or None
     if not email or not company_name:
         raise HTTPException(status_code=400, detail="email and company_name required")
     if not _is_valid_email(email):
         raise HTTPException(status_code=400, detail="Invalid email")
+    # Prevent accidental duplicates: one live pending invite per email
+    dup = await db.execute(
+        text("SELECT id, expires_at FROM company_invitations WHERE email=:email AND status='pending'"),
+        {"email": email},
+    )
+    dup_row = dup.mappings().first()
+    if dup_row and dup_row["expires_at"] >= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Active invitation already exists for this email")
+    if dup_row:
+        await db.execute(text("UPDATE company_invitations SET status='expired' WHERE id=:id"), {"id": dup_row["id"]})
     token = secrets.token_urlsafe(32)
     token_hash = _hash(token)
-    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=72)
+    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=COMPANY_INVITE_EXPIRY_DAYS)
+    inv_id = str(uuid4())
     await db.execute(
-        text("INSERT INTO company_invitations (id, email, company_name, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :hash, 'pending', :by, :exp, :now)"),
-        {"id": str(uuid4()), "email": email, "name": company_name, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
+        text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
+        {"id": inv_id, "email": email, "name": company_name, "cname": contact_name, "crole": contact_role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
     )
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_CREATED", actor=current_user, resource_type="company_invitation", details=email)
-    # Email (best-effort)
+    invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
+    email_sent = True
+    email_error: str | None = None
     try:
-        from app.services.email import send_email
-        frontend = settings.frontend_url.rstrip("/")
-        url = f"{frontend}/invite/company?token={token}"
-        html = f"<p>You are invited to create company <strong>{company_name}</strong> on CODITENT. <a href='{url}'>Accept invitation</a> — expires in 72h. Link: {url}</p>"
-        send_email(email, f"You've been invited to create {company_name} on CODITENT", html)
-    except Exception:
-        pass
-    return {"detail": "invited"}
+        _send_company_invite_email(email, company_name, token, expires_at)
+    except Exception as exc:
+        email_sent = False
+        email_error = str(exc)[:300]
+        try:
+            from app.observability import get_logger
+            get_logger("invitations").warning("company_invite_email_failed", email=email, error=email_error)
+        except Exception:
+            pass
+    out: dict = {"detail": "invited", "invitation_id": inv_id, "invitation_url": invite_url, "email_sent": email_sent}
+    if email_error:
+        out["email_error"] = email_error
+    return out
 
 @router.get("/company/invitations", response_model=dict)
 async def list_company_invitations(
     current_user: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    res = await db.execute(text("SELECT id, email, company_name, status, expires_at, created_at FROM company_invitations ORDER BY created_at DESC"))
+    res = await db.execute(text("SELECT ci.id, ci.email, ci.company_name, ci.contact_name, ci.contact_role, ci.status, ci.expires_at, ci.created_at, ci.accepted_at, ci.revoked_at, ci.company_id, u.email AS invited_by_email FROM company_invitations ci LEFT JOIN users u ON u.id = ci.invited_by ORDER BY ci.created_at DESC"))
     rows = [dict(r) for r in res.mappings().all()]
     return {"invitations": rows}
+
+@router.get("/company/invitations/{invitation_id}", response_model=dict)
+async def get_company_invitation(
+    invitation_id: UUID,
+    current_user: Annotated[User, Depends(require_platform_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    res = await db.execute(text("SELECT ci.id, ci.email, ci.company_name, ci.contact_name, ci.contact_role, ci.status, ci.expires_at, ci.created_at, ci.accepted_at, ci.revoked_at, ci.company_id, u.email AS invited_by_email FROM company_invitations ci LEFT JOIN users u ON u.id = ci.invited_by WHERE ci.id=:id"), {"id": str(invitation_id)})
+    row = res.mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    return {"invitation": dict(row)}
 
 @router.post("/company/invitations/{invitation_id}/revoke", response_model=dict)
 async def revoke_company_invitation(
@@ -130,10 +201,68 @@ async def revoke_company_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
     if row["status"] != "pending":
         raise HTTPException(status_code=400, detail="Only pending invitations can be revoked")
-    await db.execute(text("UPDATE company_invitations SET status='revoked' WHERE id=:id"), {"id": str(invitation_id)})
+    await db.execute(text("UPDATE company_invitations SET status='revoked', revoked_at=:now WHERE id=:id"), {"now": datetime.utcnow(), "id": str(invitation_id)})
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_REVOKED", actor=current_user, resource_type="company_invitation", resource_id=invitation_id)
     return {"detail": "revoked"}
+
+@router.post("/company/invitations/{invitation_id}/resend", response_model=dict)
+async def resend_company_invitation(
+    invitation_id: UUID,
+    current_user: Annotated[User, Depends(require_platform_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    res = await db.execute(text("SELECT * FROM company_invitations WHERE id=:id FOR UPDATE"), {"id": str(invitation_id)})
+    row = res.mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    if row["status"] not in ("pending", "expired"):
+        raise HTTPException(status_code=400, detail="Only pending or expired invitations can be resent")
+    await db.execute(text("UPDATE company_invitations SET status='revoked', revoked_at=:now WHERE id=:id"), {"now": datetime.utcnow(), "id": str(invitation_id)})
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=COMPANY_INVITE_EXPIRY_DAYS)
+    new_id = str(uuid4())
+    await db.execute(
+        text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
+        {"id": new_id, "email": row["email"], "name": row["company_name"], "cname": row["contact_name"], "crole": row["contact_role"], "hash": _hash(token), "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
+    )
+    await db.commit()
+    await log_audit(db, action="COMPANY_INVITATION_RESENT", actor=current_user, resource_type="company_invitation", resource_id=UUID(new_id))
+    invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
+    email_sent = True
+    try:
+        _send_company_invite_email(row["email"], row["company_name"], token, expires_at)
+    except Exception as exc:
+        email_sent = False
+        try:
+            from app.observability import get_logger
+            get_logger("invitations").warning("company_invite_email_failed", email=row["email"], error=str(exc)[:200])
+        except Exception:
+            pass
+    return {"detail": "resent", "invitation_id": new_id, "invitation_url": invite_url, "email_sent": email_sent}
+
+@router.get("/company-invitations/validate", response_model=dict)
+async def validate_company_invitation(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    token: str = Query(..., min_length=10),
+):
+    """Public validation for the accept page. Never exposes token hash or user ids."""
+    res = await db.execute(text("SELECT email, company_name, contact_name, status, expires_at FROM company_invitations WHERE token_hash=:h"), {"h": _hash(token)})
+    row = res.mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid invitation")
+    status_val = row["status"]
+    if status_val == "pending" and row["expires_at"] < datetime.utcnow():
+        await db.execute(text("UPDATE company_invitations SET status='expired' WHERE token_hash=:h"), {"h": _hash(token)})
+        await db.commit()
+        status_val = "expired"
+    return {
+        "email": row["email"],
+        "company_name": row["company_name"],
+        "contact_name": row["contact_name"],
+        "status": status_val,
+        "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
+    }
 
 @router.post("/company/accept", response_model=dict)
 async def accept_company_invite(
@@ -172,6 +301,7 @@ async def accept_company_invite(
     await db.commit()
     await log_audit(db, action="COMPANY_CREATED", actor=user, company_id=company.id, resource_type="company", resource_id=company.id)
     return {"detail": "company created", "company_id": str(company.id)}
+
 
 # ---------- Company OWNER/ADMIN -> Employee ----------
 @router.post("/employee/invite", response_model=dict)
@@ -235,8 +365,8 @@ async def list_employee_invitations(
 
 @router.get("/employee/validate", response_model=dict)
 async def validate_employee_invitation(
+    db: Annotated[AsyncSession, Depends(get_db)],
     token: str = Query(..., min_length=10),
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """Public endpoint to display invitation details without exposing token hash — for acceptance page."""
     token_hash = _hash(token)

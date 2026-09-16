@@ -100,6 +100,26 @@ export interface AdminStats {
   total_candidates: number;
   total_recruiters: number;
   total_offers: number;
+  total_companies: number;
+  active_companies: number;
+  pending_company_invitations: number;
+  expired_company_invitations: number;
+  active_offers: number;
+}
+
+export interface CompanyInvitation {
+  id: string;
+  email: string;
+  company_name: string;
+  contact_name?: string | null;
+  contact_role?: string | null;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+  company_id?: string | null;
+  invited_by_email?: string | null;
 }
 
 export interface AdminActivity {
@@ -164,6 +184,7 @@ export interface ApplicationItem {
   cover_letter?: string | null;
   ai_score?: number | null;
   ai_report?: string | null;
+  ai_status?: "pending" | "processing" | "completed" | "failed" | string;
   created_at?: string;
   updated_at?: string | null;
   candidate?: User;

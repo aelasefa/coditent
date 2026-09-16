@@ -86,13 +86,32 @@ api.interceptors.response.use(
   }
 );
 
+export interface RegistrationStarted {
+  detail: string;
+  email: string;
+  expires_in_seconds: number;
+}
+
 export async function register(payload: {
   email: string;
   password: string;
   full_name: string;
   role: "CANDIDATE" | "RECRUITER";
+}): Promise<RegistrationStarted> {
+  const { data } = await api.post<RegistrationStarted>("/auth/register", payload);
+  return data;
+}
+
+export async function verifyEmail(payload: {
+  email: string;
+  otp: string;
 }): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>("/auth/register", payload);
+  const { data } = await api.post<TokenResponse>("/auth/verify-email", payload);
+  return data;
+}
+
+export async function resendVerification(email: string): Promise<RegistrationStarted & { retry_after_seconds?: number }> {
+  const { data } = await api.post("/auth/resend-verification", { email });
   return data;
 }
 
@@ -240,16 +259,28 @@ export async function getRecommendations(): Promise<Recommendation[]> {
   return data.recommendations;
 }
 
+export interface RecommendationJob {
+  job_id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  cached?: boolean;
+  error?: string;
+}
+
 export async function generateRecommendations(payload: {
   field: string;
   region: string;
   type: "JOB" | "INTERNSHIP";
-}): Promise<Recommendation[]> {
-  const { data } = await api.post<{ recommendations: Recommendation[] }>(
+}): Promise<RecommendationJob> {
+  const { data } = await api.post<RecommendationJob>(
     "/recommendations/generate",
     payload
   );
-  return data.recommendations;
+  return data;
+}
+
+export async function getRecommendationJob(jobId: string): Promise<RecommendationJob> {
+  const { data } = await api.get<RecommendationJob>(`/recommendations/jobs/${jobId}`);
+  return data;
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
@@ -337,19 +368,58 @@ export async function getConversations(): Promise<{ user: import("@/lib/types").
   return data.conversations;
 }
 
-export async function inviteCompany(payload: { email: string; company_name: string }): Promise<{ detail: string }> {
+export interface CompanyInvitationPayload {
+  company_name: string;
+  email: string;
+  contact_name?: string;
+  contact_role?: string;
+}
+
+export async function inviteCompany(payload: CompanyInvitationPayload): Promise<{
+  detail: string;
+  invitation_id: string;
+  invitation_url: string;
+  email_sent: boolean;
+  email_error?: string;
+}> {
   const { data } = await api.post("/invites/company/invite", payload);
   return data;
 }
-export async function listCompanyInvitations(): Promise<{ invitations: { id: string; email: string; company_name: string; status: string; expires_at: string }[] }> {
+export async function listCompanyInvitations(): Promise<{ invitations: import("@/lib/types").CompanyInvitation[] }> {
   const { data } = await api.get("/invites/company/invitations");
+  return data;
+}
+export async function getCompanyInvitation(id: string): Promise<{ invitation: import("@/lib/types").CompanyInvitation }> {
+  const { data } = await api.get(`/invites/company/invitations/${id}`);
+  return data;
+}
+export async function resendCompanyInvitation(id: string): Promise<{
+  detail: string;
+  invitation_id: string;
+  invitation_url: string;
+  email_sent: boolean;
+}> {
+  const { data } = await api.post(`/invites/company/invitations/${id}/resend`);
   return data;
 }
 export async function revokeCompanyInvitation(id: string): Promise<{ detail: string }> {
   const { data } = await api.post(`/invites/company/invitations/${id}/revoke`);
   return data;
 }
-export async function acceptCompanyInvite(payload: { token: string; password: string; full_name: string }): Promise<{ detail: string; company_id: string }> {
+export async function validateCompanyInvitation(token: string): Promise<{
+  email: string;
+  company_name: string;
+  contact_name: string | null;
+  status: string;
+  expires_at: string | null;
+}> {
+  const { data } = await api.get("/invites/company-invitations/validate", { params: { token } });
+  return data;
+}
+export async function acceptCompanyInvite(payload: { token: string; password: string; full_name: string }): Promise<{
+  detail: string;
+  company_id: string;
+}> {
   const { data } = await api.post("/invites/company/accept", payload);
   return data;
 }
@@ -423,6 +493,13 @@ export async function updateApplicationStatus(
   status: string
 ): Promise<{ id: string; status: string }> {
   const { data } = await api.patch(`/applications/${id}`, { status });
+  return data;
+}
+
+export async function retryApplicationScreening(
+  id: string
+): Promise<{ id: string; ai_status: string }> {
+  const { data } = await api.post(`/applications/${id}/screen`);
   return data;
 }
 

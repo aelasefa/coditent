@@ -5,7 +5,7 @@ import json
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -90,18 +90,23 @@ async def generate_recommendations_for_candidate(
     offers = offers_result.scalars().all()
 
     if not offers:
-        await db.execute(delete(SavedRecommendation).where(SavedRecommendation.candidate_id == candidate_id))
-        await db.commit()
-        return []
+        # Nothing matched this criteria run: keep existing scores untouched.
+        existing_result = await db.execute(
+            select(SavedRecommendation)
+            .options(joinedload(SavedRecommendation.offer))
+            .where(SavedRecommendation.candidate_id == candidate_id)
+            .order_by(SavedRecommendation.ai_score.desc())
+        )
+        existing_recs = existing_result.scalars().all()
+        return [RecommendationOut.model_validate(item).model_dump(mode="json") for item in existing_recs]
 
     ai_results = await rank_offers(profile, criteria_obj, offers)
     if not ai_results:
         ai_results = _fallback_rank_offers(profile, offers)
 
-    await db.execute(delete(SavedRecommendation).where(SavedRecommendation.candidate_id == candidate_id))
-
+    # Upsert only offers matched by this run. Never wipe scores for offers
+    # outside the requested criteria; drop rows only for inactive offers.
     offer_map = {str(offer.id): offer for offer in offers}
-    new_rows: list[SavedRecommendation] = []
     for row in ai_results:
         offer_id = row.get("offer_id")
         if offer_id not in offer_map:
@@ -112,17 +117,36 @@ async def generate_recommendations_for_candidate(
         except (TypeError, ValueError):
             continue
 
-        new_rows.append(
-            SavedRecommendation(
-                candidate_id=candidate_id,
-                offer_id=parsed_offer_id,
-                ai_score=int(row.get("score", 0)),
-                ai_reasoning=str(row.get("reasoning", "")),
+        existing_result = await db.execute(
+            select(SavedRecommendation).where(
+                SavedRecommendation.candidate_id == candidate_id,
+                SavedRecommendation.offer_id == parsed_offer_id,
             )
         )
+        existing = existing_result.scalars().first()
+        if existing is not None:
+            existing.ai_score = int(row.get("score", 0))
+            existing.ai_reasoning = str(row.get("reasoning", ""))
+        else:
+            db.add(
+                SavedRecommendation(
+                    candidate_id=candidate_id,
+                    offer_id=parsed_offer_id,
+                    ai_score=int(row.get("score", 0)),
+                    ai_reasoning=str(row.get("reasoning", "")),
+                )
+            )
 
-    if new_rows:
-        db.add_all(new_rows)
+    if offers:
+        active_ids = [offer.id for offer in offers]
+        inactive_result = await db.execute(
+            select(SavedRecommendation).where(
+                SavedRecommendation.candidate_id == candidate_id,
+                SavedRecommendation.offer_id.not_in(active_ids),
+            )
+        )
+        for stale in inactive_result.scalars().all():
+            await db.delete(stale)
 
     await db.commit()
 

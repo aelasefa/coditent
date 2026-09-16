@@ -26,6 +26,10 @@ const widths: Record<string, string> = {
 export function Sheet({ open, onClose, title, description, children, footer, side = "right", size = "md" }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
+  // Latest onClose without re-running setup on parent re-renders,
+  // which would steal focus out of form fields on every keystroke.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -34,7 +38,7 @@ export function Sheet({ open, onClose, title, description, children, footer, sid
     document.body.style.overflow = "hidden";
     const t = window.setTimeout(() => panelRef.current?.focus(), 0);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -43,7 +47,7 @@ export function Sheet({ open, onClose, title, description, children, footer, sid
       window.removeEventListener("keydown", onKey);
       prevFocus.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
 

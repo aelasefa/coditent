@@ -63,12 +63,11 @@ jobs:
 
       - name: Sanity check imports (Supabase-only, no local DB)
         env:
-          # Use Supabase-shaped URL (no connection attempted on import); real Supabase not needed for this check
-          DATABASE_URL: postgresql+asyncpg://postgres.test:fake@db.test.supabase.co:5432/postgres
-          JWT_SECRET: ci-test-jwt-secret-key-1234567890
-          GEMINI_API_KEY: ci-test-gemini-key
-          REDIS_URL: redis://localhost:6379/0
-          FRONTEND_URL: http://localhost:3000
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6379/0' }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
         run: |
           python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"
 
@@ -105,6 +104,9 @@ jobs:
       - name: Run Ansible Deployment Playbook
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
+          # Playbooks live in ansible/playbooks/, so the default relative
+          # roles path does not resolve in CI. Point at the repo roles dir.
+          ANSIBLE_ROLES_PATH: "ansible/roles"
         run: |
           ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/deploy.yml \
             -e "ansible_host=${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }}" \
