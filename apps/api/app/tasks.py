@@ -8,7 +8,7 @@ from celery import Celery
 
 from app.cache import get_sync_redis
 from app.config import settings
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, engine
 from app.observability import get_logger
 from app.services.recommendation_jobs import generate_recommendations_for_candidate, make_cache_key
 
@@ -39,10 +39,13 @@ def generate_recommendations_task(job_id: str, candidate_id: str, criteria: dict
 
     try:
         candidate_uuid = uuid.UUID(candidate_id)
-        # Celery fork pool leaves an event loop from the parent; create a fresh one
+        # Celery fork pool leaves an event loop from the parent; create a fresh one.
+        # The async engine pool may hold connections bound to a previous loop,
+        # so dispose it first or every job after the first per worker fails.
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
+            loop.run_until_complete(engine.dispose())
             result = loop.run_until_complete(_run_job(candidate_uuid, criteria))
         finally:
             loop.close()

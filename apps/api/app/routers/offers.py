@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import get_async_redis
 from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
@@ -31,6 +32,18 @@ async def list_offers(
     )
     offers = result.scalars().all()
     return {"offers": [OfferOut.model_validate(offer) for offer in offers]}
+
+
+async def _bust_recommendation_cache() -> None:
+    """Drop cached generate results so newly published (or toggled) offers
+    get rescored on the next Generate instead of serving stale lists."""
+    try:
+        client = get_async_redis()
+        keys = await client.keys("recommendations:*")
+        if keys:
+            await client.delete(*keys)
+    except Exception:
+        pass
 
 
 @router.post("", response_model=OfferOut)
@@ -68,6 +81,7 @@ async def create_offer(
     await db.commit()
     await db.refresh(offer)
     await log_audit(db, action="OFFER_CREATED", actor=current_user, company_id=current_user.company_id, resource_type="offer", resource_id=offer.id)
+    await _bust_recommendation_cache()
     return OfferOut.model_validate(offer)
 
 
@@ -144,6 +158,7 @@ async def toggle_offer(
     offer.active = not offer.active
     await db.commit()
     await db.refresh(offer)
+    await _bust_recommendation_cache()
     return OfferOut.model_validate(offer)
 
 
