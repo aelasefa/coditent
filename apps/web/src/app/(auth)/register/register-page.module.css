@@ -29,15 +29,21 @@
   flex-direction: column;
 }
 
+/* Same positioning behavior as Login */
 .shell {
   flex: 1 0 auto;
   min-height: auto;
-  align-items: start;
-  padding-top: clamp(3rem, 6vw, 5.5rem);
+  align-items: center;
+  padding-block: 1rem 1.5rem;
 }
 
-.formInner { width: min(100%, 560px); }
-.form { gap: 0.95rem; }
+.formInner {
+  width: min(100%, 560px);
+}
+
+.form {
+  gap: 0.95rem;
+}
 
 .fieldGrid {
   display: grid;
@@ -135,9 +141,7 @@
 
 @media (max-height: 780px) and (min-width: 761px) {
   .shell {
-    align-items: flex-start;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
+    padding-block: 0.25rem 0.5rem;
   }
 
   .form { gap: 0.35rem; }

@@ -201,7 +201,6 @@ async def exchange_code_for_access_token(
             logger.info(
                 "google_oauth_token_exchange",
                 redirect_uri=redirect_uri,
-                code=code,
             )
         response = await client.post(
             provider.token_url,
@@ -210,18 +209,17 @@ async def exchange_code_for_access_token(
         )
 
     response_payload: dict[str, Any] | None = None
-    response_text: str | None = None
     if provider.name == "google":
         try:
             response_payload = response.json()
         except ValueError:
-            response_text = response.text
+            response_payload = None
 
         if response.is_error:
             logger.warning(
                 "google_oauth_token_error",
                 status_code=response.status_code,
-                body=response_payload if response_payload is not None else response_text,
+                error=(response_payload or {}).get("error"),
             )
             if isinstance(response_payload, dict) and response_payload.get("error") in {
                 "invalid_client",
@@ -234,7 +232,7 @@ async def exchange_code_for_access_token(
                     detail="google_token_exchange_failed",
                 )
         else:
-            logger.info("google_oauth_token_response", body=response_payload)
+            logger.info("google_oauth_token_response", status_code=response.status_code)
 
     if response.status_code in {400, 401}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_invalid_code")

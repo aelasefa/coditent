@@ -1,4 +1,11 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { getAuthenticatedDestination, safeNextDestination } from "@/lib/auth-redirect";
+import { getApiBaseUrl, getMe } from "@/lib/api";
+import { removeToken, saveToken } from "@/lib/auth";
+import { isOAuthPopupResult, OAUTH_POPUP_ACK } from "@/lib/oauth-popup";
 
 const googleIcon = (
   <svg viewBox="0 0 48 48" className="h-4 w-4" role="img" aria-label="Google">
@@ -39,38 +46,152 @@ interface SocialLoginButtonsProps {
   separator?: ReactNode;
 }
 
-import { getApiBaseUrl } from "@/lib/api";
-
 export function SocialLoginButtons({
   className,
   separator = "OR",
 }: SocialLoginButtonsProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const popupRef = useRef<Window | null>(null);
+  const closePollRef = useRef<number | null>(null);
+  const handledRef = useRef(false);
+  const [popupError, setPopupError] = useState<string | null>(null);
   const ssoBaseUrl = getApiBaseUrl();
   const baseButtonClass =
     "inline-flex h-11 w-full items-center justify-center gap-3 rounded-full px-4 text-sm font-semibold transition-all duration-300 ease-md active:scale-95";
 
+  useEffect(() => {
+    function clearClosePoll() {
+      if (closePollRef.current !== null) {
+        window.clearInterval(closePollRef.current);
+        closePollRef.current = null;
+      }
+    }
+
+    async function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (!popupRef.current || event.source !== popupRef.current) return;
+      if (!isOAuthPopupResult(event.data)) return;
+
+      if (handledRef.current) {
+        popupRef.current.postMessage(OAUTH_POPUP_ACK, window.location.origin);
+        return;
+      }
+
+      handledRef.current = true;
+      clearClosePoll();
+
+      if (event.data.status === "error") {
+        popupRef.current.postMessage(OAUTH_POPUP_ACK, window.location.origin);
+        setPopupError(readableOAuthError(event.data.error));
+        popupRef.current = null;
+        return;
+      }
+
+      saveToken(event.data.token);
+      popupRef.current.postMessage(OAUTH_POPUP_ACK, window.location.origin);
+      popupRef.current = null;
+
+      try {
+        const user = await getMe();
+        localStorage.setItem("user", JSON.stringify(user));
+        const next = safeNextDestination(searchParams.get("next"));
+        router.replace(
+          getAuthenticatedDestination(user, {
+            next,
+            isNewRegistration: event.data.isNewRegistration,
+          })
+        );
+      } catch {
+        removeToken();
+        setPopupError("Authentication completed, but the Coditent session could not be verified. Please try again.");
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      clearClosePoll();
+    };
+  }, [router, searchParams]);
+
+  function openOAuthPopup(provider: "google" | "linkedin") {
+    setPopupError(null);
+    handledRef.current = false;
+
+    if (popupRef.current && !popupRef.current.closed) {
+      popupRef.current.focus();
+      return;
+    }
+
+    const width = 520;
+    const height = 650;
+    const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2);
+    const top = Math.max(0, window.screenY + (window.outerHeight - height) / 2);
+    const features = [
+      "popup=yes",
+      `width=${width}`,
+      `height=${height}`,
+      `left=${Math.round(left)}`,
+      `top=${Math.round(top)}`,
+      "resizable=yes",
+      "scrollbars=yes",
+    ].join(",");
+    const popup = window.open(
+      `${ssoBaseUrl}/auth/sso/${provider}/start`,
+      `coditent_oauth_${provider}`,
+      features
+    );
+
+    if (!popup || popup.closed) {
+      setPopupError("The sign-in popup was blocked. Allow popups for Coditent and try again.");
+      return;
+    }
+
+    popupRef.current = popup;
+    popup.focus();
+    closePollRef.current = window.setInterval(() => {
+      if (popup.closed) {
+        if (closePollRef.current !== null) window.clearInterval(closePollRef.current);
+        closePollRef.current = null;
+        popupRef.current = null;
+        if (!handledRef.current) {
+          setPopupError("The sign-in window was closed before authentication finished.");
+        }
+      }
+    }, 400);
+  }
+
   return (
     <div className={className}>
       <div className="grid gap-3">
-        <a
+        <button
+          type="button"
           className={`${baseButtonClass} border border-md-outline/30 bg-white text-slate-900 hover:border-md-primary/40 hover:shadow-sm`}
-          href={`${ssoBaseUrl}/auth/sso/google/start`}
+          onClick={() => openOAuthPopup("google")}
         >
           <span aria-hidden className="flex h-5 w-5 items-center justify-center">
             {googleIcon}
           </span>
           Continue with Google
-        </a>
-        <a
+        </button>
+        <button
+          type="button"
           className={`${baseButtonClass} bg-[#0A66C2] text-white hover:bg-[#0A66C2]/90`}
-          href={`${ssoBaseUrl}/auth/sso/linkedin/start`}
+          onClick={() => openOAuthPopup("linkedin")}
         >
           <span aria-hidden className="flex h-5 w-5 items-center justify-center">
             {linkedInIcon}
           </span>
           Continue with LinkedIn
-        </a>
+        </button>
       </div>
+
+      {popupError ? (
+        <p role="alert" className="mt-3 text-sm font-medium text-danger">
+          {popupError}
+        </p>
+      ) : null}
 
       <div className="my-5 flex items-center gap-3">
         <div className="h-px flex-1 bg-md-outline/30" />
@@ -81,4 +202,14 @@ export function SocialLoginButtons({
       </div>
     </div>
   );
+}
+
+function readableOAuthError(error: string): string {
+  const messages: Record<string, string> = {
+    invalid_sso_callback: "The sign-in response was invalid. Please try again.",
+    invalid_sso_state: "The sign-in session was invalid or expired. Please try again.",
+    sso_provider_error: "The provider did not complete sign-in. Please try again.",
+    sso_code_or_state_missing: "The provider returned an incomplete sign-in response. Please try again.",
+  };
+  return messages[error] ?? "Social sign-in failed. Please try again.";
 }
