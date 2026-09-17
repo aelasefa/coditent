@@ -21,9 +21,24 @@ async def list_applications(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     if current_user.role.value == "CANDIDATE":
-        result = await db.execute(select(Application).where(Application.candidate_id == current_user.id).order_by(Application.created_at.desc()))
-        apps = result.scalars().all()
-        return {"applications": [{"id": str(a.id), "opportunity_id": str(a.opportunity_id), "status": a.status, "chat_enabled": is_chat_enabled_for_status(a.status), "created_at": a.created_at.isoformat()} for a in apps]}
+        result = await db.execute(
+            select(Application, Offer)
+            .join(Offer, Application.opportunity_id == Offer.id)
+            .where(Application.candidate_id == current_user.id)
+            .order_by(Application.created_at.desc())
+        )
+        return {"applications": [
+            {
+                "id": str(app.id),
+                "opportunity_id": str(app.opportunity_id),
+                "status": app.status,
+                "chat_enabled": is_chat_enabled_for_status(app.status),
+                "created_at": app.created_at.isoformat(),
+                "updated_at": app.updated_at.isoformat() if app.updated_at else None,
+                "opportunity": {"id": str(offer.id), "title": offer.title, "company": offer.company},
+            }
+            for app, offer in result.all()
+        ]}
     if current_user.role.value == "COMPANY_USER":
         if not current_user.company_id or not can(current_user.company_role, "view_applications"):
             raise HTTPException(status_code=403, detail="Forbidden")

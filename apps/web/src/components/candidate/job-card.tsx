@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { MatchScore } from "./match-score";
 import { formatDate, offerLocation, parseSkills } from "./offer-utils";
 import type { Recommendation } from "@/lib/types";
+import styles from "./candidate-pages.module.css";
 
 interface JobCardProps {
   rec: Recommendation;
@@ -35,7 +36,10 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
             {posted ? ` · ${posted}` : ""}
           </p>
         </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
         <MatchScore score={score} reasoning={reasoning} />
+        {applied ? <span className="text-xs font-semibold text-success">Applied</span> : null}
       </div>
       {skills.length > 0 ? (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -46,14 +50,11 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
           ))}
         </div>
       ) : null}
-      {applied ? (
-        <p className="mt-2 text-xs font-semibold text-success">Applied</p>
-      ) : null}
     </>
   );
 
   const cls = cn(
-    "block w-full rounded-xl border bg-surface p-4 text-left transition-colors duration-fast",
+    `block w-full border bg-surface p-4 text-left transition-colors duration-fast ${styles.jobRow}`,
     selected ? "border-primary ring-2 ring-primary/20" : "border-border-subtle hover:border-border-strong"
   );
 

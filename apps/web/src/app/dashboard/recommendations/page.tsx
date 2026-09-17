@@ -5,13 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { api, generateRecommendations, getProfile, getRecommendationJob, getRecommendations } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import { PageContainer, PageHeader } from "@/components/shell/page-container";
+import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Sheet } from "@/components/ui/sheet";
 import { FilterBar, type DiscoverFilters } from "@/components/candidate/filter-bar";
 import { JobCard, JobCardSkeleton } from "@/components/candidate/job-card";
 import { JobDetails, JobDetailsSkeleton } from "@/components/candidate/job-details";
 import type { ApplicationItem } from "@/lib/types";
+import styles from "@/components/candidate/candidate-pages.module.css";
 
 export default function RecommendationsPage() {
   return (
@@ -111,15 +112,12 @@ function RecommendationsContent() {
     [appsQuery.data, applied]
   );
 
-  const fields = useMemo(() => [...new Set(recs.map((r) => r.offer.field).filter(Boolean))].sort(), [recs]);
-  const regions = useMemo(() => [...new Set(recs.map((r) => r.offer.region).filter(Boolean))].sort(), [recs]);
-
   const filtered = useMemo(() => {
     const q = filters.query.trim().toLowerCase();
     let list = recs.filter((r) => {
       const o = r.offer;
-      if (filters.field && o.field !== filters.field) return false;
-      if (filters.region && o.region !== filters.region) return false;
+      if (filters.field && !o.field.toLowerCase().includes(filters.field.trim().toLowerCase())) return false;
+      if (filters.region && !o.region.toLowerCase().includes(filters.region.trim().toLowerCase())) return false;
       if (filters.type !== "ALL" && o.type !== filters.type) return false;
       if (q) {
         const hay = `${o.title} ${o.company} ${o.required_skills ?? ""} ${o.field} ${o.region}`.toLowerCase();
@@ -134,39 +132,45 @@ function RecommendationsContent() {
     return list;
   }, [recs, filters]);
 
-  const selected = filtered.find((r) => r.offer.id === selectedId) ?? recs.find((r) => r.offer.id === selectedId) ?? filtered[0] ?? null;
+  const selected = filtered.find((r) => r.offer.id === selectedId) ?? filtered[0] ?? null;
   const selectedApplied = selected ? appliedOfferIds.has(selected.offer.id) : false;
 
   function handleGenerate() {
+    if (generateMutation.isPending || pollingJob) return;
     setJobFailed(false);
     const profile = (profileQuery.data ?? {}) as { field_of_study?: string | null; city?: string | null };
+    const field = filters.field.trim() || profile.field_of_study?.trim();
+    const region = filters.region.trim() || profile.city?.trim();
+    if (!field || !region) {
+      toast("Add a field and region", { description: "Enter both above, or add them to your profile before analyzing matches.", variant: "warning" });
+      return;
+    }
     generateMutation.mutate({
-      field: filters.field || profile.field_of_study || "Informatique",
-      region: filters.region || profile.city || "Casablanca",
+      field,
+      region,
       type: filters.type === "ALL" ? "JOB" : filters.type,
     });
   }
 
-  const loading = recsQuery.isLoading || generateMutation.isPending || pollingJob;
+  const loading = recsQuery.isLoading;
   const error = recsQuery.isError;
 
   return (
     <PageContainer variant="wide">
-      <PageHeader title="Discover" description="Opportunities matched to your profile by AI." />
+      <div className={styles.discoverIntro}>
+        <div><h1 className="ct-page-title">Discover opportunities</h1><p>Search open roles, then analyze matches for your field and region.</p></div>
+        <p>Match analysis appears on each role when it is ready.</p>
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-        <div className="space-y-4">
-          <FilterBar
+      <div className={styles.filterPanel}><FilterBar
             filters={filters}
-            onChange={setFilters}
-            fields={fields}
-            regions={regions}
+            onChange={(next) => { setFilters(next); setSelectedId(null); }}
             onGenerate={handleGenerate}
-            generating={generateMutation.isPending}
-          />
-          <p className="text-[13px] text-muted-foreground" role="status">
-            {loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}
-          </p>
+            generating={generateMutation.isPending || pollingJob}
+          /></div>
+      <div className={styles.resultsHeading}><h2>Open roles</h2><p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}</p></div>
+      <div className={styles.resultsLayout}>
+        <div className={styles.resultsList}>
           {jobFailed ? (
             <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
               <p className="text-sm font-semibold text-danger">Match scoring did not complete.</p>
@@ -184,7 +188,7 @@ function RecommendationsContent() {
             </div>
           ) : null}
           {!error ? (
-            <div className="space-y-2.5" role="list" aria-label="Opportunities">
+            <div className={styles.jobList} role="list" aria-label="Opportunities">
               {loading
                 ? [1, 2, 3].map((i) => <JobCardSkeleton key={i} />)
                 : filtered.map((r) => (
@@ -207,8 +211,8 @@ function RecommendationsContent() {
               {!loading && recs.length === 0 ? (
                 <EmptyState
                   title="No recommendations yet"
-                  description="Set field and region, then refresh to generate AI matches."
-                  primaryAction={{ label: "Refresh recommendations", onClick: handleGenerate }}
+                  description="Enter a field and region, then analyze matches to see roles here."
+                  primaryAction={{ label: "Analyze matches", onClick: handleGenerate }}
                 />
               ) : null}
             </div>
@@ -216,7 +220,7 @@ function RecommendationsContent() {
         </div>
 
         <div className="hidden lg:block">
-          <div className="sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-xl border border-border-subtle bg-surface p-6">
+          <div className={`${styles.jobDetail} sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto border border-border-subtle bg-surface p-6`}>
             {loading ? (
               <JobDetailsSkeleton />
             ) : selected ? (
