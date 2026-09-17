@@ -3,9 +3,14 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getAuthenticatedDestination, safeNextDestination } from "@/lib/auth-redirect";
-import { getApiBaseUrl, getCandidateOnboarding, getMe } from "@/lib/api";
+import { exchangeOAuthHandoff, getApiBaseUrl, getCandidateOnboarding, getMe } from "@/lib/api";
 import { removeToken, saveToken } from "@/lib/auth";
-import { isOAuthPopupResult, OAUTH_POPUP_ACK } from "@/lib/oauth-popup";
+import {
+  isOAuthPopupResult,
+  OAUTH_POPUP_ACK,
+  oauthChannelName,
+  type OAuthPopupResult,
+} from "@/lib/oauth-popup";
 
 const googleIcon = (
   <svg viewBox="0 0 48 48" className="h-4 w-4" role="img" aria-label="Google">
@@ -54,6 +59,9 @@ export function SocialLoginButtons({
   const searchParams = useSearchParams();
   const popupRef = useRef<Window | null>(null);
   const closePollRef = useRef<number | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const attemptIdRef = useRef<string | null>(null);
+  const channelRef = useRef<BroadcastChannel | null>(null);
   const handledRef = useRef(false);
   const [popupError, setPopupError] = useState<string | null>(null);
   const ssoBaseUrl = getApiBaseUrl();
@@ -66,36 +74,54 @@ export function SocialLoginButtons({
         window.clearInterval(closePollRef.current);
         closePollRef.current = null;
       }
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     }
 
-    async function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      if (!popupRef.current || event.source !== popupRef.current) return;
-      if (!isOAuthPopupResult(event.data)) return;
+    function closeChannel() {
+      channelRef.current?.close();
+      channelRef.current = null;
+    }
+
+    function acknowledge(attemptId: string) {
+      const acknowledgement = { type: OAUTH_POPUP_ACK, attemptId } as const;
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.postMessage(acknowledgement, window.location.origin);
+      }
+      channelRef.current?.postMessage(acknowledgement);
+    }
+
+    async function handleResult(result: OAuthPopupResult) {
+      if (result.attemptId !== attemptIdRef.current) return;
 
       if (handledRef.current) {
-        popupRef.current.postMessage(OAUTH_POPUP_ACK, window.location.origin);
+        acknowledge(result.attemptId);
         return;
       }
 
       handledRef.current = true;
       clearClosePoll();
 
-      if (event.data.status === "error") {
-        popupRef.current.postMessage(OAUTH_POPUP_ACK, window.location.origin);
-        setPopupError(readableOAuthError(event.data.error));
+      if (result.type === "CODITENT_OAUTH_ERROR") {
+        setPopupError(readableOAuthError(result.error));
         popupRef.current = null;
+        closeChannel();
         return;
       }
 
-      saveToken(event.data.token);
-      popupRef.current.postMessage(OAUTH_POPUP_ACK, window.location.origin);
-      popupRef.current = null;
-
       try {
+        const session = await exchangeOAuthHandoff(result.handoffCode);
+        saveToken(session.token);
         const user = await getMe();
         localStorage.setItem("user", JSON.stringify(user));
         const next = safeNextDestination(searchParams.get("next"));
+        acknowledge(result.attemptId);
+        window.setTimeout(() => {
+          popupRef.current = null;
+          closeChannel();
+        }, 700);
         if (user.role === "CANDIDATE" && !next) {
           const onboarding = await getCandidateOnboarding();
           if (!onboarding.onboarding_completed) {
@@ -106,19 +132,30 @@ export function SocialLoginButtons({
         router.replace(
           getAuthenticatedDestination(user, {
             next,
-            isNewRegistration: event.data.isNewRegistration,
+            isNewRegistration: session.is_new_registration,
           })
         );
       } catch {
+        acknowledge(result.attemptId);
+        popupRef.current = null;
+        closeChannel();
         removeToken();
         setPopupError("Authentication completed, but the Coditent session could not be verified. Please try again.");
       }
+    }
+
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (!popupRef.current || event.source !== popupRef.current) return;
+      if (!isOAuthPopupResult(event.data)) return;
+      void handleResult(event.data);
     }
 
     window.addEventListener("message", handleMessage);
     return () => {
       window.removeEventListener("message", handleMessage);
       clearClosePoll();
+      closeChannel();
     };
   }, [router, searchParams]);
 
@@ -144,14 +181,35 @@ export function SocialLoginButtons({
       "resizable=yes",
       "scrollbars=yes",
     ].join(",");
+    const attemptId = crypto.randomUUID();
+    attemptIdRef.current = attemptId;
+    channelRef.current?.close();
+    if ("BroadcastChannel" in window) {
+      const channel = new BroadcastChannel(oauthChannelName(attemptId));
+      channel.onmessage = (event: MessageEvent) => {
+        if (isOAuthPopupResult(event.data) && event.data.attemptId === attemptId) {
+          window.dispatchEvent(new MessageEvent("message", {
+            data: event.data,
+            origin: window.location.origin,
+            source: popupRef.current,
+          }));
+        }
+      };
+      channelRef.current = channel;
+    }
+    const startUrl = new URL(`${ssoBaseUrl}/auth/sso/${provider}/start`);
+    startUrl.searchParams.set("popup_origin", window.location.origin);
+    startUrl.searchParams.set("attempt_id", attemptId);
     const popup = window.open(
-      `${ssoBaseUrl}/auth/sso/${provider}/start`,
+      startUrl.toString(),
       `coditent_oauth_${provider}`,
       features
     );
 
     if (!popup || popup.closed) {
       setPopupError("The sign-in popup was blocked. Allow popups for Coditent and try again.");
+      channelRef.current?.close();
+      channelRef.current = null;
       return;
     }
 
@@ -164,9 +222,18 @@ export function SocialLoginButtons({
         popupRef.current = null;
         if (!handledRef.current) {
           setPopupError("The sign-in window was closed before authentication finished.");
+          channelRef.current?.close();
+          channelRef.current = null;
         }
       }
     }, 400);
+    timeoutRef.current = window.setTimeout(() => {
+      if (!handledRef.current) {
+        setPopupError("Social sign-in took too long. Close the sign-in window and try again.");
+        channelRef.current?.close();
+        channelRef.current = null;
+      }
+    }, 120_000);
   }
 
   return (
