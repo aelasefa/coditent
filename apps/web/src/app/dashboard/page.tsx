@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { FiArrowRight, FiBriefcase, FiCheckSquare, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
@@ -153,6 +154,15 @@ export default function DashboardPage() {
               <ul className={styles.activityList}>{recentApps.map((application) => <li key={application.id}><Link href={`/dashboard/applications?app=${application.id}`}><span><strong>{application.opportunity?.title ?? "Application"}</strong><small>{application.opportunity?.company ?? ""}{application.updated_at ? ` · Updated ${new Date(application.updated_at).toLocaleDateString()}` : ""}</small></span><ApplicationStage status={application.status} /><FiArrowRight aria-hidden className={styles.activityArrow} /></Link></li>)}</ul>
             )}
           </section>
+
+          <div className={styles.careerArtwork} aria-hidden="true">
+            <Image
+              src="/images/candidate/career-journey.png"
+              alt=""
+              fill
+              sizes="(max-width: 767px) calc(100vw - 2rem), (max-width: 1279px) calc(100vw - 3rem), 1152px"
+            />
+          </div>
         </div>
       )}
     </PageContainer>

@@ -145,6 +145,7 @@ body:has(.candidate-theme) {
 }
 
 .candidate-theme {
+  --candidate-header-height: 4.5rem;
   min-height: 100vh;
   background: var(--background);
 }

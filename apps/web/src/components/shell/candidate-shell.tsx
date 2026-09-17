@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { getCandidateOnboarding, getMe } from "@/lib/api";
-import { AppShell } from "./app-shell";
-import { candidateBottomNav, candidateNavSections } from "./nav-config";
+import { CandidateTopShell } from "./candidate-top-shell";
 
 function logout() {
   if (typeof window !== "undefined") {
@@ -33,20 +32,16 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="candidate-theme">
-    <AppShell
-      navSections={candidateNavSections}
-      bottomNav={candidateBottomNav}
-      logoHref="/dashboard"
+    <CandidateTopShell
       user={{
         name: me?.full_name || "Candidate",
         email: me?.email,
-        roleLabel: me?.role,
+        avatarUrl: me?.avatar_url,
       }}
-      userMenuItems={[{ label: "Profile", href: "/profile" }]}
       onLogout={logout}
     >
       {children}
-    </AppShell>
+    </CandidateTopShell>
     </div>
   );
 }
