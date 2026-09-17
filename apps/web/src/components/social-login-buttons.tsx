@@ -197,7 +197,10 @@ export function SocialLoginButtons({
       };
       channelRef.current = channel;
     }
-    const startUrl = new URL(`${ssoBaseUrl}/auth/sso/${provider}/start`);
+    const startUrl = new URL(
+      `${ssoBaseUrl}/auth/sso/${provider}/start`,
+      window.location.origin
+    );
     startUrl.searchParams.set("popup_origin", window.location.origin);
     startUrl.searchParams.set("attempt_id", attemptId);
     const popup = window.open(
