@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "@/components/ui/logo";
-import { exchangeOAuthHandoff, getCandidateOnboarding, getMe } from "@/lib/api";
-import { getAuthenticatedDestination } from "@/lib/auth-redirect";
+import { exchangeOAuthHandoff, getMe } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
+import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
   isOAuthPopupAck,
   OAUTH_POPUP_ERROR,
@@ -32,6 +33,7 @@ const errorMessages: Record<string, string> = {
 
 export default function SsoCallbackPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const callbackParamsRef = useRef<{
     handoffCode: string | null;
     attemptId: string;
@@ -124,14 +126,11 @@ export default function SsoCallbackPage() {
         saveToken(session.token);
         const user = await getMe();
         localStorage.setItem("user", JSON.stringify(user));
-        if (user.role === "CANDIDATE") {
-          const onboarding = await getCandidateOnboarding();
-          if (!onboarding.onboarding_completed) {
-            router.replace("/get-started");
-            return;
-          }
-        }
-        router.replace(getAuthenticatedDestination(user, { isNewRegistration: session.is_new_registration }));
+        router.replace(
+          await getPostAuthDestination(queryClient, user, {
+            isNewRegistration: session.is_new_registration,
+          })
+        );
       } catch {
         if (!active) return;
         setErrorCode("sso_session_missing");
@@ -185,7 +184,7 @@ export default function SsoCallbackPage() {
       active = false;
       cleanup();
     };
-  }, [router]);
+  }, [queryClient, router]);
 
   const errorMessage = useMemo(
     () => errorMessages[errorCode ?? ""] ?? "Social sign-in could not be completed. Please try again.",
