@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { getAuthenticatedDestination } from "@/lib/auth-redirect";
-import { getMe } from "@/lib/api";
+import { getCandidateOnboarding, getMe } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 import {
   isOAuthPopupAck,
@@ -94,6 +94,14 @@ export default function SsoCallbackPage() {
         const user = await getMe();
         if (!isMounted) return;
         localStorage.setItem("user", JSON.stringify(user));
+        if (user.role === "CANDIDATE") {
+          const onboarding = await getCandidateOnboarding();
+          if (!isMounted) return;
+          if (!onboarding.onboarding_completed) {
+            router.replace("/get-started");
+            return;
+          }
+        }
         router.replace(
           getAuthenticatedDestination(user, {
             isNewRegistration: new URLSearchParams(window.location.search).get("registration") === "new",

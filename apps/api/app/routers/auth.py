@@ -93,6 +93,8 @@ async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthI
                     field_of_study=None,
                     university=None,
                     study_level=None,
+                    onboarding_step=1,
+                    onboarding_completed=False,
                 )
             )
             needs_commit = True
@@ -127,6 +129,8 @@ async def _create_sso_user(db: AsyncSession, identity: OAuthIdentity, role: User
                 field_of_study=None,
                 university=None,
                 study_level=None,
+                onboarding_step=1,
+                onboarding_completed=False,
             )
         )
 
@@ -554,6 +558,8 @@ async def verify_email(
             field_of_study=None,
             university=None,
             study_level=None,
+            onboarding_step=1,
+            onboarding_completed=False,
         )
     )
     await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})

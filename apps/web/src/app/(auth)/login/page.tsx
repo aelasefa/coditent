@@ -8,7 +8,7 @@ import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
-import { api } from "@/lib/api";
+import { api, getCandidateOnboarding } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 import type { TokenResponse } from "@/lib/types";
 import styles from "./login-page.module.css";
@@ -62,6 +62,13 @@ function LoginInner() {
       }
 
       saveToken(data.token);
+      if (data.user.role === "CANDIDATE") {
+        const onboarding = await getCandidateOnboarding();
+        if (!onboarding.onboarding_completed) {
+          router.push("/get-started");
+          return;
+        }
+      }
       if (nextPath) {
         router.push(nextPath);
         return;

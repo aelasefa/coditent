@@ -95,6 +95,18 @@ export interface TokenResponse {
   user: User;
 }
 
+export interface OnboardingState {
+  search_timeline: string | null;
+  desired_opportunity_type: string | null;
+  desired_fields: string[];
+  desired_location: string | null;
+  preferred_work_mode: string | null;
+  career_stage: string | null;
+  onboarding_step: number;
+  onboarding_completed: boolean;
+  onboarding_completed_at: string | null;
+}
+
 export interface AdminStats {
   total_users: number;
   total_candidates: number;

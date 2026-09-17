@@ -48,7 +48,7 @@ export default function ChooseRolePage() {
         router.push("/recruiter");
         return;
       }
-      router.push("/profile");
+      router.push("/get-started");
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;

@@ -92,6 +92,23 @@ class ProfileOut(APIModel):
     updated_at: datetime | None
 
 
+class OnboardingStepUpdate(APIModel):
+    step: int = Field(ge=1, le=6)
+    value: str | list[str]
+
+
+class OnboardingStateOut(APIModel):
+    search_timeline: str | None = None
+    desired_opportunity_type: str | None = None
+    desired_fields: list[str] = Field(default_factory=list)
+    desired_location: str | None = None
+    preferred_work_mode: str | None = None
+    career_stage: str | None = None
+    onboarding_step: int
+    onboarding_completed: bool
+    onboarding_completed_at: datetime | None = None
+
+
 class AvatarUpdate(APIModel):
     avatar_url: str = Field(max_length=5_000_000)
 

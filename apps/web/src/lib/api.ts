@@ -6,6 +6,7 @@ import type {
   AdminActivity,
   AdminStats,
   Offer,
+  OnboardingState,
   Profile,
   Recommendation,
   TokenResponse,
@@ -30,7 +31,7 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-const protectedPrefixes = ["/profile", "/dashboard", "/recruiter", "/admin"];
+const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/recruiter", "/admin"];
 
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login") {
@@ -188,6 +189,24 @@ export async function updateAvatar(avatarUrl: string): Promise<User> {
 
 export async function getProfile(): Promise<Profile> {
   const { data } = await api.get<Profile>("/candidates/profile");
+  return data;
+}
+
+export async function getCandidateOnboarding(): Promise<OnboardingState> {
+  const { data } = await api.get<OnboardingState>("/candidates/onboarding");
+  return data;
+}
+
+export async function saveCandidateOnboardingStep(
+  step: number,
+  value: string | string[]
+): Promise<OnboardingState> {
+  const { data } = await api.put<OnboardingState>("/candidates/onboarding/step", { step, value });
+  return data;
+}
+
+export async function completeCandidateOnboarding(): Promise<OnboardingState> {
+  const { data } = await api.post<OnboardingState>("/candidates/onboarding/complete");
   return data;
 }
 

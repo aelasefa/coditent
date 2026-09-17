@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getAuthenticatedDestination, safeNextDestination } from "@/lib/auth-redirect";
-import { getApiBaseUrl, getMe } from "@/lib/api";
+import { getApiBaseUrl, getCandidateOnboarding, getMe } from "@/lib/api";
 import { removeToken, saveToken } from "@/lib/auth";
 import { isOAuthPopupResult, OAUTH_POPUP_ACK } from "@/lib/oauth-popup";
 
@@ -96,6 +96,13 @@ export function SocialLoginButtons({
         const user = await getMe();
         localStorage.setItem("user", JSON.stringify(user));
         const next = safeNextDestination(searchParams.get("next"));
+        if (user.role === "CANDIDATE" && !next) {
+          const onboarding = await getCandidateOnboarding();
+          if (!onboarding.onboarding_completed) {
+            router.replace("/get-started");
+            return;
+          }
+        }
         router.replace(
           getAuthenticatedDestination(user, {
             next,
