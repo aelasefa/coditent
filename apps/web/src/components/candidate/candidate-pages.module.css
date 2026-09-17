@@ -86,6 +86,9 @@
 .activityList small { margin-top: 0.15rem; color: #617369; font-size: 0.76rem; }
 .activityArrow { flex: none; width: 0.9rem; height: 0.9rem; color: #74917c; }
 
+.careerArtwork { position: relative; overflow: hidden; width: 100%; height: clamp(250px, 29vw, 330px); border-radius: 12px; background: #edf1e9; }
+.careerArtwork img { object-fit: cover; object-position: center bottom; }
+
 .heroLink {
   display: inline-flex;
   align-items: center;
@@ -175,7 +178,9 @@
   background: #f5f5ed;
 }
 
-.profileArtwork img { object-fit: cover; }
+.profileArtwork img, .profileArtwork video { object-fit: cover; }
+.profileArtworkVideo { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 220ms var(--ease-standard); }
+.profileArtworkVideoReady { opacity: 1; }
 
 .profilePage { padding-bottom: 6rem; }
 
@@ -211,7 +216,7 @@
 .truncate { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 .editorShell { overflow: visible; border: 1px solid #dce6da; border-radius: 12px; background: #fffefa; }
-.profileTabs { position: sticky; z-index: 10; top: 3.5rem; display: flex; gap: 0.25rem; overflow-x: auto; padding: 0.55rem clamp(1rem, 3vw, 2.2rem) 0; border-bottom: 1px solid #dce6da; background: rgb(255 254 250 / 96%); backdrop-filter: blur(12px); scrollbar-width: thin; }
+.profileTabs { position: sticky; z-index: 10; top: var(--candidate-header-height, 4.5rem); display: flex; gap: 0.25rem; overflow-x: auto; padding: 0.55rem clamp(1rem, 3vw, 2.2rem) 0; border-bottom: 1px solid #dce6da; background: rgb(255 254 250 / 96%); backdrop-filter: blur(12px); scrollbar-width: thin; }
 .profileTab, .profileTabActive { flex: none; min-height: 46px; margin-bottom: -1px; padding: 0.55rem 0.95rem; border-bottom: 2px solid transparent; color: #617369; font-size: 0.84rem; font-weight: 650; transition: color 250ms ease, border-color 250ms ease, background-color 250ms ease; }
 .profileTab:hover { color: #194d38; background: #f4f7f0; }
 .profileTabActive { border-bottom-color: #194d38; color: #194d38; }
@@ -352,7 +357,7 @@
 
 @media (max-width: 1100px) {
   .profileIntro { grid-template-columns: 1fr; gap: 1rem; }
-  .profileArtwork { height: 155px; }
+  .profileArtwork { height: clamp(220px, 32vw, 340px); }
   .profileStatus { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .statusItem:first-child { grid-column: 1 / -1; }
   .statusItem + .statusItem { border-left: 0; border-top: 1px solid #e3e9df; }
@@ -371,11 +376,12 @@
   .journeyItem { min-height: 0; padding: 1rem 1.2rem; }
   .journeyItem + .journeyItem { border-left: 0; border-top: 1px solid #e3e9df; }
   .journeyItem .statusProgress { margin-top: 0.7rem; }
+  .careerArtwork { height: auto; aspect-ratio: 16 / 9; }
   .actionGrid, .recommendationGrid { grid-template-columns: 1fr; }
   .quietNotice { align-items: start; flex-direction: column; }
   .heroAside { grid-template-columns: repeat(2, 1fr); padding: 1rem 0 0; border-left: 0; border-top: 1px solid rgb(255 255 255 / 25%); }
   .profileIntro { grid-template-columns: 1fr; gap: 0.85rem; padding: 1.15rem; }
-  .profileArtwork { height: 110px; }
+  .profileArtwork { height: auto; aspect-ratio: 16 / 9; }
   .profileIdentity { align-items: start; }
   .profileIntroActions { margin-top: 0.85rem; }
   .profileAvatar { width: 3.8rem; height: 3.8rem; font-size: 1rem; }
@@ -386,9 +392,8 @@
   .statusItem + .statusItem { border-left: 0; border-top: 1px solid #e3e9df; }
   .statusItem:last-child { border-left: 1px solid #e3e9df; }
   .statusValue > strong { font-size: 1.65rem; }
-  .profileTabs { top: 3.5rem; }
   .formTwoColumns { grid-template-columns: 1fr; }
-  .saveBar { bottom: calc(5rem + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; }
+  .saveBar { bottom: calc(1rem + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; }
   .saveBar > div:last-child { justify-content: flex-end; }
   .discoverIntro { align-items: start; flex-direction: column; }
   .discoverToolbar, .resultsLayout { grid-template-columns: 1fr; }
@@ -397,6 +402,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .profileArtworkVideo { transition: none; }
   .heroLink, .applicationRow, .messageRow, .statusProgress span { transition: none; }
   .heroLink:hover, .applicationRow:hover { transform: none; }
   .overviewHero, .journeyRail, .profilePanel, .saveBar { animation: none; }

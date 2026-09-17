@@ -38,28 +38,16 @@ export function isNavActive(pathname: string, item: NavItem): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-export const candidateNavSections: NavSection[] = [
-  {
-    items: [
-      { label: "Home", href: "/dashboard", icon: FiHome, match: "exact" },
-      { label: "Discover", href: "/dashboard/recommendations", icon: FiSearch, match: "prefix" },
-      { label: "My Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
-      { label: "Messages", href: "/chat", icon: FiMessageSquare, match: "prefix" },
-      { label: "Profile", href: "/profile", icon: FiUser, match: "prefix" },
-    ],
-  },
-];
-
-// Practice + Assessments hidden: routes do not exist yet. No fake links.
-// Secondary Notifications/Settings/Help hidden: no candidate API or routes yet.
-export const candidateBottomNav: NavItem[] = [
+export const candidateNavItems: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: FiHome, match: "exact" },
   { label: "Discover", href: "/dashboard/recommendations", icon: FiSearch, match: "prefix" },
-  { label: "Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
+  { label: "My Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
   { label: "Messages", href: "/chat", icon: FiMessageSquare, match: "prefix" },
   { label: "Profile", href: "/profile", icon: FiUser, match: "prefix" },
 ];
 
+// Practice + Assessments hidden: routes do not exist yet. No fake links.
+// Secondary Notifications/Settings/Help hidden: no candidate API or routes yet.
 export const companyNavSections: NavSection[] = [
   {
     title: "Overview",

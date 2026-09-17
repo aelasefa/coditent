@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -32,6 +31,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { getProfileCompletion } from "@/components/candidate/profile-completion";
+import { ProfileArtwork } from "@/components/candidate/profile-artwork";
+import { useCandidateAvatarPreview } from "@/components/shell/candidate-top-shell";
 import styles from "@/components/candidate/candidate-pages.module.css";
 
 const urlField = z.union([z.literal(""), z.string().url("Enter a valid URL starting with https://")]);
@@ -84,6 +85,7 @@ export default function ProfileBuilderPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const setAvatarPreview = useCandidateAvatarPreview();
   const [activeSection, setActiveSection] = useState<ProfileSection>("about");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -102,10 +104,16 @@ export default function ProfileBuilderPage() {
   const [useExtracted, setUseExtracted] = useState<Record<string, boolean>>({});
   const cvFileRef = useRef<HTMLInputElement>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
+  const photoReaderRef = useRef<FileReader | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const cancelNavigationRef = useRef<HTMLButtonElement>(null);
   const navigationAllowedRef = useRef(false);
+
+  useEffect(() => () => {
+    photoReaderRef.current?.abort();
+    setAvatarPreview(null);
+  }, [setAvatarPreview]);
 
   const form = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -358,9 +366,16 @@ export default function ProfileBuilderPage() {
     if (updateMutation.isPending) return;
     try {
       if (photoFile && photoPreview) {
-        await updateAvatar(photoPreview);
-        queryClient.invalidateQueries({ queryKey: ["me"] });
-        setPhotoFile(null);
+        try {
+          const savedUser = await updateAvatar(photoPreview);
+          queryClient.setQueryData(["me"], savedUser);
+          setPhotoFile(null);
+          setAvatarPreview(null);
+          if (photoFileRef.current) photoFileRef.current.value = "";
+        } catch {
+          toast("Could not save photo", { description: "Please try again.", variant: "error" });
+          return;
+        }
       }
       const years = vals.years_of_experience.trim();
       const saved = await updateMutation.mutateAsync({
@@ -392,24 +407,39 @@ export default function ProfileBuilderPage() {
   });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
       toast("Choose an image under 2 MB", { variant: "warning" });
-      e.target.value = "";
+      input.value = "";
       return;
     }
+    photoReaderRef.current?.abort();
     setPhotoFile(file);
     const reader = new FileReader();
-    reader.onload = () => setPhotoPreview(reader.result as string);
+    photoReaderRef.current = reader;
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      setPhotoPreview(reader.result);
+      setAvatarPreview(reader.result);
+    };
+    reader.onerror = () => {
+      setPhotoFile(null);
+      input.value = "";
+      toast("Could not read photo", { description: "Choose the image again.", variant: "error" });
+    };
     reader.readAsDataURL(file);
   };
 
   const discardChanges = () => {
+    photoReaderRef.current?.abort();
     form.reset();
     setSkills(profileQuery.data?.skills?.split(",").map((s) => s.trim()).filter(Boolean) ?? []);
     setPhotoFile(null);
     setPhotoPreview(userQuery.data?.avatar_url ?? null);
+    setAvatarPreview(null);
+    if (photoFileRef.current) photoFileRef.current.value = "";
   };
 
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -499,9 +529,7 @@ export default function ProfileBuilderPage() {
             <span>Image up to 2 MB</span>
           </div>
         </div>
-        <div className={styles.profileArtwork}>
-          <Image src="/images/candidate/profile-builder.png" alt="" fill sizes="(max-width: 767px) 100vw, 45vw" />
-        </div>
+        <ProfileArtwork />
       </section>
 
       {loading ? (
