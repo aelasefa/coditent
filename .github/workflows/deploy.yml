@@ -83,17 +83,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Ansible & Galaxy Collections
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible
-          ansible-galaxy collection install -r ansible/requirements.yml
-
       - name: Configure SSH Private Key
         run: |
           mkdir -p ~/.ssh
@@ -101,17 +90,9 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Run Ansible Deployment Playbook
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
-          # Playbooks live in ansible/playbooks/, so the default relative
-          # roles path does not resolve in CI. Point at the repo roles dir.
-          ANSIBLE_ROLES_PATH: "ansible/roles"
+      - name: Execute Deployment Script on EC2
         run: |
-          ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/deploy.yml \
-            -e "ansible_host=${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }}" \
-            -e "ansible_ssh_private_key_file=~/.ssh/id_rsa" \
-            -e "repo_branch=${{ github.ref_name }}"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "/opt/coditent/deploy.sh"
 
       - name: Verify Live Public Health Endpoint
         run: |

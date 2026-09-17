@@ -7,7 +7,6 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { completeOauthRegistration } from "@/lib/api";
-import { saveToken } from "@/lib/auth";
 
 const roles = [
   {
@@ -33,22 +32,13 @@ export default function ChooseRolePage() {
     setErrorMessage(null);
     try {
       const data = await completeOauthRegistration({ role });
-      if (window.opener && !window.opener.closed) {
-        router.replace(
-          `/auth/sso/callback?registration=new#token=${encodeURIComponent(data.token)}`
-        );
-        return;
-      }
-      saveToken(data.token);
-      if (data.user.role === "RECRUITER") {
-        if (!data.user.is_approved) {
-          router.push("/pending-approval");
-          return;
-        }
-        router.push("/recruiter");
-        return;
-      }
-      router.push("/get-started");
+      const query = new URLSearchParams({
+        handoff: data.handoff_code,
+        attempt: data.attempt_id,
+        provider: data.provider,
+        registration: "new",
+      });
+      router.replace(`/auth/sso/callback?${query.toString()}`);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;

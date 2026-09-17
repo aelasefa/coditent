@@ -1,8 +1,8 @@
 import secrets
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 from typing import Annotated
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -23,6 +23,8 @@ from app.schemas import (
     LoginRequest,
     OAuthCompleteRegistrationRequest,
     OAuthCompleteRegistrationResponse,
+    OAuthHandoffExchangeRequest,
+    OAuthHandoffExchangeResponse,
     RegisterRequest,
     ResendVerificationRequest,
     TokenResponse,
@@ -42,10 +44,10 @@ from app.services.email_verification import (
 )
 from app.services.oauth_service import (
     OAuthIdentity,
-    build_frontend_choose_role_url,
-    build_frontend_dashboard_url,
     build_oauth_authorize_url,
     create_oauth_state,
+    create_oauth_handoff,
+    consume_oauth_handoff,
     create_onboarding_session,
     exchange_code_for_access_token,
     fetch_user_identity,
@@ -139,15 +141,32 @@ async def _create_sso_user(db: AsyncSession, identity: OAuthIdentity, role: User
     return user
 
 
-def _build_sso_response(request: Request, token: str, user: User) -> Response:
+def _set_access_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=settings.access_token_cookie_name,
+        value=token,
+        httponly=True,
+        secure=settings.access_token_cookie_secure,
+        samesite=settings.access_token_cookie_samesite,
+        max_age=settings.access_token_expire_minutes * 60,
+        path="/",
+    )
+
+
+def _build_sso_response(
+    request: Request,
+    token: str,
+    user: User,
+    handoff_code: str,
+    popup_origin: str,
+    attempt_id: str,
+    provider: str,
+) -> Response:
     accept_header = request.headers.get("accept", "").lower()
     wants_html = "text/html" in accept_header
 
     if wants_html:
-        callback_url = (
-            f"{settings.frontend_url.rstrip('/')}/auth/sso/callback"
-            f"#token={quote(token, safe='')}"
-        )
+        callback_url = f"{popup_origin}/auth/sso/callback?{urlencode({'handoff': handoff_code, 'attempt': attempt_id, 'provider': provider})}"
         response: Response = RedirectResponse(
             url=callback_url,
             status_code=status.HTTP_302_FOUND,
@@ -158,35 +177,41 @@ def _build_sso_response(request: Request, token: str, user: User) -> Response:
             content=TokenResponse(token=token, user=UserOut.model_validate(user)).model_dump(mode="json"),
         )
 
-    response.set_cookie(
-        key=settings.access_token_cookie_name,
-        value=token,
-        httponly=True,
-        secure=settings.access_token_cookie_secure,
-        samesite=settings.access_token_cookie_samesite,
-        max_age=settings.access_token_expire_minutes * 60,
-        path="/",
-    )
+    if not wants_html:
+        _set_access_cookie(response, token)
     return response
 
 
-def _build_sso_error_response(request: Request, detail: str, status_code: int) -> Response:
+def _build_sso_error_response(
+    request: Request,
+    detail: str,
+    status_code: int,
+    provider: str,
+    popup_origin: str | None = None,
+    attempt_id: str | None = None,
+) -> Response:
     if "text/html" in request.headers.get("accept", "").lower():
+        origin = popup_origin or settings.frontend_url.rstrip("/")
         callback_url = (
-            f"{settings.frontend_url.rstrip('/')}/auth/sso/callback?"
-            f"{urlencode({'error': detail})}"
+            f"{origin}/auth/sso/callback?"
+            f"{urlencode({'error': detail, 'provider': provider, 'attempt': attempt_id or ''})}"
         )
         return RedirectResponse(url=callback_url, status_code=status.HTTP_302_FOUND)
     raise HTTPException(status_code=status_code, detail=detail)
 
 
-def _build_onboarding_response(request: Request, onboarding_token: str) -> Response:
+def _build_onboarding_response(
+    request: Request,
+    onboarding_token: str,
+    popup_origin: str,
+    attempt_id: str,
+) -> Response:
     accept_header = request.headers.get("accept", "").lower()
     wants_html = "text/html" in accept_header
 
     if wants_html:
         response: Response = RedirectResponse(
-            url=build_frontend_choose_role_url(),
+            url=f"{popup_origin}/choose-role?{urlencode({'attempt': attempt_id})}",
             status_code=status.HTTP_302_FOUND,
         )
     else:
@@ -228,11 +253,20 @@ async def sso_providers() -> dict[str, bool]:
 
 
 @router.get("/sso/{provider}/start")
-async def sso_start(provider: str, request: Request) -> RedirectResponse:
+async def sso_start(
+    provider: str,
+    request: Request,
+    popup_origin: str | None = None,
+    attempt_id: str | None = None,
+) -> RedirectResponse:
     oauth_provider = get_oauth_provider(provider)
     request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
     redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
-    state_token = create_oauth_state(oauth_provider.name)
+    state_token = create_oauth_state(
+        oauth_provider.name,
+        popup_origin or settings.frontend_url,
+        attempt_id or secrets.token_urlsafe(24),
+    )
     authorization_url = build_oauth_authorize_url(oauth_provider, redirect_uri, state_token)
     logger.info("sso_start", provider=oauth_provider.name)
     return RedirectResponse(url=authorization_url, status_code=status.HTTP_302_FOUND)
@@ -250,22 +284,31 @@ async def sso_callback(
     try:
         oauth_provider = get_oauth_provider(provider)
     except HTTPException as exc:
-        return _build_sso_error_response(request, str(exc.detail), exc.status_code)
+        return _build_sso_error_response(request, str(exc.detail), exc.status_code, provider)
 
     if error:
         logger.warning("sso_error", provider=provider, error=error)
+        popup_origin = None
+        attempt_id = None
+        if state:
+            try:
+                popup_origin, attempt_id = verify_oauth_state(state, oauth_provider.name)
+            except HTTPException:
+                pass
         return _build_sso_error_response(
-            request, "sso_provider_error", status.HTTP_400_BAD_REQUEST
+            request, "sso_provider_error", status.HTTP_400_BAD_REQUEST,
+            oauth_provider.name, popup_origin, attempt_id,
         )
 
     if not code or not state:
         logger.warning("sso_error", provider=provider, error="sso_code_or_state_missing")
         return _build_sso_error_response(
-            request, "sso_code_or_state_missing", status.HTTP_400_BAD_REQUEST
+            request, "sso_code_or_state_missing", status.HTTP_400_BAD_REQUEST,
+            oauth_provider.name,
         )
 
     try:
-        verify_oauth_state(state, oauth_provider.name)
+        popup_origin, attempt_id = verify_oauth_state(state, oauth_provider.name)
         request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
         redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
         provider_access_token = await exchange_code_for_access_token(oauth_provider, code, redirect_uri)
@@ -274,16 +317,20 @@ async def sso_callback(
         user = result.scalar_one_or_none()
     except HTTPException as exc:
         logger.warning("sso_error", provider=provider, error=str(exc.detail))
-        return _build_sso_error_response(request, str(exc.detail), exc.status_code)
+        return _build_sso_error_response(
+            request, str(exc.detail), exc.status_code, oauth_provider.name,
+            locals().get("popup_origin"), locals().get("attempt_id"),
+        )
     except Exception:
         logger.exception("sso_error", provider=provider, error="sso_internal_error")
         return _build_sso_error_response(
-            request, "sso_internal_error", status.HTTP_500_INTERNAL_SERVER_ERROR
+            request, "sso_internal_error", status.HTTP_500_INTERNAL_SERVER_ERROR,
+            oauth_provider.name, locals().get("popup_origin"), locals().get("attempt_id"),
         )
 
     if user is None:
-        onboarding_token = create_onboarding_session(identity)
-        response = _build_onboarding_response(request, onboarding_token)
+        onboarding_token = create_onboarding_session(identity, popup_origin, attempt_id)
+        response = _build_onboarding_response(request, onboarding_token, popup_origin, attempt_id)
         logger.info("sso_onboarding", provider=oauth_provider.name, email=identity.email)
         return response
 
@@ -295,8 +342,12 @@ async def sso_callback(
             "role": user.role.value,
         }
     )
+    wants_html = "text/html" in request.headers.get("accept", "").lower()
+    handoff_code = await create_oauth_handoff(token, str(user.id), False) if wants_html else ""
 
-    response = _build_sso_response(request, token, user)
+    response = _build_sso_response(
+        request, token, user, handoff_code, popup_origin, attempt_id, oauth_provider.name
+    )
     logger.info("sso_success", provider=oauth_provider.name, user_id=str(user.id))
     return response
 
@@ -329,7 +380,8 @@ async def complete_oauth_registration(
         )
 
     try:
-        identity = verify_onboarding_session(onboarding_token)
+        onboarding = verify_onboarding_session(onboarding_token)
+        identity = onboarding.identity
         logger.info(
             "sso_complete_registration_identity",
             email=identity.email,
@@ -348,7 +400,7 @@ async def complete_oauth_registration(
         logger.warning(
             "sso_complete_registration_failed",
             role=role,
-            provider=getattr(identity, "provider", None),
+            provider=getattr(locals().get("identity"), "provider", None),
         )
         if exc.detail == "oauth_onboarding_invalid":
             raise HTTPException(
@@ -370,22 +422,15 @@ async def complete_oauth_registration(
             "role": user.role.value,
         }
     )
+    handoff_code = await create_oauth_handoff(token, str(user.id), True)
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
         content=OAuthCompleteRegistrationResponse(
-            access_token=token,
-            user=UserOut.model_validate(user),
+            handoff_code=handoff_code,
+            attempt_id=onboarding.attempt_id,
+            provider=identity.provider,
         ).model_dump(mode="json"),
-    )
-    response.set_cookie(
-        key=settings.access_token_cookie_name,
-        value=token,
-        httponly=True,
-        secure=settings.access_token_cookie_secure,
-        samesite=settings.access_token_cookie_samesite,
-        max_age=settings.access_token_expire_minutes * 60,
-        path="/",
     )
     _clear_onboarding_cookie(response)
     logger.info(
@@ -393,6 +438,33 @@ async def complete_oauth_registration(
         provider=identity.provider,
         user_id=str(user.id),
     )
+    return response
+
+
+@router.post("/oauth/handoff/exchange", response_model=OAuthHandoffExchangeResponse)
+async def exchange_oauth_handoff(
+    data: OAuthHandoffExchangeRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    handoff = await consume_oauth_handoff(data.code)
+    try:
+        user_id = UUID(str(handoff["user_id"]))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff") from exc
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
+    token = str(handoff["token"])
+    response = JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=OAuthHandoffExchangeResponse(
+            token=token,
+            user=UserOut.model_validate(user),
+            is_new_registration=bool(handoff.get("is_new_registration")),
+        ).model_dump(mode="json"),
+    )
+    _set_access_cookie(response, token)
     return response
 
 

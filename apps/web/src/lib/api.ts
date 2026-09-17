@@ -6,6 +6,8 @@ import type {
   AdminActivity,
   AdminStats,
   Offer,
+  OAuthHandoffResult,
+  OAuthRegistrationHandoff,
   OnboardingState,
   Profile,
   Recommendation,
@@ -134,7 +136,7 @@ export async function adminLogin(payload: {
 
 export async function completeOauthRegistration(payload: {
   role: "candidate" | "recruiter";
-}): Promise<TokenResponse> {
+}): Promise<OAuthRegistrationHandoff> {
   const response = await fetch(
     `${getApiBaseUrl()}/auth/oauth/complete-registration`,
     {
@@ -147,11 +149,11 @@ export async function completeOauthRegistration(payload: {
     }
   );
 
-  let data: (TokenResponse & { access_token?: string }) | { detail?: string } | null = null;
+  let data: OAuthRegistrationHandoff | { detail?: string } | null = null;
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     try {
-      data = (await response.json()) as (TokenResponse & { access_token?: string }) | { detail?: string };
+      data = (await response.json()) as OAuthRegistrationHandoff | { detail?: string };
     } catch {
       data = null;
     }
@@ -167,14 +169,12 @@ export async function completeOauthRegistration(payload: {
     throw error;
   }
 
-  if (typeof data === "object" && data && "access_token" in data) {
-    return {
-      token: (data as { access_token?: string }).access_token ?? "",
-      user: (data as TokenResponse).user,
-    };
-  }
+  return data as OAuthRegistrationHandoff;
+}
 
-  return data as TokenResponse;
+export async function exchangeOAuthHandoff(code: string): Promise<OAuthHandoffResult> {
+  const { data } = await api.post<OAuthHandoffResult>("/auth/oauth/handoff/exchange", { code });
+  return data;
 }
 
 export async function getMe(): Promise<User> {
