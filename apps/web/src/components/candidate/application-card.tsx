@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApplicationStage, nextStepFor, stageLabel } from "./application-stage";
 import type { ApplicationItem, RecruitmentChatListItem } from "@/lib/types";
+import styles from "./candidate-pages.module.css";
 
 function formatDate(iso?: string | null): string | null {
   if (!iso) return null;
@@ -24,7 +25,7 @@ export function ApplicationCard({
   const canMessage = Boolean(app.chat_enabled || chat);
 
   return (
-    <Card>
+    <Card className={styles.applicationRow}>
       <CardContent>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">

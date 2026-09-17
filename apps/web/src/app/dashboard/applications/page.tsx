@@ -5,13 +5,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { FiBriefcase } from "react-icons/fi";
 import { api, listRecruitmentChats } from "@/lib/api";
-import { PageContainer, PageHeader } from "@/components/shell/page-container";
+import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet } from "@/components/ui/sheet";
 import { ApplicationCard, ApplicationTimeline } from "@/components/candidate/application-card";
 import { mapStatusToStage, nextStepFor, stageLabel } from "@/components/candidate/application-stage";
 import type { ApplicationItem } from "@/lib/types";
+import styles from "@/components/candidate/candidate-pages.module.css";
 
 type Filter = "all" | "active" | "assessment" | "interview" | "offers" | "closed";
 
@@ -79,9 +80,9 @@ function ApplicationsContent() {
 
   return (
     <PageContainer>
-      <PageHeader title="My Applications" description="Every application, current stage and next step." />
+      <div className={styles.pageIntro}><h1>My applications</h1><p>Follow each role from application through the next decision.</p></div>
 
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter applications">
+      <div className={styles.applicationFilters} role="group" aria-label="Filter applications">
         {FILTERS.map((f) => {
           const active = filter === f.id;
           const count = apps.filter((a) => matches(a, f.id)).length;
@@ -91,13 +92,9 @@ function ApplicationsContent() {
               type="button"
               onClick={() => setFilter(f.id)}
               aria-pressed={active}
-              className={
-                active
-                  ? "rounded-full bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
-                  : "rounded-full bg-surface-secondary px-3.5 py-1.5 text-[13px] font-medium text-foreground-secondary hover:bg-surface-hover"
-              }
+              className={active ? styles.applicationFilterActive : styles.applicationFilter}
             >
-              {f.label} · {count}
+              <strong>{count}</strong><span>{f.label}</span>
             </button>
           );
         })}
@@ -134,7 +131,7 @@ function ApplicationsContent() {
           />
         </div>
       ) : (
-        <ul className="mt-4 space-y-3" aria-label="Applications">
+        <ul className={styles.applicationList} aria-label="Applications">
           {visible.map((app) => (
             <li key={app.id}>
               <ApplicationCard app={app} chat={chatByApp.get(app.id)} />

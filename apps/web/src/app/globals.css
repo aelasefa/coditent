@@ -119,6 +119,77 @@
   --shadow-color: rgba(0, 0, 0, 0.4);
 }
 
+/* Candidate workspace follows the warm, green identity established on the home page.
+   The body owns these tokens so portal-based sheets inherit the same palette. */
+body:has(.candidate-theme) {
+  --background: #f8f8f3;
+  --surface: #fffefa;
+  --surface-secondary: #edf1e9;
+  --surface-hover: #e4ebe0;
+  --foreground: #192b23;
+  --foreground-secondary: #3e5147;
+  --muted: #617369;
+  --muted-foreground: #617369;
+  --border: #cfdbcf;
+  --border-subtle: #e3e9df;
+  --border-strong: #9bb3a0;
+  --primary: #194d38;
+  --primary-hover: #123e2d;
+  --primary-active: #0d3023;
+  --primary-foreground: #fffefa;
+  --accent: #a25c38;
+  --accent-foreground: #fffefa;
+  --focus-ring: #a25c38;
+  --shadow-color: rgb(25 77 56 / 9%);
+  color-scheme: light;
+}
+
+.candidate-theme {
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.candidate-theme h1.ct-page-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.25rem, 3.3vw, 3.4rem);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+}
+
+.candidate-theme .ct-section-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+
+.candidate-theme aside,
+.candidate-theme header,
+.candidate-theme nav[aria-label="Primary mobile"] {
+  border-color: var(--border-subtle);
+}
+
+.candidate-theme :where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.candidate-theme :where(aside, header, nav[aria-label="Primary mobile"]) {
+  backdrop-filter: blur(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .candidate-theme *,
+  .candidate-theme *::before,
+  .candidate-theme *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -441,5 +512,3 @@ a {
     animation: none !important;
   }
 }
-
-

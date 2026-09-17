@@ -17,6 +17,7 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
 
   return (
+    <div className="candidate-theme">
     <AppShell
       navSections={candidateNavSections}
       bottomNav={candidateBottomNav}
@@ -31,5 +32,6 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AppShell>
+    </div>
   );
 }
