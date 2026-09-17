@@ -47,7 +47,7 @@ function VerifyInner() {
     try {
       const data = await verifyEmail({ email, otp: code });
       saveToken(data.token);
-      router.push("/profile");
+      router.push("/get-started");
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const detail = error.response?.data?.detail;

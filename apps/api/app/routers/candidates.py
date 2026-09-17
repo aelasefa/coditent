@@ -1,3 +1,5 @@
+import json
+from datetime import UTC, datetime
 from typing import Annotated
 
 import uuid as uuid_lib
@@ -8,10 +10,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import require_candidate
+from app.dependencies import require_candidate, require_candidate_account
 from app.models import CandidateProfile, User
 from app.observability import get_logger
-from app.schemas import CVMetaOut, CVParseOut, ProfileOut, ProfileUpdate
+from app.schemas import (
+    CVMetaOut,
+    CVParseOut,
+    OnboardingStateOut,
+    OnboardingStepUpdate,
+    ProfileOut,
+    ProfileUpdate,
+)
 from app.services.cv_extraction import AIExtractionError, extract_profile_from_text
 from app.services.cv_parser import (
     MAX_CV_BYTES,
@@ -31,6 +40,24 @@ from app.services.cv_storage import (
 router = APIRouter()
 logger = get_logger("candidates")
 
+ONBOARDING_OPTIONS: dict[int, set[str]] = {
+    1: {"ASAP", "WITHIN_3_MONTHS", "WITHIN_6_MONTHS", "PASSIVELY_BROWSING"},
+    2: {"INTERNSHIP", "JOB", "BOTH"},
+    3: {"engineering", "design", "data", "operations", "success"},
+    4: {"Casablanca", "Rabat", "Marrakech", "Other in Morocco"},
+    5: {"ON_SITE", "HYBRID", "REMOTE", "NO_PREFERENCE"},
+    6: {"STUDENT", "RECENT_GRADUATE", "ZERO_TO_ONE", "ONE_TO_THREE", "THREE_TO_FIVE", "FIVE_PLUS"},
+}
+
+ONBOARDING_FIELD_BY_STEP = {
+    1: "search_timeline",
+    2: "desired_opportunity_type",
+    3: "desired_fields",
+    4: "desired_location",
+    5: "preferred_work_mode",
+    6: "career_stage",
+}
+
 
 async def _get_profile(db: AsyncSession, user_id) -> CandidateProfile:
     result = await db.execute(
@@ -40,6 +67,93 @@ async def _get_profile(db: AsyncSession, user_id) -> CandidateProfile:
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
     return profile
+
+
+def _onboarding_state(profile: CandidateProfile) -> OnboardingStateOut:
+    fields: list[str] = []
+    if profile.desired_fields:
+        try:
+            parsed = json.loads(profile.desired_fields)
+            if isinstance(parsed, list):
+                fields = [str(value) for value in parsed]
+        except (TypeError, ValueError):
+            fields = []
+    return OnboardingStateOut(
+        search_timeline=profile.search_timeline,
+        desired_opportunity_type=profile.desired_opportunity_type,
+        desired_fields=fields,
+        desired_location=profile.desired_location,
+        preferred_work_mode=profile.preferred_work_mode,
+        career_stage=profile.career_stage,
+        onboarding_step=profile.onboarding_step,
+        onboarding_completed=profile.onboarding_completed,
+        onboarding_completed_at=profile.onboarding_completed_at,
+    )
+
+
+@router.get("/onboarding", response_model=OnboardingStateOut)
+async def get_onboarding(
+    current_user: Annotated[User, Depends(require_candidate_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OnboardingStateOut:
+    return _onboarding_state(await _get_profile(db, current_user.id))
+
+
+@router.put("/onboarding/step", response_model=OnboardingStateOut)
+async def update_onboarding_step(
+    data: OnboardingStepUpdate,
+    current_user: Annotated[User, Depends(require_candidate_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OnboardingStateOut:
+    profile = await _get_profile(db, current_user.id)
+    if profile.onboarding_completed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Onboarding is already complete")
+    if data.step > profile.onboarding_step:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete the current step first")
+
+    allowed = ONBOARDING_OPTIONS[data.step]
+    if data.step == 3:
+        if not isinstance(data.value, list) or not data.value:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Select at least one field")
+        values = list(dict.fromkeys(data.value))
+        if any(not isinstance(value, str) or value not in allowed for value in values):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid field selection")
+        stored_value: str = json.dumps(values)
+    else:
+        if not isinstance(data.value, str) or data.value not in allowed:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid onboarding answer")
+        stored_value = data.value
+
+    setattr(profile, ONBOARDING_FIELD_BY_STEP[data.step], stored_value)
+    if data.step == profile.onboarding_step:
+        profile.onboarding_step = min(7, data.step + 1)
+    await db.commit()
+    await db.refresh(profile)
+    return _onboarding_state(profile)
+
+
+@router.post("/onboarding/complete", response_model=OnboardingStateOut)
+async def complete_onboarding(
+    current_user: Annotated[User, Depends(require_candidate_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OnboardingStateOut:
+    profile = await _get_profile(db, current_user.id)
+    required = (
+        profile.search_timeline,
+        profile.desired_opportunity_type,
+        profile.desired_fields,
+        profile.desired_location,
+        profile.preferred_work_mode,
+        profile.career_stage,
+    )
+    if profile.onboarding_step < 7 or not all(required):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete every onboarding step first")
+    if not profile.onboarding_completed:
+        profile.onboarding_completed = True
+        profile.onboarding_completed_at = datetime.now(UTC).replace(tzinfo=None)
+        await db.commit()
+        await db.refresh(profile)
+    return _onboarding_state(profile)
 
 
 CONTENT_TYPE_BY_EXT = {

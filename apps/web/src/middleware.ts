@@ -8,6 +8,7 @@ function isProtectedPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/register" || pathname === "/verify-email" || pathname === "/admin/login" || pathname.startsWith("/invite") || pathname === "/company/invite/accept") return false;
   return (
     pathname.startsWith("/profile") ||
+    pathname.startsWith("/get-started") ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/recruiter") ||
     pathname.startsWith("/admin") ||
@@ -48,9 +49,14 @@ function roleLogic(request: NextRequest): NextResponse {
     if (role === "PLATFORM_ADMIN" || role === "ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
     if (role === "RECRUITER") return NextResponse.redirect(new URL("/recruiter", request.url));
-    return NextResponse.redirect(new URL("/profile", request.url));
+    return NextResponse.redirect(new URL("/get-started", request.url));
   }
   if (pathname.startsWith("/recruiter") && role === "CANDIDATE") return NextResponse.redirect(new URL("/profile", request.url));
+  if (pathname.startsWith("/get-started") && role && role !== "CANDIDATE") {
+    if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
+    if (role === "PLATFORM_ADMIN" || role === "ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
+    return NextResponse.redirect(new URL("/recruiter", request.url));
+  }
   if ((pathname.startsWith("/profile") || pathname.startsWith("/dashboard")) && (role === "RECRUITER" || role === "COMPANY_USER" || role === "PLATFORM_ADMIN")) {
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
     if (role === "PLATFORM_ADMIN") return NextResponse.redirect(new URL("/admin", request.url));

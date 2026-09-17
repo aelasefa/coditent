@@ -1,0 +1,95 @@
+.page {
+  --onboarding-foreground: #192b23;
+  --onboarding-border: #cfdbcf;
+  position: relative;
+  min-height: 100svh;
+  overflow-x: clip;
+  color: #192b23;
+  background: #f8f8f3;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #f8f8f3;
+  /* Temporary approved auth poster until the dedicated Higgsfield asset is generated. */
+  background-image: linear-gradient(90deg, rgb(248 248 243 / 98%) 0%, rgb(248 248 243 / 90%) 39%, rgb(248 248 243 / 28%) 70%), url("/images/auth/sign-in-background.png");
+  background-position: center;
+  background-size: cover;
+}
+
+.content { position: relative; z-index: 1; display: flex; min-height: 100svh; flex-direction: column; }
+.page :where(a, button):focus-visible { outline: 3px solid #a25c38; outline-offset: 3px; }
+.skipLink { position: fixed; top: 0.75rem; left: 0.75rem; z-index: 20; padding: 0.65rem 0.9rem; border-radius: 7px; background: #fffefa; color: #192b23; font-size: 0.82rem; font-weight: 700; transform: translateY(-160%); }
+.skipLink:focus { transform: translateY(0); }
+.header { display: flex; width: min(100% - 4rem, 1280px); min-height: 70px; align-items: center; justify-content: space-between; margin-inline: auto; }
+.logout { border: 0; background: transparent; color: #395746; font-size: 0.82rem; font-weight: 750; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 4px; cursor: pointer; }
+.logout:hover { color: #194d38; text-decoration-color: currentColor; }
+.shell { display: flex; width: min(100% - 4rem, 1280px); flex: 1 0 auto; align-items: center; margin-inline: auto; padding: 1rem 0 2rem; }
+.panel { width: min(100%, 560px); }
+.progressRow { display: flex; justify-content: space-between; color: #587060; font-size: 0.72rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+.progressTrack { height: 3px; margin-top: 0.65rem; overflow: hidden; border-radius: 99px; background: #dce5d9; }
+.progressTrack span { display: block; height: 100%; border-radius: inherit; background: #194d38; transition: width 260ms ease; }
+.question { animation: enter 260ms ease both; }
+.eyebrow { margin: 1.7rem 0 0.75rem; color: #5b765e; font-size: 0.7rem; font-weight: 750; letter-spacing: 0.15em; text-transform: uppercase; }
+.title { max-width: 12ch; margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.65rem, 4.3vw, 4.6rem); font-weight: 400; letter-spacing: -0.05em; line-height: 1.01; }
+.subtitle { max-width: 48ch; margin: 0.8rem 0 0; color: #53665a; font-size: 0.94rem; line-height: 1.55; }
+.options,
+.optionGrid { display: grid; gap: 0.65rem; margin-top: 1.5rem; }
+.optionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.2rem; padding-top: 1.15rem; border-top: 1px solid #dfe7dc; }
+.continueButton,
+.backButton { min-height: 46px; border-radius: 7px; padding: 0.7rem 1.2rem; font-size: 0.87rem; font-weight: 750; cursor: pointer; }
+.continueButton { min-width: 150px; border: 1px solid #194d38; background: #194d38; color: #fff; }
+.continueButton:hover { background: #123e2d; }
+.backButton { border: 1px solid #cfdbcf; background: rgb(255 254 250 / 78%); color: #194d38; }
+.backButton:hover { border-color: #9bb3a0; background: #fffefa; }
+.continueButton:disabled,
+.backButton:disabled { cursor: not-allowed; opacity: 0.5; }
+.error { margin: 1rem 0 0; padding: 0.75rem 0.85rem; border: 1px solid #e3b8a8; border-radius: 7px; background: #fff4ed; color: #8e3f28; font-size: 0.84rem; font-weight: 650; }
+.loading { color: #53665a; font-size: 0.95rem; }
+.summary { display: grid; gap: 0.15rem; margin-top: 1.5rem; padding: 0.8rem 1rem; border: 1px solid #cfdbcf; border-radius: 8px; background: rgb(255 254 250 / 84%); }
+.summary p { display: grid; grid-template-columns: 112px 1fr; gap: 1rem; margin: 0; padding: 0.7rem 0; border-bottom: 1px solid #e3e9df; color: #334b3e; font-size: 0.86rem; }
+.summary p:last-child { border-bottom: 0; }
+.summary span { color: #617369; font-size: 0.72rem; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; }
+
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-height: 780px) and (min-width: 761px) {
+  .header { min-height: 54px; }
+  .shell { align-items: flex-start; padding-top: 0.5rem; padding-bottom: 1.5rem; }
+  .eyebrow { margin-top: 1rem; margin-bottom: 0.45rem; }
+  .title { font-size: clamp(2.35rem, 3.4vw, 3.7rem); }
+  .subtitle { margin-top: 0.55rem; line-height: 1.4; }
+  .options,
+  .optionGrid { gap: 0.5rem; margin-top: 1rem; }
+  .actions { margin-top: 0.85rem; padding-top: 0.85rem; }
+}
+
+@media (max-width: 760px) {
+  .background { background-image: linear-gradient(rgb(248 248 243 / 94%), rgb(248 248 243 / 84%)), url("/images/auth/sign-in-background.png"); background-position: 66% center; }
+  .header,
+  .shell { width: min(100% - 2rem, 1280px); }
+  .header { min-height: 58px; }
+  .shell { align-items: flex-start; padding: 1.1rem 0 1.5rem; }
+  .panel { width: 100%; }
+  .title { max-width: 13ch; font-size: clamp(2.45rem, 11vw, 3.6rem); }
+  .optionGrid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .eyebrow { margin-top: 1.25rem; }
+  .title { font-size: 2.4rem; }
+  .subtitle { font-size: 0.88rem; }
+  .options,
+  .optionGrid { margin-top: 1.1rem; }
+  .continueButton { min-width: 140px; }
+  .summary p { grid-template-columns: 92px 1fr; gap: 0.7rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question { animation: none; }
+  .progressTrack span { transition: none; }
+}

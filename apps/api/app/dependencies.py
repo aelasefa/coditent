@@ -127,6 +127,15 @@ async def require_candidate(
     return current_user
 
 
+async def require_candidate_account(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Authorize candidate-owned flows without legacy admin access."""
+    if current_user.role.value != "CANDIDATE" or current_user.company_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Candidate account required")
+    return current_user
+
+
 async def require_recruiter(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
