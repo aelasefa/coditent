@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Suspense, useState } from "react";
-import { AuthLayout } from "@/components/auth/auth-layout";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/ui/logo";
 import { api } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 import type { TokenResponse } from "@/lib/types";
+import styles from "./login-page.module.css";
 
 type LoginRole = "candidate" | "recruiter";
 
@@ -86,82 +87,124 @@ function LoginInner() {
   }
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Sign in to continue to your workspace.">
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-secondary p-1" role="tablist" aria-label="Account type">
-        {(["candidate", "recruiter"] as LoginRole[]).map((r) => (
-          <button
-            key={r}
-            type="button"
-            role="tab"
-            aria-selected={activeRole === r}
-            onClick={() => {
-              setActiveRole(r);
-              setErrorMessage(null);
-            }}
-            className={activeRole === r ? "h-10 rounded-lg bg-primary text-sm font-semibold text-primary-foreground" : "h-10 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground"}
-          >
-            {r === "candidate" ? "Candidate" : "Recruiter"}
-          </button>
-        ))}
-      </div>
-
-      <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
-        <SocialLoginButtons separator="or continue with email" />
-        <Input
-          label="Email"
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@example.com"
-          disabled={isSubmitting}
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            setErrorMessage(null);
-          }}
+    <main className={styles.page}>
+      <video
+        className={styles.backgroundVideo}
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        poster="/images/auth/sign-in-background.png"
+        aria-hidden="true"
+        tabIndex={-1}
+      >
+        <source
+          src="/images/auth/Create-a-subtle-polished-3-second-silen.mp4"
+          type="video/mp4"
         />
-        <div>
-          <Input
-            label="Password"
-            id="password"
-            type={showPassword ? "text" : "password"}
-            required
-            autoComplete="current-password"
-            placeholder="Your password"
-            disabled={isSubmitting}
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setErrorMessage(null);
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            aria-pressed={showPassword}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            className="mt-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            {showPassword ? "Hide password" : "Show password"}
-          </button>
-        </div>
-        <Button type="submit" loading={isSubmitting} className="w-full">
-          {activeRole === "candidate" ? "Sign in as Candidate" : "Sign in as Recruiter"}
-        </Button>
-        {errorMessage ? (
-          <p role="alert" className="text-sm font-medium text-danger">
-            {errorMessage}
-          </p>
-        ) : null}
-        <p className="text-center text-sm text-muted-foreground">
-          No account yet?{" "}
-          <Link href={`/register?role=${activeRole}`} className="font-semibold text-primary hover:underline">
-            Create one
+      </video>
+
+      <div className={styles.loginContent}>
+        <a href="#auth-form" className={styles.skipLink}>Skip to sign-in form</a>
+        <header className={styles.header}>
+          <Link href="/" aria-label="Coditent home">
+            <Logo size="md" />
           </Link>
-        </p>
-      </form>
-    </AuthLayout>
+          <Link href="/offers/all" className={styles.headerLink}>
+            Browse opportunities <span aria-hidden="true">↗</span>
+          </Link>
+        </header>
+
+        <div className={styles.shell}>
+          <section className={styles.formColumn} aria-labelledby="sign-in-title">
+            <div className={styles.formInner}>
+              <p className={styles.eyebrow}>Welcome back</p>
+              <h1 id="sign-in-title" className={styles.title}>Continue your <em>career journey.</em></h1>
+              <p className={styles.subtitle}>Sign in to return to your profile, applications, and conversations.</p>
+
+              <div id="auth-form" className={styles.formArea}>
+                <div className={styles.roleTabs} role="tablist" aria-label="Account type">
+                  {(["candidate", "recruiter"] as LoginRole[]).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeRole === r}
+                      onClick={() => {
+                        setActiveRole(r);
+                        setErrorMessage(null);
+                      }}
+                      className={activeRole === r ? styles.roleTabActive : styles.roleTab}
+                    >
+                      {r === "candidate" ? "Candidate" : "Recruiter"}
+                    </button>
+                  ))}
+                </div>
+
+                <form className={styles.form} onSubmit={handleSubmit}>
+                  <SocialLoginButtons className={styles.socialLogin} separator="or continue with email" />
+                  <Input
+                    label="Email"
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    disabled={isSubmitting}
+                    aria-describedby={errorMessage ? "login-error" : undefined}
+                    className={styles.input}
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setErrorMessage(null);
+                    }}
+                  />
+                  <div>
+                    <Input
+                      label="Password"
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      autoComplete="current-password"
+                      placeholder="Your password"
+                      disabled={isSubmitting}
+                      aria-describedby={errorMessage ? "login-error" : undefined}
+                      className={styles.input}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setErrorMessage(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-pressed={showPassword}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className={styles.passwordToggle}
+                    >
+                      {showPassword ? "Hide password" : "Show password"}
+                    </button>
+                  </div>
+                  {errorMessage ? (
+                    <p id="login-error" role="alert" className={styles.error}>
+                      {errorMessage}
+                    </p>
+                  ) : null}
+                  <Button type="submit" loading={isSubmitting} className={styles.submitButton}>
+                    {activeRole === "candidate" ? "Sign in as Candidate" : "Sign in as Recruiter"}
+                  </Button>
+                  <p className={styles.registerPrompt}>
+                    New to Coditent?{" "}
+                    <Link href={`/register?role=${activeRole}`}>Create an account</Link>
+                  </p>
+                </form>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
   );
 }
 

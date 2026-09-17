@@ -4,48 +4,101 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AuthLayout } from "@/components/auth/auth-layout";
+import { getAuthenticatedDestination } from "@/lib/auth-redirect";
 import { getMe } from "@/lib/api";
-import { AUTH_TOKEN_KEY } from "@/lib/constants";
+import { saveToken } from "@/lib/auth";
+import {
+  isOAuthPopupAck,
+  OAUTH_POPUP_MESSAGE_TYPE,
+  type OAuthPopupResult,
+} from "@/lib/oauth-popup";
 
 export default function SsoCallbackPage() {
   const router = useRouter();
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [isParsed, setIsParsed] = useState(false);
+  const [standaloneToken, setStandaloneToken] = useState<string | null>(null);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
-    const token = query.get("token");
-    if (token) {
-      localStorage.setItem(AUTH_TOKEN_KEY, token);
-      document.cookie = `${AUTH_TOKEN_KEY}=${token}; path=/; max-age=2592000; SameSite=Lax; secure`;
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const token = fragment.get("token") ?? query.get("token");
+    const callbackError = query.get("error") ?? (!token ? "invalid_sso_callback" : null);
+    const opener = window.opener as Window | null;
+
+    if (opener && !opener.closed) {
+      const message: OAuthPopupResult = token
+        ? {
+            type: OAUTH_POPUP_MESSAGE_TYPE,
+            status: "success",
+            token,
+            isNewRegistration: query.get("registration") === "new",
+          }
+        : {
+            type: OAUTH_POPUP_MESSAGE_TYPE,
+            status: "error",
+            error: callbackError ?? "invalid_sso_callback",
+          };
+      let acknowledged = false;
+
+      const handleAcknowledgement = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.source !== opener || !isOAuthPopupAck(event.data)) return;
+        acknowledged = true;
+        window.removeEventListener("message", handleAcknowledgement);
+        window.close();
+      };
+
+      window.addEventListener("message", handleAcknowledgement);
+      opener.postMessage(message, window.location.origin);
+
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener("message", handleAcknowledgement);
+        if (!acknowledged) {
+          setErrorCode("sso_parent_unavailable");
+          setIsParsed(true);
+        }
+      }, 5000);
+
+      return () => {
+        window.clearTimeout(timeout);
+        window.removeEventListener("message", handleAcknowledgement);
+      };
     }
-    setErrorCode(query.get("error"));
+
+    if (token) {
+      saveToken(token);
+      setStandaloneToken(token);
+    }
+    setErrorCode(callbackError);
     setIsParsed(true);
   }, []);
 
   const readableError = useMemo(() => {
     if (!errorCode) return null;
+    if (errorCode === "sso_parent_unavailable") {
+      return "Could not return sign-in to the original Coditent window. Close this window and try again.";
+    }
+    if (errorCode === "invalid_sso_callback") {
+      return "The sign-in response was invalid. Close this window and try again.";
+    }
     const normalized = errorCode.replace(/_/g, " ");
     return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}.`;
   }, [errorCode]);
 
   useEffect(() => {
-    if (!isParsed || errorCode) return;
+    if (!isParsed || errorCode || !standaloneToken) return;
     let isMounted = true;
     async function finalizeLogin() {
       try {
         const user = await getMe();
         if (!isMounted) return;
         localStorage.setItem("user", JSON.stringify(user));
-        if (user.role === "ADMIN") {
-          router.replace("/admin");
-          return;
-        }
-        if (user.role === "RECRUITER") {
-          router.replace("/recruiter");
-          return;
-        }
-        router.replace("/dashboard");
+        router.replace(
+          getAuthenticatedDestination(user, {
+            isNewRegistration: new URLSearchParams(window.location.search).get("registration") === "new",
+          })
+        );
       } catch {
         if (!isMounted) return;
         setErrorCode("sso_session_missing");
@@ -55,7 +108,7 @@ export default function SsoCallbackPage() {
     return () => {
       isMounted = false;
     };
-  }, [isParsed, errorCode, router]);
+  }, [isParsed, errorCode, router, standaloneToken]);
 
   if (!isParsed) {
     return (
