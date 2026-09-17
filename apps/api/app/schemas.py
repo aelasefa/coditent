@@ -56,7 +56,17 @@ class TokenResponse(APIModel):
 
 
 class OAuthCompleteRegistrationResponse(APIModel):
-    access_token: str
+    handoff_code: str
+    attempt_id: str
+    provider: str
+
+
+class OAuthHandoffExchangeRequest(APIModel):
+    code: str = Field(min_length=20, max_length=200)
+
+
+class OAuthHandoffExchangeResponse(TokenResponse):
+    is_new_registration: bool
     user: UserOut
 
 

@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import secrets
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
 
 from app.config import settings
+from app.cache import get_async_redis
 from app.observability import get_logger
 
 
 oauth_state_expire_minutes = 10
+oauth_handoff_expire_seconds = 90
 allowed_oauth_roles = {"candidate", "recruiter"}
 
 logger = get_logger("oauth")
@@ -38,6 +42,13 @@ class OAuthIdentity:
     oauth_id: str
     avatar_url: str | None
     provider: str
+
+
+@dataclass(frozen=True)
+class OAuthOnboardingContext:
+    identity: OAuthIdentity
+    popup_origin: str
+    attempt_id: str
 
 
 def get_oauth_provider(provider: str) -> OAuthProvider:
@@ -87,17 +98,44 @@ def validate_oauth_role(role: str | None) -> str:
     return normalized_role
 
 
-def create_oauth_state(provider: str) -> str:
+def validate_popup_origin(origin: str | None) -> str:
+    configured = urlparse(settings.frontend_url.rstrip("/"))
+    candidate = urlparse((origin or settings.frontend_url).rstrip("/"))
+    if candidate.scheme not in {"http", "https"} or not candidate.hostname or candidate.path not in {"", "/"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_origin")
+
+    configured_origin = f"{configured.scheme}://{configured.netloc}"
+    candidate_origin = f"{candidate.scheme}://{candidate.netloc}"
+    if candidate_origin == configured_origin:
+        return candidate_origin
+
+    local_hosts = {"localhost", "127.0.0.1"}
+    if (
+        configured.hostname in local_hosts
+        and candidate.hostname in local_hosts
+        and configured.scheme == candidate.scheme == "http"
+        and configured.port == candidate.port
+    ):
+        return candidate_origin
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_origin")
+
+
+def create_oauth_state(provider: str, popup_origin: str, attempt_id: str) -> str:
+    validated_origin = validate_popup_origin(popup_origin)
+    if not attempt_id or len(attempt_id) > 120:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_attempt")
     state_payload = {
         "purpose": "oauth_state",
         "provider": provider,
         "csrf": secrets.token_urlsafe(24),
+        "popup_origin": validated_origin,
+        "attempt_id": attempt_id,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=oauth_state_expire_minutes),
     }
     return jwt.encode(state_payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def verify_oauth_state(state_token: str, provider: str) -> None:
+def verify_oauth_state(state_token: str, provider: str) -> tuple[str, str]:
     try:
         payload = jwt.decode(state_token, settings.secret_key, algorithms=[settings.algorithm])
     except JWTError as exc:
@@ -107,11 +145,14 @@ def verify_oauth_state(state_token: str, provider: str) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     if not payload.get("csrf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    popup_origin = validate_popup_origin(str(payload.get("popup_origin") or ""))
+    attempt_id = str(payload.get("attempt_id") or "")
+    if not attempt_id or len(attempt_id) > 120:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    return popup_origin, attempt_id
 
-    return None
 
-
-def create_onboarding_session(identity: OAuthIdentity) -> str:
+def create_onboarding_session(identity: OAuthIdentity, popup_origin: str, attempt_id: str) -> str:
     payload = {
         "purpose": "oauth_onboarding",
         "provider": identity.provider,
@@ -119,13 +160,15 @@ def create_onboarding_session(identity: OAuthIdentity) -> str:
         "full_name": identity.full_name,
         "oauth_id": identity.oauth_id,
         "avatar_url": identity.avatar_url,
+        "popup_origin": validate_popup_origin(popup_origin),
+        "attempt_id": attempt_id,
         "exp": datetime.now(timezone.utc)
         + timedelta(minutes=settings.oauth_onboarding_expire_minutes),
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def verify_onboarding_session(token: str) -> OAuthIdentity:
+def verify_onboarding_session(token: str) -> OAuthOnboardingContext:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
     except JWTError as exc:
@@ -142,21 +185,55 @@ def verify_onboarding_session(token: str) -> OAuthIdentity:
     if not email or not provider:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="oauth_onboarding_invalid")
 
-    return OAuthIdentity(
-        email=email,
-        full_name=full_name or _name_from_email(email),
-        oauth_id=oauth_id or email,
-        avatar_url=str(avatar_url).strip() if avatar_url else None,
-        provider=provider,
+    popup_origin = validate_popup_origin(str(payload.get("popup_origin") or ""))
+    attempt_id = str(payload.get("attempt_id") or "")
+    if not attempt_id or len(attempt_id) > 120:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="oauth_onboarding_invalid")
+
+    return OAuthOnboardingContext(
+        identity=OAuthIdentity(
+            email=email,
+            full_name=full_name or _name_from_email(email),
+            oauth_id=oauth_id or email,
+            avatar_url=str(avatar_url).strip() if avatar_url else None,
+            provider=provider,
+        ),
+        popup_origin=popup_origin,
+        attempt_id=attempt_id,
     )
 
 
-def build_frontend_dashboard_url() -> str:
-    return f"{settings.frontend_url.rstrip('/')}/dashboard"
+def _handoff_key(code: str) -> str:
+    digest = hashlib.sha256(code.encode()).hexdigest()
+    return f"oauth:handoff:{digest}"
 
 
-def build_frontend_choose_role_url() -> str:
-    return f"{settings.frontend_url.rstrip('/')}/choose-role"
+async def create_oauth_handoff(token: str, user_id: str, is_new_registration: bool) -> str:
+    code = secrets.token_urlsafe(32)
+    payload = json.dumps(
+        {"token": token, "user_id": user_id, "is_new_registration": is_new_registration}
+    )
+    stored = await get_async_redis().set(
+        _handoff_key(code), payload, ex=oauth_handoff_expire_seconds, nx=True
+    )
+    if not stored:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="sso_handoff_unavailable")
+    return code
+
+
+async def consume_oauth_handoff(code: str) -> dict[str, str | bool]:
+    if not code or len(code) > 200:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_handoff")
+    payload = await get_async_redis().getdel(_handoff_key(code))
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="sso_handoff_expired")
+    try:
+        data = json.loads(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff") from exc
+    if not isinstance(data.get("token"), str) or not isinstance(data.get("user_id"), str):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
+    return data
 
 
 def build_oauth_authorize_url(provider: OAuthProvider, redirect_uri: str, state_token: str) -> str:

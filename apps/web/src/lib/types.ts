@@ -95,6 +95,16 @@ export interface TokenResponse {
   user: User;
 }
 
+export interface OAuthHandoffResult extends TokenResponse {
+  is_new_registration: boolean;
+}
+
+export interface OAuthRegistrationHandoff {
+  handoff_code: string;
+  attempt_id: string;
+  provider: string;
+}
+
 export interface OnboardingState {
   search_timeline: string | null;
   desired_opportunity_type: string | null;

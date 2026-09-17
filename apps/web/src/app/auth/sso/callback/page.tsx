@@ -2,146 +2,251 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { AuthLayout } from "@/components/auth/auth-layout";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Logo } from "@/components/ui/logo";
+import { exchangeOAuthHandoff, getCandidateOnboarding, getMe } from "@/lib/api";
 import { getAuthenticatedDestination } from "@/lib/auth-redirect";
-import { getCandidateOnboarding, getMe } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
 import {
   isOAuthPopupAck,
-  OAUTH_POPUP_MESSAGE_TYPE,
+  OAUTH_POPUP_ERROR,
+  OAUTH_POPUP_SUCCESS,
+  oauthChannelName,
   type OAuthPopupResult,
 } from "@/lib/oauth-popup";
+import authStyles from "../../../(auth)/login/login-page.module.css";
+import styles from "./sso-callback.module.css";
+
+type CallbackState = "loading" | "success" | "error";
+
+const errorMessages: Record<string, string> = {
+  invalid_sso_callback: "The sign-in response was incomplete or malformed.",
+  invalid_sso_state: "This sign-in attempt expired or could not be verified.",
+  invalid_sso_origin: "This sign-in attempt came from an unrecognized Coditent page.",
+  sso_provider_error: "The provider cancelled or could not complete sign-in.",
+  sso_code_or_state_missing: "The provider returned an incomplete sign-in response.",
+  sso_handoff_expired: "This sign-in result expired or was already used.",
+  sso_parent_unavailable: "We could not securely return sign-in to the original Coditent window.",
+  sso_session_missing: "The secure Coditent session could not be established.",
+};
 
 export default function SsoCallbackPage() {
   const router = useRouter();
+  const callbackParamsRef = useRef<{
+    handoffCode: string | null;
+    attemptId: string;
+    callbackError: string | null;
+    provider: string | null;
+    isNewRegistration: boolean;
+  } | null>(null);
+  const [state, setState] = useState<CallbackState>("loading");
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [isParsed, setIsParsed] = useState(false);
-  const [standaloneToken, setStandaloneToken] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
 
   useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const token = fragment.get("token") ?? query.get("token");
-    const callbackError = query.get("error") ?? (!token ? "invalid_sso_callback" : null);
+    let active = true;
+    let closeTimer: number | null = null;
+    let responseTimer: number | null = null;
+    let channel: BroadcastChannel | null = null;
+    if (!callbackParamsRef.current) {
+      const query = new URLSearchParams(window.location.search);
+      callbackParamsRef.current = {
+        handoffCode: query.get("handoff"),
+        attemptId: query.get("attempt") ?? "",
+        callbackError: query.get("error"),
+        provider: query.get("provider"),
+        isNewRegistration: query.get("registration") === "new",
+      };
+    }
+    const {
+      handoffCode,
+      attemptId,
+      callbackError,
+      provider: currentProvider,
+      isNewRegistration,
+    } = callbackParamsRef.current;
     const opener = window.opener as Window | null;
+    const isNamedPopup = window.name.startsWith("coditent_oauth_");
+    setProvider(currentProvider);
 
-    if (opener && !opener.closed) {
-      const message: OAuthPopupResult = token
-        ? {
-            type: OAUTH_POPUP_MESSAGE_TYPE,
-            status: "success",
-            token,
-            isNewRegistration: query.get("registration") === "new",
-          }
-        : {
-            type: OAUTH_POPUP_MESSAGE_TYPE,
-            status: "error",
-            error: callbackError ?? "invalid_sso_callback",
-          };
-      let acknowledged = false;
+    // Remove the one-time handoff from browser history immediately after parsing it.
+    window.history.replaceState(null, "", window.location.pathname);
 
-      const handleAcknowledgement = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.source !== opener || !isOAuthPopupAck(event.data)) return;
-        acknowledged = true;
-        window.removeEventListener("message", handleAcknowledgement);
-        window.close();
-      };
-
-      window.addEventListener("message", handleAcknowledgement);
-      opener.postMessage(message, window.location.origin);
-
-      const timeout = window.setTimeout(() => {
-        window.removeEventListener("message", handleAcknowledgement);
-        if (!acknowledged) {
-          setErrorCode("sso_parent_unavailable");
-          setIsParsed(true);
-        }
-      }, 5000);
-
-      return () => {
-        window.clearTimeout(timeout);
-        window.removeEventListener("message", handleAcknowledgement);
-      };
+    function cleanup() {
+      if (closeTimer !== null) window.clearTimeout(closeTimer);
+      if (responseTimer !== null) window.clearTimeout(responseTimer);
+      window.removeEventListener("message", handleAcknowledgement);
+      channel?.close();
     }
 
-    if (token) {
-      saveToken(token);
-      setStandaloneToken(token);
+    function finishClose() {
+      if (responseTimer !== null) {
+        window.clearTimeout(responseTimer);
+        responseTimer = null;
+      }
+      setState("success");
+      closeTimer = window.setTimeout(() => window.close(), 650);
     }
-    setErrorCode(callbackError);
-    setIsParsed(true);
-  }, []);
 
-  const readableError = useMemo(() => {
-    if (!errorCode) return null;
-    if (errorCode === "sso_parent_unavailable") {
-      return "Could not return sign-in to the original Coditent window. Close this window and try again.";
+    function handleAcknowledgement(event: MessageEvent) {
+      if (event.origin !== window.location.origin || event.source !== opener) return;
+      if (isOAuthPopupAck(event.data, attemptId)) finishClose();
     }
-    if (errorCode === "invalid_sso_callback") {
-      return "The sign-in response was invalid. Close this window and try again.";
-    }
-    const normalized = errorCode.replace(/_/g, " ");
-    return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}.`;
-  }, [errorCode]);
 
-  useEffect(() => {
-    if (!isParsed || errorCode || !standaloneToken) return;
-    let isMounted = true;
-    async function finalizeLogin() {
+    function handleChannelAcknowledgement(event: MessageEvent) {
+      if (isOAuthPopupAck(event.data, attemptId)) finishClose();
+    }
+
+    function sendToParent(message: OAuthPopupResult): boolean {
+      let sent = false;
+      if (opener && !opener.closed) {
+        opener.postMessage(message, window.location.origin);
+        sent = true;
+      }
+      if (attemptId && "BroadcastChannel" in window) {
+        channel = new BroadcastChannel(oauthChannelName(attemptId));
+        channel.onmessage = handleChannelAcknowledgement;
+        channel.postMessage(message);
+        sent = true;
+      }
+      return sent;
+    }
+
+    async function finishStandalone() {
+      if (!handoffCode) {
+        setErrorCode(callbackError ?? "invalid_sso_callback");
+        setState("error");
+        return;
+      }
       try {
+        const session = await exchangeOAuthHandoff(handoffCode);
+        if (!active) return;
+        saveToken(session.token);
         const user = await getMe();
-        if (!isMounted) return;
         localStorage.setItem("user", JSON.stringify(user));
         if (user.role === "CANDIDATE") {
           const onboarding = await getCandidateOnboarding();
-          if (!isMounted) return;
           if (!onboarding.onboarding_completed) {
             router.replace("/get-started");
             return;
           }
         }
-        router.replace(
-          getAuthenticatedDestination(user, {
-            isNewRegistration: new URLSearchParams(window.location.search).get("registration") === "new",
-          })
-        );
+        router.replace(getAuthenticatedDestination(user, { isNewRegistration: session.is_new_registration }));
       } catch {
-        if (!isMounted) return;
+        if (!active) return;
         setErrorCode("sso_session_missing");
+        setState("error");
       }
     }
-    finalizeLogin();
+
+    if (callbackError) {
+      if (attemptId) {
+        sendToParent({
+          type: OAUTH_POPUP_ERROR,
+          attemptId,
+          error: callbackError,
+        });
+      }
+      setErrorCode(callbackError);
+      setState("error");
+      return cleanup;
+    }
+
+    if (!handoffCode || !attemptId) {
+      void finishStandalone();
+      return cleanup;
+    }
+
+    if (!isNamedPopup && (!opener || opener.closed)) {
+      void finishStandalone();
+      return cleanup;
+    }
+
+    window.addEventListener("message", handleAcknowledgement);
+    const sent = sendToParent({
+      type: OAUTH_POPUP_SUCCESS,
+      attemptId,
+      handoffCode,
+      isNewRegistration,
+    });
+    setState("success");
+    if (!sent) {
+      setErrorCode("sso_parent_unavailable");
+      setState("error");
+    } else {
+      responseTimer = window.setTimeout(() => {
+        if (!active) return;
+        setErrorCode("sso_parent_unavailable");
+        setState("error");
+      }, 10_000);
+    }
+
     return () => {
-      isMounted = false;
+      active = false;
+      cleanup();
     };
-  }, [isParsed, errorCode, router, standaloneToken]);
+  }, [router]);
 
-  if (!isParsed) {
-    return (
-      <AuthLayout title="Preparing sign-in" subtitle="Reading SSO response.">
-        <p role="status" className="text-sm text-muted-foreground">Loading…</p>
-      </AuthLayout>
-    );
-  }
+  const errorMessage = useMemo(
+    () => errorMessages[errorCode ?? ""] ?? "Social sign-in could not be completed. Please try again.",
+    [errorCode]
+  );
 
-  if (readableError) {
-    return (
-      <AuthLayout title="SSO login failed" subtitle={readableError}>
-        <Link href="/login" className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover">
-          Back to login
-        </Link>
-      </AuthLayout>
-    );
+  function tryAgain() {
+    if (window.opener && !window.opener.closed) {
+      window.opener.focus();
+      window.close();
+      return;
+    }
+    router.replace(provider === "linkedin" ? "/login" : "/login");
   }
 
   return (
-    <AuthLayout title="Completing SSO login" subtitle="Confirming session with API.">
-      <p role="status" className="text-sm text-muted-foreground">Signing you in…</p>
-      <Link href="/login" className="mt-4 inline-block text-sm font-medium text-muted-foreground underline">
-        Back to login
-      </Link>
-    </AuthLayout>
+    <main className={authStyles.page}>
+      <video
+        className={authStyles.backgroundVideo}
+        autoPlay
+        muted
+        playsInline
+        preload="metadata"
+        poster="/images/auth/sign-in-background.png"
+        aria-hidden="true"
+        tabIndex={-1}
+      >
+        <source src="/images/auth/Create-a-subtle-polished-3-second-silen.mp4" type="video/mp4" />
+      </video>
+      <div className={authStyles.loginContent}>
+        <header className={authStyles.header}>
+          <Link href="/" aria-label="Coditent home"><Logo size="md" /></Link>
+          <Link href="/login" className={authStyles.headerLink}>Back to sign in</Link>
+        </header>
+        <div className={authStyles.shell}>
+          <section className={authStyles.formColumn} aria-live="polite">
+            <div className={`${authStyles.formInner} ${styles.card}`}>
+              <div className={state === "error" ? styles.errorIcon : state === "success" ? styles.successIcon : styles.loadingIcon} aria-hidden>
+                {state === "error" ? "!" : state === "success" ? "✓" : <span />}
+              </div>
+              <p className={authStyles.eyebrow}>Secure authentication</p>
+              <h1 className={styles.title}>
+                {state === "loading" ? "Signing you in" : state === "success" ? "Signed in successfully" : "Couldn’t sign you in"}
+              </h1>
+              <p className={styles.subtitle}>
+                {state === "loading"
+                  ? "Finishing your secure sign-in…"
+                  : state === "success"
+                    ? "Returning you to Coditent…"
+                    : errorMessage}
+              </p>
+              {state === "error" ? (
+                <div className={styles.actions}>
+                  <button type="button" className={styles.primaryButton} onClick={tryAgain}>Try again</button>
+                  <Link href="/login" className={styles.secondaryButton}>Back to sign in</Link>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
   );
 }
