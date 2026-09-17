@@ -171,7 +171,10 @@ export default function GetStartedPage() {
     setError(null);
     try {
       const completedState = await completeCandidateOnboarding();
-      queryClient.setQueryData(["candidate-onboarding"], completedState);
+      queryClient.setQueriesData(
+        { queryKey: ["candidate-onboarding"] },
+        completedState
+      );
       router.push("/dashboard/recommendations");
     } catch (requestError) {
       setError(readableError(requestError));

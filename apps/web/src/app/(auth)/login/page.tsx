@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { Suspense, useState } from "react";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
-import { api, getCandidateOnboarding } from "@/lib/api";
+import { api } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
+import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import type { TokenResponse } from "@/lib/types";
 import styles from "./login-page.module.css";
 
@@ -23,6 +25,7 @@ function safeNext(raw: string | null): string | null {
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [activeRole, setActiveRole] = useState<LoginRole>("candidate");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,18 +65,7 @@ function LoginInner() {
       }
 
       saveToken(data.token);
-      if (data.user.role === "CANDIDATE") {
-        const onboarding = await getCandidateOnboarding();
-        if (!onboarding.onboarding_completed) {
-          router.push("/get-started");
-          return;
-        }
-      }
-      if (nextPath) {
-        router.push(nextPath);
-        return;
-      }
-      router.push(data.user.role === "RECRUITER" ? "/recruiter" : "/dashboard");
+      router.push(await getPostAuthDestination(queryClient, data.user, { next: nextPath }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
