@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ComponentType } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import styles from "./candidate-pages.module.css";
 
 export interface NextAction {
   icon: ComponentType<{ className?: string }>;
@@ -15,7 +16,7 @@ export interface NextAction {
 export function NextActionCard({ action }: { action: NextAction }) {
   const Icon = action.icon;
   return (
-    <Card>
+    <Card className={styles.nextAction}>
       <CardContent className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Icon className="h-4 w-4" />

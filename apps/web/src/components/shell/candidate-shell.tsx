@@ -32,6 +32,7 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
   if (me?.role === "CANDIDATE" && (isLoading || onboarding?.onboarding_completed === false)) return null;
 
   return (
+    <div className="candidate-theme">
     <AppShell
       navSections={candidateNavSections}
       bottomNav={candidateBottomNav}
@@ -46,5 +47,6 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AppShell>
+    </div>
   );
 }

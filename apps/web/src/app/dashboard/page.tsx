@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { FiArrowRight, FiBriefcase, FiCheckSquare, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
 import { api, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
-import { PageContainer, PageHeader } from "@/components/shell/page-container";
-import { Card, CardContent } from "@/components/ui/card";
+import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JobCard } from "@/components/candidate/job-card";
-import { ApplicationStage, stageLabel } from "@/components/candidate/application-stage";
+import { ApplicationStage } from "@/components/candidate/application-stage";
 import { NextActionCard, type NextAction } from "@/components/candidate/next-action-card";
+import { getProfileCompletion } from "@/components/candidate/profile-completion";
 import type { ApplicationItem } from "@/lib/types";
+import styles from "@/components/candidate/candidate-pages.module.css";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -19,19 +20,6 @@ function greeting(): string {
   if (h < 18) return "Good afternoon";
   return "Good evening";
 }
-
-const PROFILE_FIELDS = [
-  { key: "headline", label: "Headline" },
-  { key: "bio", label: "Bio" },
-  { key: "skills", label: "Skills" },
-  { key: "city", label: "City" },
-  { key: "phone", label: "Phone" },
-  { key: "field_of_study", label: "Field of study" },
-  { key: "university", label: "University" },
-  { key: "study_level", label: "Study level" },
-  { key: "linkedin_url", label: "LinkedIn" },
-  { key: "portfolio_url", label: "Portfolio" },
-] as const;
 
 export default function DashboardPage() {
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
@@ -47,25 +35,21 @@ export default function DashboardPage() {
   const chatsQuery = useQuery({ queryKey: ["my-recruitment-chats"], queryFn: listRecruitmentChats });
 
   const me = meQuery.data;
-  const profile = (profileQuery.data ?? {}) as Record<string, unknown>;
+  const profile = profileQuery.data;
   const recs = recsQuery.data ?? [];
   const apps = appsQuery.data ?? [];
   const chats = chatsQuery.data ?? [];
   const loading = meQuery.isLoading || profileQuery.isLoading || recsQuery.isLoading || appsQuery.isLoading;
 
   const firstName = (me?.full_name ?? "").split(" ")[0] || null;
-  const missingProfile = PROFILE_FIELDS.filter((f) => {
-    const v = profile[f.key];
-    return v == null || String(v).trim() === "";
-  });
-  const hasCv = Boolean((profile as { cv_url?: string | null }).cv_url);
+  const completion = getProfileCompletion(profile, me?.avatar_url);
 
   const actions: NextAction[] = [];
-  if (!profileQuery.isLoading && (missingProfile.length > 0 || !hasCv)) {
+  if (!profileQuery.isLoading && completion.missing.length > 0) {
     actions.push({
       icon: FiUser,
       title: "Complete your profile",
-      context: `${missingProfile.length + (hasCv ? 0 : 1)} items missing. Strong profiles get better matches.`,
+      context: `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} to complete before your profile is ready.`,
       cta: "Open profile",
       href: "/profile",
     });
@@ -110,135 +94,65 @@ export default function DashboardPage() {
   const recentApps = [...apps]
     .sort((a, b) => String(b.updated_at ?? b.created_at ?? "").localeCompare(String(a.updated_at ?? a.created_at ?? "")))
     .slice(0, 4);
-  const doneCount = PROFILE_FIELDS.length + 1 - missingProfile.length - (hasCv ? 0 : 1);
-  const totalCount = PROFILE_FIELDS.length + 1;
+  const doneCount = completion.done;
+  const totalCount = completion.total;
 
   return (
     <PageContainer>
-      <PageHeader
-        title={firstName ? `${greeting()}, ${firstName}` : "Your career dashboard"}
-        description="Next actions, best matches and recent application activity."
-      />
+      <section className={styles.overviewHero} aria-labelledby="dashboard-heading">
+        <div className={styles.heroCopy}>
+          <p className={styles.eyebrow}>Your career space</p>
+          <h1 id="dashboard-heading" className={styles.heroTitle}>
+            {firstName ? `${greeting()}, ${firstName}.` : "Your next chapter starts here."}
+          </h1>
+          <p className={styles.heroDescription}>Pick up where you left off, explore opportunities, and keep every application in view.</p>
+          <Link href="/dashboard/recommendations" className={styles.heroLink}>
+            Explore opportunities <FiArrowRight aria-hidden />
+          </Link>
+        </div>
+      </section>
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
+        <div className="grid gap-4 md:grid-cols-3" role="status" aria-label="Loading dashboard">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32" />)}
         </div>
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-          <div className="space-y-8">
-            <section aria-label="Next actions">
-              <h2 className="ct-section-title">Next actions</h2>
-              {nextActions.length === 0 ? (
-                <Card className="mt-3">
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">Nothing urgent. Explore new opportunities.</p>
-                    <Link href="/dashboard/recommendations" className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">
-                      Open Discover
-                    </Link>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {nextActions.map((a) => (
-                    <NextActionCard key={a.title} action={a} />
-                  ))}
-                </div>
-              )}
-            </section>
+        <div className={styles.dashboardFlow}>
+          <section className={styles.journeyRail} aria-label="Your career at a glance">
+            <Link href="/profile" className={styles.journeyItem}>
+              <span>Profile</span>
+              <strong>{Math.round((doneCount / totalCount) * 100)}%</strong>
+              <p>{completion.missing.length ? `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} left to add` : "Your profile is complete"}</p>
+              <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} /></div>
+            </Link>
+            <Link href="/dashboard/applications" className={styles.journeyItem}>
+              <span>Applications</span><strong>{apps.length}</strong><p>Track each stage and next step</p>
+            </Link>
+            <Link href="/chat" className={styles.journeyItem}>
+              <span>Conversations</span><strong>{chats.length}</strong><p>Messages about your applications</p>
+            </Link>
+          </section>
 
-            <section aria-label="Recommended for you">
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 className="ct-section-title">Recommended for you</h2>
-                <Link href="/dashboard/recommendations" className="text-[13px] font-semibold text-primary hover:underline">
-                  View all
-                </Link>
-              </div>
-              {topRecs.length === 0 ? (
-                <EmptyState
-                  title="No recommendations yet"
-                  description="Generate matches from Discover to see top picks here."
-                  primaryAction={{ label: "Open Discover", href: "/dashboard/recommendations" }}
-                />
-              ) : (
-                <div className="mt-3 space-y-3">
-                  {topRecs.map((r) => (
-                    <JobCard
-                      key={r.id}
-                      rec={r}
-                      applied={appliedIds.has(r.offer.id)}
-                      href={`/dashboard/recommendations?offer=${r.offer.id}`}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
+          <section aria-label="Next actions">
+            <div className={styles.sectionHeading}><h2>What needs your attention</h2></div>
+            {nextActions.length === 0 ? <div className={styles.quietNotice}><p>Nothing urgent right now. Discover a role that fits your next move.</p><Link href="/dashboard/recommendations">Explore roles <FiArrowRight aria-hidden /></Link></div> : (
+              <div className={styles.actionGrid}>{nextActions.map((action) => <NextActionCard key={action.title} action={action} />)}</div>
+            )}
+          </section>
 
-          <div className="space-y-8">
-            <section aria-label="Application activity">
-              <h2 className="ct-section-title">Application activity</h2>
-              {recentApps.length === 0 ? (
-                <div className="mt-3">
-                  <EmptyState
-                    icon={FiBriefcase}
-                    title="No applications yet"
-                    description="Jobs you apply to appear here with stage updates."
-                    primaryAction={{ label: "Discover opportunities", href: "/dashboard/recommendations" }}
-                  />
-                </div>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {recentApps.map((a) => (
-                    <li key={a.id} className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface px-4 py-3">
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-foreground">
-                          {a.opportunity?.title ?? "Application"}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {a.opportunity?.company ?? ""} {a.updated_at ? `· ${new Date(a.updated_at).toLocaleDateString()}` : ""}
-                        </span>
-                      </span>
-                      <ApplicationStage status={a.status} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {apps.length > 0 ? (
-                <Link href="/dashboard/applications" className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-primary hover:underline">
-                  Open tracker <FiArrowRight aria-hidden className="h-3.5 w-3.5" />
-                </Link>
-              ) : null}
-            </section>
+          <section aria-label="Recommended for you">
+            <div className={styles.sectionHeading}><h2>Opportunities to explore</h2><Link href="/dashboard/recommendations" className={styles.sectionLink}>View all <FiArrowRight aria-hidden /></Link></div>
+            {topRecs.length === 0 ? <EmptyState title="No opportunities yet" description="Analyze matches in Discover to see relevant roles here." primaryAction={{ label: "Open Discover", href: "/dashboard/recommendations" }} /> : (
+              <div className={styles.recommendationGrid}>{topRecs.map((recommendation) => <JobCard key={recommendation.id} rec={recommendation} applied={appliedIds.has(recommendation.offer.id)} href={`/dashboard/recommendations?offer=${recommendation.offer.id}`} />)}</div>
+            )}
+          </section>
 
-            <section aria-label="Profile readiness">
-              <h2 className="ct-section-title">Profile readiness</h2>
-              <Card className="mt-3">
-                <CardContent>
-                  <p className="text-sm font-semibold text-foreground">
-                    {doneCount} of {totalCount} complete
-                  </p>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-secondary" role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion">
-                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} />
-                  </div>
-                  {missingProfile.length > 0 ? (
-                    <p className="mt-2 text-[13px] text-muted-foreground">
-                      Missing: {missingProfile.slice(0, 4).map((f) => f.label).join(", ")}
-                      {missingProfile.length > 4 ? ` +${missingProfile.length - 4} more` : ""}
-                      {hasCv ? "" : `${missingProfile.length > 0 ? ", " : ""}CV`}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-[13px] text-muted-foreground">Profile basics complete. Current stage: {apps.length > 0 ? stageLabel(apps[0].status) : "exploring"}.</p>
-                  )}
-                  <Link href="/profile" className="mt-2 inline-block text-[13px] font-semibold text-primary hover:underline">
-                    Improve profile
-                  </Link>
-                </CardContent>
-              </Card>
-            </section>
-          </div>
+          <section aria-label="Application activity">
+            <div className={styles.sectionHeading}><h2>Application activity</h2><Link href="/dashboard/applications" className={styles.sectionLink}>Open tracker <FiArrowRight aria-hidden /></Link></div>
+            {recentApps.length === 0 ? <EmptyState icon={FiBriefcase} title="No applications yet" description="Applied roles appear here with their latest stage." primaryAction={{ label: "Discover opportunities", href: "/dashboard/recommendations" }} /> : (
+              <ul className={styles.activityList}>{recentApps.map((application) => <li key={application.id}><Link href={`/dashboard/applications?app=${application.id}`}><span><strong>{application.opportunity?.title ?? "Application"}</strong><small>{application.opportunity?.company ?? ""}{application.updated_at ? ` · Updated ${new Date(application.updated_at).toLocaleDateString()}` : ""}</small></span><ApplicationStage status={application.status} /><FiArrowRight aria-hidden className={styles.activityArrow} /></Link></li>)}</ul>
+            )}
+          </section>
         </div>
       )}
     </PageContainer>

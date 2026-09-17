@@ -4,11 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { FiMessageSquare } from "react-icons/fi";
 import { getConversations, getMe, listRecruitmentChats } from "@/lib/api";
-import { PageContainer, PageHeader } from "@/components/shell/page-container";
+import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApplicationStage } from "@/components/candidate/application-stage";
+import styles from "@/components/candidate/candidate-pages.module.css";
 
 function timeLabel(iso?: string | null): string {
   if (!iso) return "";
@@ -29,7 +30,7 @@ function InboxContent() {
 
   return (
     <PageContainer>
-      <PageHeader title="Messages" description="Recruiter conversations linked to applications." />
+      <div className={styles.pageIntro}><h1>Messages</h1><p>Conversations about your applications and career connections.</p></div>
       {loading ? (
         <div className="space-y-2" role="status" aria-label="Loading conversations">
           {[1, 2, 3].map((i) => (
@@ -61,7 +62,7 @@ function InboxContent() {
                   <li key={c.application_id}>
                     <Link
                       href={`/chat/recruitment/${c.application_id}`}
-                      className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface px-4 py-3 hover:border-border-strong"
+                      className={`${styles.messageRow} flex items-center gap-3 border border-border-subtle bg-surface px-4 py-3`}
                     >
                       <Avatar name={c.peer?.full_name ?? c.company_name ?? c.offer_title} size="md" src={c.peer?.avatar_url} />
                       <span className="min-w-0 flex-1">
@@ -93,7 +94,7 @@ function InboxContent() {
                   <li key={c.user.id}>
                     <Link
                       href={`/chat/${c.user.id}`}
-                      className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface px-4 py-3 hover:border-border-strong"
+                      className={`${styles.messageRow} flex items-center gap-3 border border-border-subtle bg-surface px-4 py-3`}
                     >
                       <Avatar name={c.user.full_name} size="md" src={c.user.avatar_url} />
                       <span className="min-w-0 flex-1">

@@ -200,7 +200,7 @@ export interface ApplicationItem {
   created_at?: string;
   updated_at?: string | null;
   candidate?: User;
-  opportunity?: Offer;
+  opportunity?: Pick<Offer, "id" | "title" | "company">;
 }
 
 export interface RecruitmentPeer {

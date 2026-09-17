@@ -1,9 +1,10 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import styles from "./candidate-pages.module.css";
 
 export interface DiscoverFilters {
   query: string;
@@ -16,59 +17,33 @@ export interface DiscoverFilters {
 interface FilterBarProps {
   filters: DiscoverFilters;
   onChange: (f: DiscoverFilters) => void;
-  fields: string[];
-  regions: string[];
   onGenerate: () => void;
   generating: boolean;
 }
 
-export function FilterBar({ filters, onChange, fields, regions, onGenerate, generating }: FilterBarProps) {
-  const activeChips: Array<{ key: string; label: string; clear: () => void }> = [];
-  if (filters.field) activeChips.push({ key: "field", label: filters.field, clear: () => onChange({ ...filters, field: "" }) });
-  if (filters.region) activeChips.push({ key: "region", label: filters.region, clear: () => onChange({ ...filters, region: "" }) });
-  if (filters.type !== "ALL")
-    activeChips.push({
-      key: "type",
-      label: filters.type === "JOB" ? "Job" : "Internship",
-      clear: () => onChange({ ...filters, type: "ALL" }),
-    });
+export function FilterBar({ filters, onChange, onGenerate, generating }: FilterBarProps) {
+  const searchRef = useRef<HTMLInputElement>(null);
+  const hasFilters = Boolean(filters.query || filters.field || filters.region || filters.type !== "ALL" || filters.sort !== "match");
 
   return (
-    <div className="space-y-3">
-      <Input
-        label="Search opportunities"
-        placeholder="Search roles, skills or companies"
-        value={filters.query}
-        onChange={(e) => onChange({ ...filters, query: e.target.value })}
-        autoComplete="off"
-      />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Select
-          aria-label="Field"
-          label="Field"
-          value={filters.field}
-          onChange={(e) => onChange({ ...filters, field: e.target.value })}
-        >
-          <option value="">All fields</option>
-          {fields.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label="Region"
-          label="Region"
-          value={filters.region}
-          onChange={(e) => onChange({ ...filters, region: e.target.value })}
-        >
-          <option value="">All regions</option>
-          {regions.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </Select>
+    <div className={styles.discoverToolbar}>
+      <div className={styles.toolbarSearch}>
+        <Input
+          ref={searchRef}
+          label="Search opportunities"
+          placeholder="Role, skill or company"
+          value={filters.query}
+          onChange={(e) => onChange({ ...filters, query: e.target.value })}
+          autoComplete="off"
+          className={filters.query ? "pr-10" : undefined}
+        />
+        {filters.query ? <button type="button" aria-label="Clear search" onClick={() => { onChange({ ...filters, query: "" }); searchRef.current?.focus(); }} className="absolute right-3 top-9 rounded p-1 text-muted-foreground hover:text-foreground">×</button> : null}
+      </div>
+      <div className={styles.toolbarPair}>
+        <Input label="Field" placeholder="Any field" value={filters.field} onChange={(e) => onChange({ ...filters, field: e.target.value })} />
+        <Input label="Region" placeholder="Any region" value={filters.region} onChange={(e) => onChange({ ...filters, region: e.target.value })} />
+      </div>
+      <div className={styles.toolbarPair}>
         <Select
           aria-label="Opportunity type"
           label="Type"
@@ -89,33 +64,12 @@ export function FilterBar({ filters, onChange, fields, regions, onGenerate, gene
           <option value="newest">Newest</option>
         </Select>
       </div>
-      {activeChips.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5" aria-label="Active filters">
-          {activeChips.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              onClick={c.clear}
-              aria-label={`Remove filter ${c.label}`}
-              className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-hover"
-            >
-              {c.label} <span aria-hidden>×</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => onChange({ ...filters, field: "", region: "", type: "ALL", query: "" })}
-            className="text-xs font-semibold text-primary hover:underline"
-          >
-            Clear all
-          </button>
-        </div>
-      ) : null}
-      <div className="flex items-center gap-2">
+      <div className={styles.toolbarActions}>
         <Button variant="secondary" size="sm" onClick={onGenerate} loading={generating}>
-          Refresh recommendations
+          Analyze matches
         </Button>
-        <Badge variant="neutral">AI ranked</Badge>
+        {hasFilters ? <button type="button" onClick={() => onChange({ query: "", field: "", region: "", type: "ALL", sort: "match" })} className="text-xs font-semibold text-primary hover:underline">Clear filters</button> : null}
+        <span>Uses your profile field and city when left blank.</span>
       </div>
     </div>
   );
