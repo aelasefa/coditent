@@ -2,6 +2,7 @@ import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Annotated
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -139,7 +140,10 @@ def _build_sso_response(request: Request, token: str, user: User) -> Response:
     wants_html = "text/html" in accept_header
 
     if wants_html:
-        callback_url = f"{settings.frontend_url.rstrip('/')}/auth/sso/callback?token={token}"
+        callback_url = (
+            f"{settings.frontend_url.rstrip('/')}/auth/sso/callback"
+            f"#token={quote(token, safe='')}"
+        )
         response: Response = RedirectResponse(
             url=callback_url,
             status_code=status.HTTP_302_FOUND,
@@ -160,6 +164,16 @@ def _build_sso_response(request: Request, token: str, user: User) -> Response:
         path="/",
     )
     return response
+
+
+def _build_sso_error_response(request: Request, detail: str, status_code: int) -> Response:
+    if "text/html" in request.headers.get("accept", "").lower():
+        callback_url = (
+            f"{settings.frontend_url.rstrip('/')}/auth/sso/callback?"
+            f"{urlencode({'error': detail})}"
+        )
+        return RedirectResponse(url=callback_url, status_code=status.HTTP_302_FOUND)
+    raise HTTPException(status_code=status_code, detail=detail)
 
 
 def _build_onboarding_response(request: Request, onboarding_token: str) -> Response:
@@ -229,17 +243,21 @@ async def sso_callback(
     state: str | None = None,
     error: str | None = None,
 ) -> Response:
-    oauth_provider = get_oauth_provider(provider)
+    try:
+        oauth_provider = get_oauth_provider(provider)
+    except HTTPException as exc:
+        return _build_sso_error_response(request, str(exc.detail), exc.status_code)
 
     if error:
         logger.warning("sso_error", provider=provider, error=error)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_provider_error")
+        return _build_sso_error_response(
+            request, "sso_provider_error", status.HTTP_400_BAD_REQUEST
+        )
 
     if not code or not state:
         logger.warning("sso_error", provider=provider, error="sso_code_or_state_missing")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="sso_code_or_state_missing",
+        return _build_sso_error_response(
+            request, "sso_code_or_state_missing", status.HTTP_400_BAD_REQUEST
         )
 
     try:
@@ -252,13 +270,12 @@ async def sso_callback(
         user = result.scalar_one_or_none()
     except HTTPException as exc:
         logger.warning("sso_error", provider=provider, error=str(exc.detail))
-        raise
-    except Exception as exc:
+        return _build_sso_error_response(request, str(exc.detail), exc.status_code)
+    except Exception:
         logger.exception("sso_error", provider=provider, error="sso_internal_error")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="sso_internal_error",
-        ) from exc
+        return _build_sso_error_response(
+            request, "sso_internal_error", status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
     if user is None:
         onboarding_token = create_onboarding_session(identity)
