@@ -77,3 +77,19 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "3001:3000"
+
+  proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: coditent-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+

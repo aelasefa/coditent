@@ -22,8 +22,8 @@ class UserOut(APIModel):
 
 class RegisterRequest(APIModel):
     email: EmailStr
-    password: str = Field(min_length=8)
-    full_name: str = Field(min_length=2)
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=2, max_length=100)
     role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
 
 
@@ -38,7 +38,7 @@ class ResendVerificationRequest(APIModel):
 
 class LoginRequest(APIModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
 
 
 class OAuthCompleteRegistrationRequest(APIModel):
@@ -47,7 +47,8 @@ class OAuthCompleteRegistrationRequest(APIModel):
 
 class AdminLoginRequest(APIModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
+
 
 
 class TokenResponse(APIModel):
@@ -145,13 +146,14 @@ class RecruiterApprovalOut(APIModel):
 
 
 class OfferCreate(APIModel):
-    title: str = Field(min_length=2)
-    company: str = Field(min_length=2)
-    region: str
-    field: str
+    title: str = Field(min_length=2, max_length=150)
+    company: str = Field(min_length=2, max_length=150)
+    region: str = Field(min_length=2, max_length=100)
+    field: str = Field(min_length=2, max_length=100)
     type: Literal["JOB", "INTERNSHIP"]
-    description: str = Field(min_length=10)
-    requirements: str = Field(min_length=10)
+    description: str = Field(min_length=10, max_length=10000)
+    requirements: str = Field(min_length=10, max_length=10000)
+
 
 
 class OfferOut(APIModel):
