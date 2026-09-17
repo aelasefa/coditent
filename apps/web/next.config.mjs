@@ -20,6 +20,14 @@ const nextConfig = {
         source: "/api-proxy/:path*",
         destination: `${backendTarget.startsWith("http") ? backendTarget : "http://34.205.255.37"}/:path*`,
       },
+      {
+        source: "/auth/sso/google/callback",
+        destination: `${backendTarget.startsWith("http") ? backendTarget : "http://34.205.255.37"}/auth/sso/google/callback`,
+      },
+      {
+        source: "/auth/sso/linkedin/callback",
+        destination: `${backendTarget.startsWith("http") ? backendTarget : "http://34.205.255.37"}/auth/sso/linkedin/callback`,
+      },
     ];
   },
 };
