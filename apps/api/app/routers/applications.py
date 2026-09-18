@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +10,7 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Application, Offer, User
+from app.models import Application, CandidateProfile, Offer, User
 from app.services.recruitment_chat import is_chat_enabled_for_status
 
 router = APIRouter()
@@ -50,7 +51,15 @@ async def list_applications(
             .order_by(Application.created_at.desc())
         )
         rows = result.all()
-        return {"applications": [_serialize_application(a, u) for a, u in rows]}
+        profiles = await _profiles_by_user_id(
+            db, {row[0].candidate_id for row in rows}
+        )
+        return {
+            "applications": [
+                _serialize_application(a, u, profiles.get(a.candidate_id))
+                for a, u in rows
+            ]
+        }
     if current_user.role.value == "PLATFORM_ADMIN":
         result = await db.execute(select(Application).order_by(Application.created_at.desc()))
         apps = result.scalars().all()
@@ -58,7 +67,33 @@ async def list_applications(
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
-def _serialize_application(app: Application, candidate: User | None) -> dict:
+def _effective_cv_path(app: Application, profile: CandidateProfile | None) -> str | None:
+    """Resolve the candidate's CV for an application.
+
+    Source of truth is the candidate profile; the application stores a snapshot
+    copied at apply time. Fall back to the live profile CV so applications
+    created before the snapshot existed still resolve the existing file.
+    No second CV record is ever created here.
+    """
+    if app.cv_url:
+        return app.cv_url
+    if profile is not None and profile.cv_url:
+        return profile.cv_url
+    return None
+
+
+def _serialize_application(
+    app: Application,
+    candidate: User | None,
+    profile: CandidateProfile | None = None,
+) -> dict:
+    """Recruiter-facing application payload.
+
+    Relationship chain: Application -> User (candidate) -> CandidateProfile
+    (skills + CV). Skills come from the single source of truth,
+    CandidateProfile.skills — the same value the candidate sees.
+    """
+    cv_path = _effective_cv_path(app, profile)
     return {
         "id": str(app.id),
         "candidate_id": str(app.candidate_id),
@@ -71,11 +106,57 @@ def _serialize_application(app: Application, candidate: User | None) -> dict:
         "created_at": app.created_at.isoformat() if app.created_at else None,
         "updated_at": app.updated_at.isoformat() if app.updated_at else None,
         "candidate": (
-            {"full_name": candidate.full_name, "email": candidate.email}
+            {
+                "full_name": candidate.full_name,
+                "email": candidate.email,
+                "avatar_url": candidate.avatar_url,
+                # Same source of truth as the candidate's own profile view.
+                "skills": profile.skills if profile is not None else None,
+                "headline": profile.headline if profile is not None else None,
+                "city": profile.city if profile is not None else None,
+            }
             if candidate is not None
             else None
         ),
+        "profile": (
+            {
+                "headline": profile.headline,
+                "bio": profile.bio,
+                "field_of_study": profile.field_of_study,
+                "university": profile.university,
+                "study_level": profile.study_level.value if profile.study_level else None,
+                "skills": profile.skills,
+                "years_of_experience": profile.years_of_experience,
+                "city": profile.city,
+                "linkedin_url": profile.linkedin_url,
+                "portfolio_url": profile.portfolio_url,
+            }
+            if profile is not None
+            else None
+        ),
+        # Never expose the raw storage path as a linkable URL: the bucket is
+        # private. View/Download go through GET /applications/{id}/cv, which
+        # re-checks company isolation on every request.
+        "cv": (
+            {
+                "filename": cv_path.rsplit("/", 1)[-1],
+                "download_url": f"/applications/{app.id}/cv",
+            }
+            if cv_path
+            else None
+        ),
     }
+
+
+async def _profiles_by_user_id(
+    db: AsyncSession, user_ids: set[UUID],
+) -> dict[UUID, CandidateProfile]:
+    if not user_ids:
+        return {}
+    result = await db.execute(
+        select(CandidateProfile).where(CandidateProfile.user_id.in_(user_ids))
+    )
+    return {profile.user_id: profile for profile in result.scalars().all()}
 
 
 def _queue_screening(application_id: UUID) -> None:
@@ -101,7 +182,9 @@ async def get_application(
     if current_user.role.value == "CANDIDATE":
         if app.candidate_id != current_user.id:
             raise HTTPException(status_code=404, detail="Application not found")
-        return {"id": str(app.id), "opportunity_id": str(app.opportunity_id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status), "ai_status": getattr(app, "ai_status", None) or "pending"}
+        candidate = (await db.execute(select(User).where(User.id == app.candidate_id))).scalar_one_or_none()
+        profiles = await _profiles_by_user_id(db, {app.candidate_id})
+        return _serialize_application(app, candidate, profiles.get(app.candidate_id))
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "view_applications"):
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -109,8 +192,81 @@ async def get_application(
         if not offer or offer.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Application not found")
         candidate = (await db.execute(select(User).where(User.id == app.candidate_id))).scalar_one_or_none()
-        return _serialize_application(app, candidate)
+        profiles = await _profiles_by_user_id(db, {app.candidate_id})
+        return _serialize_application(app, candidate, profiles.get(app.candidate_id))
     raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.get("/{application_id}/cv")
+async def download_application_cv(
+    application_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Stream the candidate's CV for an application.
+
+    Access requires: requester owns the application (candidate), or is a
+    company member with view rights whose company owns the job, or platform
+    admin. Company isolation is re-checked here — a Company B recruiter
+    changing the ID gets 404, never Company A's file. The storage path comes
+    from the DB (never from user input) and must live under the candidate's
+    own prefix.
+    """
+    app = (await db.execute(select(Application).where(Application.id == application_id))).scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if current_user.role.value == "CANDIDATE":
+        if app.candidate_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Application not found")
+    elif current_user.role.value == "COMPANY_USER":
+        if not can(current_user.company_role, "view_applications"):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
+        if not offer or offer.company_id != current_user.company_id:
+            raise HTTPException(status_code=404, detail="Application not found")
+        if app.company_id is not None and app.company_id != current_user.company_id:
+            raise HTTPException(status_code=404, detail="Application not found")
+    elif current_user.role.value != "PLATFORM_ADMIN":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    profile = (
+        await db.execute(
+            select(CandidateProfile).where(CandidateProfile.user_id == app.candidate_id)
+        )
+    ).scalar_one_or_none()
+    cv_path = _effective_cv_path(app, profile)
+    if not cv_path:
+        raise HTTPException(status_code=404, detail="No CV attached to this application")
+    # Defense in depth: storage keys are "<candidate_id>/...".
+    if not cv_path.startswith(f"{app.candidate_id}/"):
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    from app.services.cv_storage import CVStorageError, download_cv
+
+    try:
+        data = download_cv(cv_path)
+    except CVStorageError:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    filename = cv_path.rsplit("/", 1)[-1]
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    media = {
+        "pdf": "application/pdf",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }.get(ext, "application/octet-stream")
+    await log_audit(
+        db,
+        action="RECRUITER_CV_VIEWED",
+        actor=current_user,
+        company_id=getattr(current_user, "company_id", None),
+        resource_type="application",
+        resource_id=app.id,
+    )
+    return StreamingResponse(
+        iter([data]),
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("", response_model=dict)

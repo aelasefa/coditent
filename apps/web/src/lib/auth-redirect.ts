@@ -18,5 +18,5 @@ export function getAuthenticatedDestination(
     if (options.isNewRegistration && !user.is_approved) return "/pending-approval";
     return "/recruiter";
   }
-  return options.isNewRegistration ? "/get-started" : "/dashboard";
+  return "/dashboard";
 }

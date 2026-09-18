@@ -23,7 +23,9 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
   const offer = rec.offer;
   const score = rec.score ?? rec.ai_score ?? null;
   const reasoning = rec.reasoning ?? rec.ai_reasoning ?? null;
-  const matchState = getMatchState(score, reasoning);
+  const matchStatus = rec.status ?? null;
+  const matchState = getMatchState(score, reasoning, matchStatus);
+  const [retrying, setRetrying] = useState(false);
   const skills = parseSkills(offer.required_skills);
   const location = offerLocation(offer);
   const posted = formatDate(offer.posted_at);
@@ -82,7 +84,7 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <MatchScore score={score} reasoning={reasoning} />
+        <MatchScore score={score} reasoning={reasoning} status={matchStatus} />
         {offer.required_experience ? (
           <span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs text-foreground-secondary">
             {offer.required_experience}
@@ -151,7 +153,28 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
         ) : matchState === "pending" ? (
           <p className="mt-2 text-sm text-muted-foreground">Match analysis in progress. Check back soon.</p>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">We could not generate a match analysis.</p>
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">We could not generate a match analysis.</p>
+            <button
+              type="button"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                try {
+                  await api.post(`/recommendations/score/${offer.id}`);
+                  queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+                  toast("Match scoring restarted", { variant: "info" });
+                } catch {
+                  toast("Could not restart scoring", { description: "Check connection, then retry.", variant: "error" });
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+              className="mt-2 text-sm font-semibold text-primary underline disabled:opacity-50"
+            >
+              {retrying ? "Restarting…" : "Retry match analysis"}
+            </button>
+          </>
         )}
       </section>
     </div>

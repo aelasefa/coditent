@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { getAuthenticatedDestination, safeNextDestination } from "@/lib/auth-redirect";
-import { exchangeOAuthHandoff, getApiBaseUrl, getCandidateOnboarding, getMe } from "@/lib/api";
+import { safeNextDestination } from "@/lib/auth-redirect";
+import { exchangeOAuthHandoff, getApiBaseUrl, getMe } from "@/lib/api";
 import { removeToken, saveToken } from "@/lib/auth";
+import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
   isOAuthPopupResult,
   OAUTH_POPUP_ACK,
@@ -57,6 +59,7 @@ export function SocialLoginButtons({
 }: SocialLoginButtonsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const popupRef = useRef<Window | null>(null);
   const closePollRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
@@ -122,15 +125,8 @@ export function SocialLoginButtons({
           popupRef.current = null;
           closeChannel();
         }, 700);
-        if (user.role === "CANDIDATE" && !next) {
-          const onboarding = await getCandidateOnboarding();
-          if (!onboarding.onboarding_completed) {
-            router.replace("/get-started");
-            return;
-          }
-        }
         router.replace(
-          getAuthenticatedDestination(user, {
+          await getPostAuthDestination(queryClient, user, {
             next,
             isNewRegistration: session.is_new_registration,
           })
@@ -157,7 +153,7 @@ export function SocialLoginButtons({
       clearClosePoll();
       closeChannel();
     };
-  }, [router, searchParams]);
+  }, [queryClient, router, searchParams]);
 
   function openOAuthPopup(provider: "google" | "linkedin") {
     setPopupError(null);
@@ -197,7 +193,10 @@ export function SocialLoginButtons({
       };
       channelRef.current = channel;
     }
-    const startUrl = new URL(`${ssoBaseUrl}/auth/sso/${provider}/start`);
+    const startUrl = new URL(
+      `${ssoBaseUrl}/auth/sso/${provider}/start`,
+      window.location.origin
+    );
     startUrl.searchParams.set("popup_origin", window.location.origin);
     startUrl.searchParams.set("attempt_id", attemptId);
     const popup = window.open(

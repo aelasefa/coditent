@@ -20,6 +20,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
   const offer = rec.offer;
   const score = rec.score ?? rec.ai_score ?? null;
   const reasoning = rec.reasoning ?? rec.ai_reasoning ?? null;
+  const matchStatus = rec.status ?? null;
   const skills = parseSkills(offer.required_skills).slice(0, 3);
   const location = offerLocation(offer);
   const posted = formatDate(offer.posted_at);
@@ -38,7 +39,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <MatchScore score={score} reasoning={reasoning} />
+        <MatchScore score={score} reasoning={reasoning} status={matchStatus} />
         {applied ? <span className="text-xs font-semibold text-success">Applied</span> : null}
       </div>
       {skills.length > 0 ? (

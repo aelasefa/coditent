@@ -184,7 +184,14 @@ class SavedRecommendation(Base):
     offer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("offers.id"), nullable=False)
     ai_score: Mapped[int] = mapped_column(Integer, nullable=False)
     ai_reasoning: Mapped[str] = mapped_column(Text, nullable=False)
+    # Candidate match lifecycle: pending -> processing -> completed | failed.
+    # Rows are created as pending by GET /recommendations for newly published
+    # active offers; a scorer moves them forward. Never leave failed scoring
+    # as pending, and never invent a score on failure.
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=datetime.utcnow, nullable=True)
 
     candidate: Mapped[User] = relationship("User", back_populates="recommendations")
     offer: Mapped[Offer] = relationship("Offer", back_populates="recommendations")

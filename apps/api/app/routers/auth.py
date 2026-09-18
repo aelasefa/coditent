@@ -65,6 +65,33 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = get_logger("auth")
 
 
+def _new_candidate_profile(user_id) -> CandidateProfile:
+    return CandidateProfile(
+        user_id=user_id,
+        city=None,
+        phone=None,
+        field_of_study=None,
+        university=None,
+        study_level=None,
+        onboarding_step=1,
+        onboarding_completed=False,
+    )
+
+
+def _legacy_candidate_profile(user_id) -> CandidateProfile:
+    return CandidateProfile(
+        user_id=user_id,
+        city=None,
+        phone=None,
+        field_of_study=None,
+        university=None,
+        study_level=None,
+        onboarding_step=7,
+        onboarding_completed=True,
+        onboarding_completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+
+
 async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthIdentity) -> User:
     needs_commit = False
 
@@ -87,18 +114,7 @@ async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthI
         )
         profile = profile_result.scalar_one_or_none()
         if profile is None:
-            db.add(
-                CandidateProfile(
-                    user_id=user.id,
-                    city=None,
-                    phone=None,
-                    field_of_study=None,
-                    university=None,
-                    study_level=None,
-                    onboarding_step=1,
-                    onboarding_completed=False,
-                )
-            )
+            db.add(_legacy_candidate_profile(user.id))
             needs_commit = True
 
     if needs_commit:
@@ -123,18 +139,7 @@ async def _create_sso_user(db: AsyncSession, identity: OAuthIdentity, role: User
     await db.flush()
 
     if role == UserRole.CANDIDATE:
-        db.add(
-            CandidateProfile(
-                user_id=user.id,
-                city=None,
-                phone=None,
-                field_of_study=None,
-                university=None,
-                study_level=None,
-                onboarding_step=1,
-                onboarding_completed=False,
-            )
-        )
+        db.add(_new_candidate_profile(user.id))
 
     await db.commit()
     await db.refresh(user)
@@ -622,18 +627,7 @@ async def verify_email(
     db.add(user)
     await db.flush()
 
-    db.add(
-        CandidateProfile(
-            user_id=user.id,
-            city=None,
-            phone=None,
-            field_of_study=None,
-            university=None,
-            study_level=None,
-            onboarding_step=1,
-            onboarding_completed=False,
-        )
-    )
+    db.add(_new_candidate_profile(user.id))
     await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
     await db.commit()
     await db.refresh(user)

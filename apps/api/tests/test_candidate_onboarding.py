@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.models import CandidateProfile
+from app.routers.auth import _legacy_candidate_profile, _new_candidate_profile
 from app.routers import candidates
 from app.schemas import OnboardingStepUpdate
 
@@ -26,6 +27,20 @@ def _profile(step: int = 1) -> CandidateProfile:
 
 def _db() -> SimpleNamespace:
     return SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
+
+
+def test_new_candidate_requires_onboarding():
+    profile = _new_candidate_profile(None)
+    assert profile.onboarding_step == 1
+    assert profile.onboarding_completed is False
+    assert profile.onboarding_completed_at is None
+
+
+def test_missing_legacy_profile_is_repaired_as_completed():
+    profile = _legacy_candidate_profile(None)
+    assert profile.onboarding_step == 7
+    assert profile.onboarding_completed is True
+    assert profile.onboarding_completed_at is not None
 
 
 def test_step_is_saved_and_progresses(monkeypatch):
