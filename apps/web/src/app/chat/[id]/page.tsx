@@ -1,10 +1,11 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getConversation, getConversations, getMe, sendMessage } from "@/lib/api";
-import { PageContainer } from "@/components/shell/page-container";
+import { ChatWorkspace } from "@/components/candidate/chat-workspace";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
+import styles from "@/components/candidate/chat-workspace.module.css";
 
 export default function ChatRoomPage({ params }: { params: { id: string } }) {
   const qc = useQueryClient();
@@ -23,24 +24,26 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
 
   const sendMut = useMutation({
     mutationFn: (text: string) => sendMessage(params.id, text),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat", params.id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["chat", params.id] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
     onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
   });
 
   return (
-    <PageContainer variant="full" className="max-w-3xl">
-      <div className="overflow-hidden rounded-xl border border-border-subtle bg-surface">
-        <ChatHeader title={title} subtitle={subtitle} backHref="/chat" />
+    <ChatWorkspace activeHref={`/chat/${params.id}`}>
+        <ChatHeader title={title} subtitle={subtitle} avatarSrc={peer?.avatar_url} backHref="/chat" />
         {msgQuery.isLoading ? (
-          <div className="space-y-2 p-4" role="status" aria-label="Loading messages">
+          <div className={styles.threadLoading} role="status" aria-label="Loading messages">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-12" />
             ))}
           </div>
         ) : msgQuery.isError ? (
-          <div role="alert" className="p-6 text-center">
-            <p className="text-sm font-semibold text-danger">Conversation unavailable.</p>
-            <button type="button" onClick={() => msgQuery.refetch()} className="mt-2 text-sm font-semibold text-danger underline">
+          <div role="alert" className={styles.threadNotice}>
+            <strong>Conversation unavailable.</strong>
+            <button type="button" onClick={() => msgQuery.refetch()}>
               Retry
             </button>
           </div>
@@ -52,7 +55,6 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
           pending={sendMut.isPending}
           onSend={(text) => sendMut.mutate(text)}
         />
-      </div>
-    </PageContainer>
+    </ChatWorkspace>
   );
 }

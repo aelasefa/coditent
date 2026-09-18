@@ -10,11 +10,12 @@ import {
 } from "@/lib/api";
 import type { ChatMessage } from "@/lib/types";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
-import { PageContainer } from "@/components/shell/page-container";
+import { ChatWorkspace } from "@/components/candidate/chat-workspace";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
 import { stageLabel } from "@/components/candidate/application-stage";
+import styles from "@/components/candidate/chat-workspace.module.css";
 
 export default function RecruitmentChatPage({ params }: { params: { applicationId: string } }) {
   const qc = useQueryClient();
@@ -31,7 +32,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
     retry: false,
   });
   const ctx = chatQuery.data;
-  const backHref = me?.role === "CANDIDATE" ? "/dashboard/applications" : "/company/candidates";
+  const backHref = me?.role === "CANDIDATE" ? "/chat" : "/company/candidates";
 
   useEffect(() => {
     if (typeof window === "undefined" || !localStorage.getItem(AUTH_TOKEN_KEY)) return;
@@ -53,6 +54,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
           qc.setQueryData(["recruitment-chat", applicationId], (prev: typeof ctx) =>
             prev ? { ...prev, messages: [...prev.messages, payload.message as ChatMessage] } : prev
           );
+          qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
         }
       } catch {
         /* ignore malformed frames */
@@ -92,6 +94,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
     },
     onSuccess: (created) => {
       if (created) qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
     },
     onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
   });
@@ -100,17 +103,18 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
   const peerRole = me?.role === "CANDIDATE" ? "Recruiter" : "Candidate";
 
   return (
-    <PageContainer variant="full" className="max-w-3xl">
-      <div className="overflow-hidden rounded-xl border border-border-subtle bg-surface">
+    <ChatWorkspace activeHref={`/chat/recruitment/${applicationId}`}>
         <ChatHeader
-          title={ctx ? `${ctx.offer_title} · ${ctx.peer?.full_name ?? peerRole}` : "Recruitment chat"}
-          subtitle={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
+          title={ctx?.peer?.full_name ?? peerRole}
+          subtitle={ctx?.offer_title}
+          context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
+          avatarSrc={ctx?.peer?.avatar_url}
           status={ctx ? `${wsLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />
 
         {chatQuery.isLoading && (
-          <div className="space-y-2 p-4" role="status" aria-label="Loading conversation">
+          <div className={styles.threadLoading} role="status" aria-label="Loading conversation">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-12" />
             ))}
@@ -118,21 +122,21 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
         )}
 
         {chatQuery.isError && (
-          <div role="alert" className="p-6 text-center">
-            <p className="text-sm font-semibold text-danger">Conversation unavailable</p>
-            <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
+          <div role="alert" className={styles.threadNotice}>
+            <strong>Conversation unavailable</strong>
+            <p>
               Access denied. Only candidate and responsible hiring team for this application can participate.
             </p>
-            <button type="button" onClick={() => chatQuery.refetch()} className="mt-3 text-sm font-semibold text-primary underline">
+            <button type="button" onClick={() => chatQuery.refetch()}>
               Retry
             </button>
           </div>
         )}
 
         {ctx && !ctx.chat_enabled && (
-          <div className="p-6 text-center" role="status">
-            <p className="text-sm font-semibold text-foreground">Chat not yet available</p>
-            <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
+          <div className={styles.threadNotice} role="status">
+            <strong>Chat not yet available</strong>
+            <p>
               Available after application progresses. Communicate with responsible recruiter then.
             </p>
           </div>
@@ -148,7 +152,6 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
             />
           </>
         )}
-      </div>
-    </PageContainer>
+    </ChatWorkspace>
   );
 }
