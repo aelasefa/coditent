@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { AiScore } from "./CandidateCard";
 import { candidateName, jobTitleFor } from "./hiring";
-import { retryApplicationScreening } from "@/lib/api";
+import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
 
@@ -66,13 +66,24 @@ export function CandidateDetail({
     onError: () => toast("Could not restart screening", { variant: "error" }),
   });
   const c = app.candidate;
-  const skills = (c as { skills?: string | null } | undefined)?.skills
-    ? String((c as { skills?: string }).skills)
+  // Single source of truth: CandidateProfile.skills, serialized into the
+  // application payload (candidate.skills, profile.skills). Only genuinely
+  // empty collections render the empty notice.
+  const rawSkills = c?.skills ?? app.profile?.skills ?? null;
+  const skills = rawSkills
+    ? String(rawSkills)
         .split(/[,;]/)
         .map((s) => s.trim())
         .filter(Boolean)
         .slice(0, 12)
     : [];
+  // Private storage: never link raw paths. View/Download go through the
+  // company-isolated GET /applications/{id}/cv endpoint.
+  const cvDownloadPath = app.cv?.download_url ?? null;
+  const cvHref = cvDownloadPath
+    ? `${getApiBaseUrl()}${cvDownloadPath.startsWith("/") ? cvDownloadPath : `/${cvDownloadPath}`}`
+    : null;
+  const cvFilename = app.cv?.filename ?? null;
 
   return (
     <div>
@@ -235,23 +246,30 @@ export function CandidateDetail({
             {
               id: "resume",
               label: "Resume",
-              content: app.cv_url ? (
-                <div className="flex flex-wrap gap-2">
-                  <a
-                    href={app.cv_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
-                  >
-                    Open CV
-                  </a>
-                  <a
-                    href={app.cv_url}
-                    download
-                    className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-surface-secondary"
-                  >
-                    Download
-                  </a>
+              content: cvHref ? (
+                <div className="space-y-2">
+                  {cvFilename ? (
+                    <p className="truncate text-[13px] font-medium text-foreground" title={cvFilename}>
+                      {cvFilename}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={cvHref}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+                    >
+                      Open CV
+                    </a>
+                    <a
+                      href={cvHref}
+                      download={cvFilename ?? true}
+                      className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-surface-secondary"
+                    >
+                      Download
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No CV attached to this application.</p>

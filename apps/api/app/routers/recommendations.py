@@ -11,12 +11,28 @@ from app.cache import get_async_redis
 from app.database import get_db
 from app.dependencies import get_pagination, require_candidate
 from app.models import Offer, SavedRecommendation, User
+from app.observability import get_logger
 from app.schemas import RecommendationOut, RecommendationRequest
 from app.services.recommendation_jobs import make_cache_key
 from app.tasks import generate_recommendations_task
 
+logger = get_logger("match")
 
 router = APIRouter()
+
+
+def _queue_single_match(candidate_id: uuid.UUID, offer_id: uuid.UUID) -> bool:
+    """Enqueue per-offer scoring via Celery. Returns True if queued."""
+    try:
+        from app.tasks import score_match_task
+
+        score_match_task.delay(str(candidate_id), str(offer_id))
+        return True
+    except Exception as exc:
+        logger.error(
+            f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=queue_error"
+        )
+        return False
 
 
 @router.post("/generate", response_model=dict[str, str | bool])
@@ -63,6 +79,89 @@ async def generate_recommendations(
     return {"job_id": job_id, "status": "pending", "cached": False}
 
 
+@router.post("/score/{offer_id}", response_model=dict)
+async def score_recommendation(
+    offer_id: uuid.UUID,
+    current_user: Annotated[User, Depends(require_candidate)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Trigger (or retry) AI match scoring for one offer.
+
+    Idempotent: a completed analysis is returned as-is and never regenerated.
+    A pending/failed analysis moves to processing and is queued. Applying to
+    the job does not affect this flow.
+    """
+    from app.services.match_scoring import get_or_create_pending
+
+    logger.info(f"[MATCH] requested candidate={current_user.id} offer={offer_id}")
+    row = await get_or_create_pending(db, current_user.id, offer_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
+    if row.candidate_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    if row.status == "completed":
+        return {"offer_id": str(offer_id), "status": "completed", "score": row.ai_score}
+    if row.status == "processing":
+        return {"offer_id": str(offer_id), "status": "processing"}
+
+    row.status = "processing"
+    from datetime import datetime as _dt
+
+    row.updated_at = _dt.utcnow()
+    await db.commit()
+    logger.info(f"[MATCH] processing candidate={current_user.id} offer={offer_id}")
+    queued = _queue_single_match(current_user.id, offer_id)
+    if not queued:
+        # Queue unavailable: revert to pending so a later retry can recover
+        # instead of stranding the row in processing.
+        row.status = "pending"
+        await db.commit()
+        raise HTTPException(status_code=503, detail="Scoring worker unavailable, retry later")
+    return {"offer_id": str(offer_id), "status": "processing"}
+
+
+@router.get("/by-offer/{offer_id}", response_model=RecommendationOut)
+async def get_recommendation_by_offer(
+    offer_id: uuid.UUID,
+    current_user: Annotated[User, Depends(require_candidate)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RecommendationOut:
+    """Fetch this candidate's own analysis for one offer (tenant-safe)."""
+    result = await db.execute(
+        select(SavedRecommendation)
+        .options(joinedload(SavedRecommendation.offer))
+        .where(
+            SavedRecommendation.candidate_id == current_user.id,
+            SavedRecommendation.offer_id == offer_id,
+        )
+    )
+    row = result.scalars().first()
+    if row is None or row.offer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    return RecommendationOut.model_validate(row)
+
+
+@router.get("/config-status", response_model=dict)
+async def match_config_status(
+    current_user: Annotated[User, Depends(require_candidate)],
+) -> dict:
+    """Runtime availability of the match pipeline. Never exposes secret values."""
+    from app.config import settings
+
+    redis_ok = False
+    try:
+        client = get_async_redis()
+        await client.ping()
+        redis_ok = True
+    except Exception:
+        redis_ok = False
+    return {
+        "gemini_configured": bool(settings.gemini_api_key),
+        "redis_reachable": redis_ok,
+        "database_configured": bool(settings.database_url),
+    }
+
+
 @router.get("/jobs/{job_id}")
 async def get_recommendation_job_status(
     job_id: str,
@@ -106,18 +205,25 @@ async def get_recommendations(
     missing_offers = [offer for offer in active_offers if offer.id not in existing_offer_ids]
 
     if missing_offers:
+        from datetime import datetime as _dt
+
         db.add_all(
             [
                 SavedRecommendation(
                     candidate_id=current_user.id,
                     offer_id=offer.id,
                     ai_score=0,
-                    ai_reasoning="Nouvelle offre ajoutee en attente du scoring IA.",
+                    ai_reasoning="Match analysis pending.",
+                    status="pending",
+                    updated_at=_dt.utcnow(),
                 )
                 for offer in missing_offers
             ]
         )
         await db.commit()
+        for offer in missing_offers:
+            logger.info(f"[MATCH] requested candidate={current_user.id} offer={offer.id}")
+            _queue_single_match(current_user.id, offer.id)
 
         result = await db.execute(
             select(SavedRecommendation)
@@ -128,6 +234,14 @@ async def get_recommendations(
             .offset(offset)
         )
         recommendations = result.scalars().all()
+    else:
+        # Recover rows stuck in processing/pending from an earlier crash:
+        # requeue a bounded batch so Discover self-heals without manual retry.
+        stale = [r for r in recommendations if getattr(r, "status", None) in ("pending", "failed")]
+        for row in stale[:10]:
+            if row.offer is not None:
+                logger.info(f"[MATCH] requested candidate={current_user.id} offer={row.offer_id}")
+                _queue_single_match(current_user.id, row.offer_id)
 
     return {
         "recommendations": [

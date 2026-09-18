@@ -302,6 +302,16 @@ export async function getRecommendationJob(jobId: string): Promise<Recommendatio
   return data;
 }
 
+export async function scoreRecommendation(offerId: string): Promise<{ offer_id: string; status: string; score?: number }> {
+  const { data } = await api.post(`/recommendations/score/${offerId}`);
+  return data;
+}
+
+export async function getRecommendationByOffer(offerId: string): Promise<import("@/lib/types").Recommendation> {
+  const { data } = await api.get(`/recommendations/by-offer/${offerId}`);
+  return data;
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   const { data } = await api.get<AdminStats>("/admin/stats");
   return data;

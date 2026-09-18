@@ -125,28 +125,42 @@ async def generate_recommendations_for_candidate(
         )
         existing = existing_result.scalars().first()
         if existing is not None:
+            # Never overwrite another candidate's row (query already scopes).
             existing.ai_score = int(row.get("score", 0))
             existing.ai_reasoning = str(row.get("reasoning", ""))
+            existing.status = "completed"
+            existing.error = None
+            from datetime import datetime as _dt
+
+            existing.updated_at = _dt.utcnow()
         else:
+            from datetime import datetime as _dt
+
             db.add(
                 SavedRecommendation(
                     candidate_id=candidate_id,
                     offer_id=parsed_offer_id,
                     ai_score=int(row.get("score", 0)),
                     ai_reasoning=str(row.get("reasoning", "")),
+                    status="completed",
+                    updated_at=_dt.utcnow(),
                 )
             )
 
-    if offers:
-        active_ids = [offer.id for offer in offers]
-        inactive_result = await db.execute(
-            select(SavedRecommendation).where(
-                SavedRecommendation.candidate_id == candidate_id,
-                SavedRecommendation.offer_id.not_in(active_ids),
-            )
+    # Drop rows only for offers that are actually inactive platform-wide —
+    # never wipe scores for offers outside this run's filter criteria.
+    from app.models import Offer as _Offer
+
+    inactive_result = await db.execute(
+        select(SavedRecommendation)
+        .join(_Offer, _Offer.id == SavedRecommendation.offer_id)
+        .where(
+            SavedRecommendation.candidate_id == candidate_id,
+            _Offer.active.is_(False),
         )
-        for stale in inactive_result.scalars().all():
-            await db.delete(stale)
+    )
+    for stale in inactive_result.scalars().all():
+        await db.delete(stale)
 
     await db.commit()
 

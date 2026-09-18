@@ -87,6 +87,10 @@ export interface Recommendation {
   reasoning?: string;
   ai_score?: number;
   ai_reasoning?: string;
+  status?: "pending" | "processing" | "completed" | "failed" | string;
+  error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   offer: Offer;
 }
 
@@ -195,6 +199,33 @@ export interface ChatMessage {
   sender?: User;
 }
 
+export interface CandidateSnapshot {
+  full_name?: string;
+  email?: string;
+  avatar_url?: string | null;
+  skills?: string | null;
+  headline?: string | null;
+  city?: string | null;
+}
+
+export interface CandidateProfileSnapshot {
+  headline?: string | null;
+  bio?: string | null;
+  field_of_study?: string | null;
+  university?: string | null;
+  study_level?: string | null;
+  skills?: string | null;
+  years_of_experience?: number | null;
+  city?: string | null;
+  linkedin_url?: string | null;
+  portfolio_url?: string | null;
+}
+
+export interface ApplicationCv {
+  filename: string;
+  download_url: string;
+}
+
 export interface ApplicationItem {
   id: string;
   candidate_id: string;
@@ -203,13 +234,15 @@ export interface ApplicationItem {
   status: "applied" | "under_review" | "shortlisted" | "assessment_required" | "assessment_completed" | "interview" | "accepted" | "rejected" | string;
   chat_enabled?: boolean;
   cv_url?: string | null;
+  cv?: ApplicationCv | null;
+  profile?: CandidateProfileSnapshot | null;
   cover_letter?: string | null;
   ai_score?: number | null;
   ai_report?: string | null;
   ai_status?: "pending" | "processing" | "completed" | "failed" | string;
   created_at?: string;
   updated_at?: string | null;
-  candidate?: User;
+  candidate?: (User & CandidateSnapshot) | null;
   opportunity?: Pick<Offer, "id" | "title" | "company">;
 }
 

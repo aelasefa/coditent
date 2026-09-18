@@ -186,6 +186,10 @@ class RecommendationOut(APIModel):
     id: uuid.UUID
     ai_score: int
     ai_reasoning: str
+    status: str = "completed"
+    error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     offer: OfferOut
 
 
