@@ -4,7 +4,15 @@ import { cn } from "@/lib/cn";
 
 export type MatchState = "scored" | "pending" | "unavailable" | "failed";
 
-export function getMatchState(score: number | null | undefined, reasoning?: string | null): MatchState {
+export function getMatchState(
+  score: number | null | undefined,
+  reasoning?: string | null,
+  matchStatus?: string | null,
+): MatchState {
+  // Real backend lifecycle wins when present; score>0 stays scored for legacy rows.
+  if (matchStatus === "completed") return "scored";
+  if (matchStatus === "failed") return "failed";
+  if (matchStatus === "pending" || matchStatus === "processing") return "pending";
   if (typeof score === "number" && score > 0) return "scored";
   const text = (reasoning ?? "").toLowerCase();
   if (text.includes("en attente") || text.includes("pending") || text.includes("in progress")) return "pending";
@@ -13,8 +21,16 @@ export function getMatchState(score: number | null | undefined, reasoning?: stri
   return "unavailable";
 }
 
-export function MatchScore({ score, reasoning }: { score?: number | null; reasoning?: string | null }) {
-  const state = getMatchState(score, reasoning);
+export function MatchScore({
+  score,
+  reasoning,
+  status,
+}: {
+  score?: number | null;
+  reasoning?: string | null;
+  status?: string | null;
+}) {
+  const state = getMatchState(score, reasoning, status);
   if (state === "scored") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
