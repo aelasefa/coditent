@@ -2,11 +2,13 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from app.utils.sanitizer import sanitize_input_text
 
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class UserOut(APIModel):
@@ -22,8 +24,8 @@ class UserOut(APIModel):
 
 class RegisterRequest(APIModel):
     email: EmailStr
-    password: str = Field(min_length=8)
-    full_name: str = Field(min_length=2)
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=2, max_length=100)
     role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
 
 
@@ -38,7 +40,7 @@ class ResendVerificationRequest(APIModel):
 
 class LoginRequest(APIModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
 
 
 class OAuthCompleteRegistrationRequest(APIModel):
@@ -47,7 +49,8 @@ class OAuthCompleteRegistrationRequest(APIModel):
 
 class AdminLoginRequest(APIModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
+
 
 
 class TokenResponse(APIModel):
@@ -82,6 +85,11 @@ class ProfileUpdate(APIModel):
     years_of_experience: int | None = Field(default=None, ge=0, le=40)
     linkedin_url: str | None = Field(default=None, max_length=255)
     portfolio_url: str | None = Field(default=None, max_length=255)
+
+    @field_validator("headline", "bio", "city", "field_of_study", "university", "skills", mode="before")
+    @classmethod
+    def sanitize_text(cls, v: str | None) -> str | None:
+        return sanitize_input_text(v)
 
 
 class ProfileOut(APIModel):
@@ -145,13 +153,20 @@ class RecruiterApprovalOut(APIModel):
 
 
 class OfferCreate(APIModel):
-    title: str = Field(min_length=2)
-    company: str = Field(min_length=2)
-    region: str
-    field: str
+    title: str = Field(min_length=2, max_length=150)
+    company: str = Field(min_length=2, max_length=150)
+    region: str = Field(min_length=2, max_length=100)
+    field: str = Field(min_length=2, max_length=100)
     type: Literal["JOB", "INTERNSHIP"]
-    description: str = Field(min_length=10)
-    requirements: str = Field(min_length=10)
+    description: str = Field(min_length=10, max_length=10000)
+    requirements: str = Field(min_length=10, max_length=10000)
+
+    @field_validator("title", "company", "description", "requirements", "region", "field", mode="before")
+    @classmethod
+    def sanitize_offer_text(cls, v: str | None) -> str | None:
+        return sanitize_input_text(v)
+
+
 
 
 class OfferOut(APIModel):
