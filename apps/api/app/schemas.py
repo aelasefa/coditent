@@ -2,11 +2,13 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from app.utils.sanitizer import sanitize_input_text
 
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class UserOut(APIModel):
@@ -84,6 +86,11 @@ class ProfileUpdate(APIModel):
     linkedin_url: str | None = Field(default=None, max_length=255)
     portfolio_url: str | None = Field(default=None, max_length=255)
 
+    @field_validator("headline", "bio", "city", "field_of_study", "university", "skills", mode="before")
+    @classmethod
+    def sanitize_text(cls, v: str | None) -> str | None:
+        return sanitize_input_text(v)
+
 
 class ProfileOut(APIModel):
     id: uuid.UUID
@@ -153,6 +160,12 @@ class OfferCreate(APIModel):
     type: Literal["JOB", "INTERNSHIP"]
     description: str = Field(min_length=10, max_length=10000)
     requirements: str = Field(min_length=10, max_length=10000)
+
+    @field_validator("title", "company", "description", "requirements", "region", "field", mode="before")
+    @classmethod
+    def sanitize_offer_text(cls, v: str | None) -> str | None:
+        return sanitize_input_text(v)
+
 
 
 
