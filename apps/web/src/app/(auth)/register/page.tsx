@@ -19,10 +19,11 @@ import styles from "./register-page.module.css";
 
 const registerSchema = z.object({
   email: z.string().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  full_name: z.string().min(2, "Name is required"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password must not exceed 128 characters"),
+  full_name: z.string().min(2, "Name is required").max(100, "Name must not exceed 100 characters"),
   role: z.enum(["candidate", "recruiter"]),
 });
+
 
 type RegisterValues = z.infer<typeof registerSchema>;
 

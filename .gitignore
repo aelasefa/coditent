@@ -8,7 +8,12 @@
 .env.test.local
 .env.production.local
 .env.prod
+apps/api/.env
+apps/api/.env.*
+apps/web/.env.local
+apps/web/.env.*
 !.env.example
+!.env.template
 *.pem
 *.key
 *.cert
@@ -143,7 +148,14 @@ tmp/
 temp/
 
 # ==========================================
-# 7. Ansible Temporary & Secret Files
+# 7. Security Documentation & Local Planning Files
+# ==========================================
+SECURITY_PHASE_1_SUMMARY.md
+SECURITY_PHASE_2_SUMMARY.md
+Security_Role_Mastery_and_Action_Plan.pdf
+
+# ==========================================
+# 8. Ansible Temporary & Secret Files
 # ==========================================
 *.retry
 .vault-password*
