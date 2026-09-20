@@ -45,17 +45,27 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
   const error = recruitmentQuery.isError || generalQuery.isError;
 
   const conversations = useMemo<Conversation[]>(() => {
-    const recruitment: Conversation[] = (recruitmentQuery.data ?? []).map((item) => ({
-      href: `/chat/recruitment/${item.application_id}`,
-      kind: "recruitment",
-      name: item.peer?.full_name ?? item.company_name ?? "Recruitment team",
-      avatar: item.peer?.avatar_url,
-      context: item.offer_title,
-      detail: item.company_name ?? "Recruitment conversation",
-      preview: item.last_message ?? (item.chat_enabled ? "Open conversation" : "Chat available after application progresses"),
-      date: item.last_at,
-      stage: item.status,
-    }));
+    // Canonical recruitment inbox: exactly ONE entry per application_id.
+    // Stage changes update the existing entry's metadata (status/preview);
+    // they never append a second row. Defensive dedupe here mirrors the
+    // backend guard in GET /chat/recruitment.
+    const seenApplications = new Set<string>();
+    const recruitment: Conversation[] = [];
+    for (const item of recruitmentQuery.data ?? []) {
+      if (seenApplications.has(item.application_id)) continue;
+      seenApplications.add(item.application_id);
+      recruitment.push({
+        href: `/chat/recruitment/${item.application_id}`,
+        kind: "recruitment",
+        name: item.peer?.full_name ?? item.company_name ?? "Recruitment team",
+        avatar: item.peer?.avatar_url,
+        context: item.offer_title,
+        detail: item.company_name ?? "Recruitment conversation",
+        preview: item.last_message ?? (item.chat_enabled ? "Open conversation" : "Chat available after application progresses"),
+        date: item.last_at,
+        stage: item.status,
+      });
+    }
     const general: Conversation[] = (generalQuery.data ?? []).map((item) => ({
       href: `/chat/${item.user.id}`,
       kind: "other",

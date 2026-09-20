@@ -11,7 +11,10 @@ from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Application, CandidateProfile, Offer, User
-from app.services.recruitment_chat import is_chat_enabled_for_status
+from app.services.recruitment_chat import (
+    get_or_create_recruitment_conversation,
+    is_chat_enabled_for_status,
+)
 
 router = APIRouter()
 
@@ -336,9 +339,11 @@ async def update_application_status(
     new_status = data.get("status")
     if new_status not in ["under_review", "shortlisted", "assessment_required", "assessment_completed", "interview", "accepted", "rejected"]:
         raise HTTPException(status_code=400, detail="Invalid status")
-    app = (await db.execute(select(Application).where(Application.id == app_id))).scalar_one_or_none()
-    if not app:
-        raise HTTPException(status_code=404, detail="Application not found")
+    # Idempotent conversation anchor: lock the application row first so
+    # concurrent accepts / stage moves reuse the SAME recruitment conversation
+    # (application_id) instead of creating a second one. Stage changes only
+    # update metadata on the existing conversation; they never insert a new one.
+    app = await get_or_create_recruitment_conversation(db, app_id)
     # Candidate must not modify recruiter-controlled state
     if current_user.role.value == "CANDIDATE":
         raise HTTPException(status_code=403, detail="Forbidden")
