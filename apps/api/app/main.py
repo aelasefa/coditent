@@ -56,6 +56,21 @@ app.include_router(audit.router, prefix="/audit", tags=["Audit"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 
 
+@app.on_event("startup")
+async def on_startup():
+    from app.core.vault import vault_client
+    if vault_client.health_check():
+        logger.info("hashicorp_vault_connected")
+        vault_client.write_secrets({
+            "JWT_SECRET": settings.secret_key,
+            "GEMINI_API_KEY": settings.gemini_api_key,
+            "SUPABASE_SERVICE_KEY": settings.supabase_service_key,
+        })
+    else:
+        logger.info("hashicorp_vault_offline_using_env_fallback")
+
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}

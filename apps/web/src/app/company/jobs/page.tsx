@@ -15,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, getAssessments, setResponsibleHr } from "@/lib/api";
+import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, getAssessments, setResponsibleHr, offerLogoSrc } from "@/lib/api";
+import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
 import { FiBriefcase, FiPlus, FiSearch } from "react-icons/fi";
@@ -274,15 +275,18 @@ export default function CompanyJobsPage() {
             {filtered.map((o) => (
               <li key={o.id} className="rounded-xl border border-border-subtle bg-surface p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-foreground">{o.title}</p>
-                    <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-                      {o.company} · {o.region} · {o.field} · {o.type === "JOB" ? "Job" : "Internship"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {appsByOffer.get(o.id) ?? 0} applicants
-                      {assQ.data ? ` · ${assessments.length} assessments in workspace` : ""}
-                    </p>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <Avatar name={o.company} size="md" src={offerLogoSrc(o)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-semibold text-foreground">{o.title}</p>
+                      <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+                        {o.company} · {o.region} · {o.field} · {o.type === "JOB" ? "Job" : "Internship"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {appsByOffer.get(o.id) ?? 0} applicants
+                        {assQ.data ? ` · ${assessments.length} assessments in workspace` : ""}
+                      </p>
+                    </div>
                   </div>
                   <StatusBadge status={o.active ? "active" : "paused"} size="sm" showDot={false} />
                 </div>

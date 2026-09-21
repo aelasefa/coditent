@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { MatchScore } from "./match-score";
 import { formatDate, offerLocation, parseSkills } from "./offer-utils";
+import { offerLogoSrc } from "@/lib/api";
 import type { Recommendation } from "@/lib/types";
 import styles from "./candidate-pages.module.css";
 
@@ -28,7 +29,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
   const body = (
     <>
       <div className="flex items-start gap-3">
-        <Avatar name={offer.company} size="md" />
+        <Avatar name={offer.company} size="md" src={offerLogoSrc(offer)} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold text-foreground">{offer.title}</p>
           <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{offer.company}</p>

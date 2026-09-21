@@ -19,6 +19,7 @@ from app.schemas import (
 )
 from app.services.recruitment_chat import (
     can_access_recruitment_chat,
+    get_or_create_recruitment_conversation,
     is_chat_enabled_for_status,
     resolve_responsible_hr_id,
 )
@@ -76,13 +77,17 @@ async def get_conversation(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    # Direct/general thread ONLY. Recruitment messages (application_id NOT NULL)
+    # must never leak here, otherwise the same peer appears twice in the inbox
+    # (once as recruitment, once as direct) with the same preview.
     result = await db.execute(
         select(ChatMessage)
         .where(
+            ChatMessage.application_id.is_(None),
             or_(
                 and_(ChatMessage.sender_id == current_user.id, ChatMessage.receiver_id == user_id),
                 and_(ChatMessage.sender_id == user_id, ChatMessage.receiver_id == current_user.id),
-            )
+            ),
         )
         .order_by(ChatMessage.created_at.asc())
         .limit(100)
@@ -101,9 +106,17 @@ async def list_conversations(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    # Direct/general inbox ONLY. Recruitment messages live under
+    # /chat/recruitment (keyed by application_id) and must not create a
+    # second inbox entry for the same peer here.
     # distinct conversation partners
     result = await db.execute(
-        select(ChatMessage).where(or_(ChatMessage.sender_id == current_user.id, ChatMessage.receiver_id == current_user.id)).order_by(ChatMessage.created_at.desc())
+        select(ChatMessage)
+        .where(
+            ChatMessage.application_id.is_(None),
+            or_(ChatMessage.sender_id == current_user.id, ChatMessage.receiver_id == current_user.id),
+        )
+        .order_by(ChatMessage.created_at.desc())
     )
     msgs = result.scalars().all()
     seen = set()
@@ -252,6 +265,7 @@ async def _build_recruitment_context(
         offer_title=offer.title,
         company_id=company.id if company else (offer.company_id or app.company_id),
         company_name=company.name if company else offer.company,
+        company_logo_url=company.logo_url if company else None,
         peer=_peer_out(peer),
         messages=messages,
     )
@@ -267,6 +281,11 @@ async def list_recruitment_chats(
     Candidate: one entry per accepted application (per offer — multiple
     applications stay separate, never merged). HR: one entry per application
     they are responsible for.
+
+    Exactly ONE entry per application_id: results are de-duplicated by
+    application_id so retries / double stage updates can never produce a
+    second inbox row. Stage changes update the existing entry's metadata
+    (status/last message), never append a new entry.
     """
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     items: list[dict] = []
@@ -308,6 +327,13 @@ async def list_recruitment_chats(
     for a in apps:
         if not is_chat_enabled_for_status(a.status):
             continue
+        # Canonical guard: exactly one inbox entry per application_id, even if
+        # the upstream query ever returned the same application twice (join
+        # fan-out, retry, race). First occurrence wins; metadata is refreshed
+        # from the application row on every call.
+        app_key = str(a.id)
+        if any(e["application_id"] == app_key for e in items):
+            continue
         offer = (
             await db.execute(select(Offer).where(Offer.id == a.opportunity_id))
         ).scalar_one_or_none()
@@ -348,7 +374,9 @@ async def list_recruitment_chats(
                 "chat_enabled": True,
                 "offer_id": str(offer.id),
                 "offer_title": offer.title,
+                "company_id": str(company.id) if company else (str(offer.company_id) if offer.company_id else None),
                 "company_name": company.name if company else offer.company,
+                "company_logo_url": company.logo_url if company else None,
                 "peer": _peer_out(peer).model_dump() if _peer_out(peer) else None,
                 "last_message": last.content if last else None,
                 "last_at": last.created_at.isoformat() if last else None,
@@ -378,8 +406,16 @@ async def send_recruitment_message(
 
     Receiver is derived server-side (candidate → responsible HR, HR →
     candidate). Any client-supplied peer IDs are ignored by design.
+    The conversation is resolved idempotently via
+    get_or_create_recruitment_conversation: repeated calls and concurrent
+    requests reuse the same application_id, never a second conversation.
     """
-    app, offer, _ = await _load_recruitment_context(db, application_id)
+    app = await get_or_create_recruitment_conversation(db, application_id)
+    offer = (
+        await db.execute(select(Offer).where(Offer.id == app.opportunity_id))
+    ).scalar_one_or_none()
+    if offer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
     decision = can_access_recruitment_chat(current_user, app, offer)
     if not decision.allowed or decision.peer_id is None:
         if decision.reason in ("not_application_candidate",):
