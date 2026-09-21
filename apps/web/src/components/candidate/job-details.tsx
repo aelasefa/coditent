@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, getProfile, offerLogoSrc } from "@/lib/api";
@@ -72,6 +73,7 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-bold leading-tight text-foreground">{offer.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{offer.company}</p>
+          {offer.company_id ? <Link href={`/dashboard/companies/${encodeURIComponent(offer.company_id)}?from=discover`} className="mt-1 inline-block text-[13px] font-semibold text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring">View company profile</Link> : null}
           <p className="mt-1 text-[13px] text-muted-foreground">
             {[location, offer.type === "INTERNSHIP" ? "Internship" : "Job", offer.work_mode, offer.field]
               .filter(Boolean)
