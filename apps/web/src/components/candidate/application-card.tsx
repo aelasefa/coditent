@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { FiArrowUpRight, FiMessageCircle } from "react-icons/fi";
 import { Avatar } from "@/components/ui/avatar";
 import { offerLogoSrc } from "@/lib/api";
-import { ApplicationStage, nextStepFor, stageLabel } from "./application-stage";
+import { ApplicationStage, applicationStatusInfo, type ApplicationPhase } from "./application-stage";
 import type { ApplicationItem, RecruitmentChatListItem } from "@/lib/types";
 import styles from "./applications.module.css";
 
@@ -20,56 +20,43 @@ export function applicationName(app: ApplicationItem, chat?: RecruitmentChatList
   };
 }
 
+function applicationCompanyId(app: ApplicationItem, chat?: RecruitmentChatListItem | null) {
+  return app.opportunity?.company_id ?? chat?.company_id ?? app.company_id ?? null;
+}
+
+function applicationLogoSrc(app: ApplicationItem, chat?: RecruitmentChatListItem | null) {
+  return offerLogoSrc({
+    company_id: applicationCompanyId(app, chat),
+    company_logo_url: app.opportunity?.company_logo_url ?? chat?.company_logo_url ?? null,
+  });
+}
+
 export function ApplicationCard({ app, chat, selected, pathname }: { app: ApplicationItem; chat?: RecruitmentChatListItem | null; selected: boolean; pathname: string }) {
   const { title, company } = applicationName(app, chat);
   const status = applicationStatusInfo(app.status);
   const updated = formatApplicationDate(app.updated_at);
 
   return (
-    <Card className={styles.applicationRow}>
-      <CardContent>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            {company ? (
-              <Avatar
-                name={company}
-                size="md"
-                src={offerLogoSrc({
-                  company_id: app.opportunity?.company_id ?? chat?.company_id ?? null,
-                  company_logo_url:
-                    app.opportunity?.company_logo_url ?? chat?.company_logo_url ?? null,
-                })}
-              />
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] font-semibold text-foreground">{title}</p>
-              <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-                {[company, appliedDate ? `Applied ${appliedDate}` : null].filter(Boolean).join(" · ") || stageLabel(app.status)}
-              </p>
-            </div>
-          </div>
-          <ApplicationStage status={app.status} />
-        </div>
-        <p className="mt-2 text-[13px] text-foreground-secondary">{nextStepFor(app.status)}</p>
-        {updatedDate ? <p className="mt-1 text-xs text-muted-foreground">Last update {updatedDate}</p> : null}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            href={`/dashboard/applications?app=${app.id}`}
-            className="inline-flex h-9 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium text-foreground hover:bg-surface-secondary"
-          >
-            View application
-          </Link>
-          {canMessage ? (
-            <Link
-              href={`/chat/recruitment/${app.id}`}
-              className="inline-flex h-9 items-center rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground hover:bg-primary-hover"
-            >
-              Message recruiter
-            </Link>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
+    <Link
+      href={`${pathname}?app=${encodeURIComponent(app.id)}`}
+      scroll={false}
+      aria-current={selected ? "true" : undefined}
+      className={`${styles.applicationRow} ${selected ? styles.applicationRowSelected : ""}`}
+    >
+      <span className={styles.rowTop}>
+        <span className={styles.rowIdentity}>
+          <Avatar name={company} size="md" src={applicationLogoSrc(app, chat)} />
+          <span className={styles.rowCompany}>{company}</span>
+        </span>
+        <FiArrowUpRight aria-hidden className={styles.rowArrow} />
+      </span>
+      <span className={styles.rowTitle}>{title}</span>
+      <span className={styles.rowStatus}><ApplicationStage status={app.status} /><span>{status.summary}</span></span>
+      <span className={styles.rowMeta}>
+        <span>{formatApplicationDate(app.created_at) ? `Applied ${formatApplicationDate(app.created_at)}` : "Application submitted"}</span>
+        {updated ? <span>Updated {updated}</span> : null}
+      </span>
+    </Link>
   );
 }
 
@@ -104,13 +91,19 @@ export function ApplicationDetail({ app, chat, showTitle = true }: { app: Applic
   const { title, company } = applicationName(app, chat);
   const status = applicationStatusInfo(app.status);
   const canMessage = Boolean(app.chat_enabled || chat);
+  const companyId = applicationCompanyId(app, chat);
   return (
     <div className={styles.detailContent}>
-      {showTitle ? <div className={styles.detailHeader}>
-        <span className={styles.detailEyebrow}>Application details</span>
-        <h2>{title}</h2>
-        <p>{company}</p>
-      </div> : null}
+      <div className={styles.detailHeader}>
+        {showTitle ? <><span className={styles.detailEyebrow}>Application details</span><h2>{title}</h2></> : null}
+        <div className={styles.detailCompany}>
+          <Avatar name={company} size="lg" src={applicationLogoSrc(app, chat)} />
+          <div>
+            <p>{company}</p>
+            {companyId ? <Link href={`/dashboard/companies/${encodeURIComponent(companyId)}?app=${encodeURIComponent(app.id)}`} className={styles.companyProfileLink}>View company profile <FiArrowUpRight aria-hidden="true" /></Link> : null}
+          </div>
+        </div>
+      </div>
       <section className={styles.currentStatus} aria-label="Current application status">
         <div className={styles.currentStatusTop}><span>Where things stand</span><ApplicationStage status={app.status} /></div>
         <p>{status.summary}</p>
