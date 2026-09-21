@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
+import { offerLogoSrc } from "@/lib/api";
 import { ApplicationStage, nextStepFor, stageLabel } from "./application-stage";
 import type { ApplicationItem, RecruitmentChatListItem } from "@/lib/types";
 import styles from "./candidate-pages.module.css";
@@ -28,11 +30,24 @@ export function ApplicationCard({
     <Card className={styles.applicationRow}>
       <CardContent>
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-foreground">{title}</p>
-            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-              {[company, appliedDate ? `Applied ${appliedDate}` : null].filter(Boolean).join(" · ") || stageLabel(app.status)}
-            </p>
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            {company ? (
+              <Avatar
+                name={company}
+                size="md"
+                src={offerLogoSrc({
+                  company_id: app.opportunity?.company_id ?? chat?.company_id ?? null,
+                  company_logo_url:
+                    app.opportunity?.company_logo_url ?? chat?.company_logo_url ?? null,
+                })}
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold text-foreground">{title}</p>
+              <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+                {[company, appliedDate ? `Applied ${appliedDate}` : null].filter(Boolean).join(" · ") || stageLabel(app.status)}
+              </p>
+            </div>
           </div>
           <ApplicationStage status={app.status} />
         </div>

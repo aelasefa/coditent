@@ -253,6 +253,23 @@ class ChatMessage(Base):
         Index("ix_chat_messages_sender", "sender_id"),
         Index("ix_chat_messages_receiver", "receiver_id"),
         Index("ix_chat_messages_application_id", "application_id"),
+        # Canonical per-application ordering for the single logical
+        # recruitment conversation (one application_id = one conversation).
+        Index("ix_chat_messages_application_created", "application_id", "created_at"),
+        # Direct/general inbox lookup: only rows with application_id IS NULL.
+        # Keeps recruitment messages out of the direct inbox at the index
+        # level and documents the separation between the two conversation
+        # kinds. NOTE: UNIQUE(application_id) must NOT be applied to this
+        # table — one recruitment conversation HOLDS MANY messages. The
+        # uniqueness guarantee lives on applications.id (PK) + the single
+        # entry per application_id enforced in list_recruitment_chats.
+        Index(
+            "ix_chat_messages_direct_pair",
+            "sender_id",
+            "receiver_id",
+            "created_at",
+            postgresql_where="application_id IS NULL",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

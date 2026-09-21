@@ -4,8 +4,9 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { FiBriefcase } from "react-icons/fi";
-import { api, listRecruitmentChats } from "@/lib/api";
+import { api, listRecruitmentChats, offerLogoSrc } from "@/lib/api";
 import { PageContainer } from "@/components/shell/page-container";
+import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet } from "@/components/ui/sheet";
@@ -150,11 +151,21 @@ function ApplicationsContent() {
       >
         {detail ? (
           <div>
-            <p className="text-sm text-muted-foreground">
-              {[detailChat?.company_name ?? detail.opportunity?.company ?? null, detail.created_at ? `Applied ${new Date(detail.created_at).toLocaleDateString()}` : null]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
+            <div className="flex items-center gap-3">
+              <Avatar
+                name={detailChat?.company_name ?? detail.opportunity?.company ?? "Company"}
+                size="lg"
+                src={offerLogoSrc({
+                  company_id: detail.opportunity?.company_id ?? detailChat?.company_id ?? null,
+                  company_logo_url: detail.opportunity?.company_logo_url ?? detailChat?.company_logo_url ?? null,
+                })}
+              />
+              <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                {[detailChat?.company_name ?? detail.opportunity?.company ?? null, detail.created_at ? `Applied ${new Date(detail.created_at).toLocaleDateString()}` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
             <ApplicationTimeline status={detail.status} />
             <section aria-label="Next step" className="mt-4 rounded-xl border border-border-subtle bg-surface-secondary/40 p-4">
               <h3 className="text-sm font-semibold text-foreground">Next step</h3>

@@ -79,6 +79,7 @@ export interface Offer {
   opportunity_status?: string;
   active: boolean;
   posted_at: string;
+  company_logo_url?: string | null;
 }
 
 export interface Recommendation {
@@ -243,7 +244,10 @@ export interface ApplicationItem {
   created_at?: string;
   updated_at?: string | null;
   candidate?: (User & CandidateSnapshot) | null;
-  opportunity?: Pick<Offer, "id" | "title" | "company">;
+  opportunity?: Pick<Offer, "id" | "title" | "company"> & {
+    company_id?: string | null;
+    company_logo_url?: string | null;
+  };
 }
 
 export interface RecruitmentPeer {
@@ -262,6 +266,7 @@ export interface RecruitmentChatContext {
   offer_title: string;
   company_id?: string | null;
   company_name?: string | null;
+  company_logo_url?: string | null;
   peer?: RecruitmentPeer | null;
   messages: ChatMessage[];
 }
@@ -272,7 +277,9 @@ export interface RecruitmentChatListItem {
   chat_enabled: boolean;
   offer_id: string;
   offer_title: string;
+  company_id?: string | null;
   company_name?: string | null;
+  company_logo_url?: string | null;
   peer?: RecruitmentPeer | null;
   last_message?: string | null;
   last_at?: string | null;

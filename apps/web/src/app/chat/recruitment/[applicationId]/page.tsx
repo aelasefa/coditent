@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  getApiBaseUrl,
   getMe,
   getRecruitmentChat,
   getRecruitmentWsUrl,
@@ -101,6 +102,10 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
 
   const peerName = ctx?.peer?.full_name ?? "recruiter";
   const peerRole = me?.role === "CANDIDATE" ? "Recruiter" : "Candidate";
+  const companyLogo =
+    ctx?.company_id && ctx?.company_logo_url
+      ? `${getApiBaseUrl()}/companies/${ctx.company_id}/logo`
+      : null;
 
   return (
     <ChatWorkspace activeHref={`/chat/recruitment/${applicationId}`}>
@@ -108,7 +113,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
           title={ctx?.peer?.full_name ?? peerRole}
           subtitle={ctx?.offer_title}
           context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
-          avatarSrc={ctx?.peer?.avatar_url}
+          avatarSrc={ctx?.peer?.avatar_url ?? companyLogo}
           status={ctx ? `${wsLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />
