@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
+import { CompanyLogoSection } from "@/components/company/CompanyLogoSection";
 import { PageHeader } from "@/components/company/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +119,9 @@ export default function SettingsPage() {
                       <Button size="sm" variant="outline" onClick={() => refetch()} className="mt-3">Retry</Button>
                     </div>
                   ) : (
-                    <form
+                    <div className="space-y-4">
+                      <CompanyLogoSection company={company ?? null} canEdit={canEditCompany} />
+                      <form
                       className="space-y-4 rounded-xl border border-border-subtle bg-surface p-5"
                       onSubmit={(e) => {
                         e.preventDefault();
@@ -151,6 +154,7 @@ export default function SettingsPage() {
                         <p className="text-xs text-muted-foreground">Read-only for your role. Only Owner and Admin can edit company details.</p>
                       )}
                     </form>
+                    </div>
                   )}
                 </div>
               ),

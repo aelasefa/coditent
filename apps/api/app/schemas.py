@@ -185,6 +185,16 @@ class OfferOut(APIModel):
     company_id: uuid.UUID | None = None
     created_by: uuid.UUID | None = None
     responsible_hr_id: uuid.UUID | None = None
+    # Denormalized branding for candidate-facing cards/detail. Storage path
+    # is resolved via GET /companies/{id}/logo — never a raw storage URL.
+    company_logo_url: str | None = None
+
+
+class CompanyLogoMetaOut(APIModel):
+    logo_url: str
+    filename: str | None = None
+    content_type: str | None = None
+    size_bytes: int | None = None
 
 
 class ResponsibleHrUpdate(APIModel):
@@ -305,6 +315,7 @@ class RecruitmentChatContext(APIModel):
     offer_title: str
     company_id: uuid.UUID | None = None
     company_name: str | None = None
+    company_logo_url: str | None = None
     peer: RecruitmentPeer | None = None
     messages: list[ChatMessageOut] = []
 

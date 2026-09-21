@@ -10,7 +10,7 @@ from sqlalchemy.orm import joinedload
 from app.cache import get_async_redis
 from app.database import get_db
 from app.dependencies import get_pagination, require_candidate
-from app.models import Offer, SavedRecommendation, User
+from app.models import Company, Offer, SavedRecommendation, User
 from app.observability import get_logger
 from app.schemas import RecommendationOut, RecommendationRequest
 from app.services.recommendation_jobs import make_cache_key
@@ -120,6 +120,30 @@ async def score_recommendation(
     return {"offer_id": str(offer_id), "status": "processing"}
 
 
+async def _attach_offer_logos(
+    db: AsyncSession, recommendations: list[SavedRecommendation]
+) -> None:
+    """Denormalize company logos onto loaded offers (batch, no N+1).
+
+    Sets a transient ``company_logo_url`` attribute read by ``OfferOut``
+    via ``from_attributes``. Nothing is persisted.
+    """
+    company_ids = {
+        rec.offer.company_id
+        for rec in recommendations
+        if rec.offer is not None and rec.offer.company_id is not None
+    }
+    if not company_ids:
+        return
+    result = await db.execute(
+        select(Company.id, Company.logo_url).where(Company.id.in_(company_ids))
+    )
+    logos = {str(cid): logo for cid, logo in result.all()}
+    for rec in recommendations:
+        if rec.offer is not None and rec.offer.company_id is not None:
+            rec.offer.company_logo_url = logos.get(str(rec.offer.company_id))
+
+
 @router.get("/by-offer/{offer_id}", response_model=RecommendationOut)
 async def get_recommendation_by_offer(
     offer_id: uuid.UUID,
@@ -138,6 +162,7 @@ async def get_recommendation_by_offer(
     row = result.scalars().first()
     if row is None or row.offer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    await _attach_offer_logos(db, [row])
     return RecommendationOut.model_validate(row)
 
 
@@ -243,9 +268,11 @@ async def get_recommendations(
                 logger.info(f"[MATCH] requested candidate={current_user.id} offer={row.offer_id}")
                 _queue_single_match(current_user.id, row.offer_id)
 
+    await _attach_offer_logos(db, list(recommendations))
+    recommendations_with_logos = recommendations
     return {
         "recommendations": [
             RecommendationOut.model_validate(recommendation)
-            for recommendation in recommendations
+            for recommendation in recommendations_with_logos
         ]
     }

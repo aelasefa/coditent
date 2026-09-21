@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FiArrowUpRight, FiBriefcase, FiMessageCircle, FiSearch, FiX } from "react-icons/fi";
-import { getConversations, listRecruitmentChats } from "@/lib/api";
+import { getApiBaseUrl, getConversations, listRecruitmentChats } from "@/lib/api";
 import { stageLabel } from "@/components/candidate/application-stage";
 import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
@@ -58,7 +58,11 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
         href: `/chat/recruitment/${item.application_id}`,
         kind: "recruitment",
         name: item.peer?.full_name ?? item.company_name ?? "Recruitment team",
-        avatar: item.peer?.avatar_url,
+        avatar:
+          item.peer?.avatar_url ??
+          (item.company_id && item.company_logo_url
+            ? `${getApiBaseUrl()}/companies/${item.company_id}/logo`
+            : null),
         context: item.offer_title,
         detail: item.company_name ?? "Recruitment conversation",
         preview: item.last_message ?? (item.chat_enabled ? "Open conversation" : "Chat available after application progresses"),

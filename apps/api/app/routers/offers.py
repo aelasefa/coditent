@@ -17,6 +17,22 @@ from app.schemas import OfferCreate, OfferOut, ResponsibleHrUpdate
 router = APIRouter()
 
 
+async def _company_logo_map(db: AsyncSession, company_ids: set) -> dict[str, str | None]:
+    """Batch-load logo paths for offers to avoid N+1 queries."""
+    ids = [cid for cid in company_ids if cid is not None]
+    if not ids:
+        return {}
+    result = await db.execute(select(Company.id, Company.logo_url).where(Company.id.in_(ids)))
+    return {str(cid): logo for cid, logo in result.all()}
+
+
+def _offer_out(offer: Offer, logos: dict[str, str | None] | None = None) -> OfferOut:
+    out = OfferOut.model_validate(offer)
+    if logos is not None and offer.company_id is not None:
+        out.company_logo_url = logos.get(str(offer.company_id))
+    return out
+
+
 @router.get("", response_model=dict[str, list[OfferOut]])
 async def list_offers(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -31,7 +47,8 @@ async def list_offers(
         .offset(offset)
     )
     offers = result.scalars().all()
-    return {"offers": [OfferOut.model_validate(offer) for offer in offers]}
+    logos = await _company_logo_map(db, {o.company_id for o in offers})
+    return {"offers": [_offer_out(offer, logos) for offer in offers]}
 
 
 async def _bust_recommendation_cache() -> None:
@@ -82,7 +99,8 @@ async def create_offer(
     await db.refresh(offer)
     await log_audit(db, action="OFFER_CREATED", actor=current_user, company_id=current_user.company_id, resource_type="offer", resource_id=offer.id)
     await _bust_recommendation_cache()
-    return OfferOut.model_validate(offer)
+    logos = await _company_logo_map(db, {offer.company_id})
+    return _offer_out(offer, logos)
 
 
 @router.get("/mine", response_model=dict[str, list[OfferOut]])
@@ -97,7 +115,8 @@ async def list_my_offers(
         .order_by(Offer.posted_at.desc())
     )
     offers = result.scalars().all()
-    return {"offers": [OfferOut.model_validate(offer) for offer in offers]}
+    logos = await _company_logo_map(db, {o.company_id for o in offers})
+    return {"offers": [_offer_out(offer, logos) for offer in offers]}
 
 
 @router.patch("/{offer_id}/responsible-hr", response_model=OfferOut)
@@ -138,7 +157,8 @@ async def set_responsible_hr(
     await db.commit()
     await db.refresh(offer)
     await log_audit(db, action="OFFER_RESPONSIBLE_HR_CHANGED", actor=current_user, company_id=current_user.company_id, resource_type="offer", resource_id=offer.id, details=str(target.id))
-    return OfferOut.model_validate(offer)
+    logos = await _company_logo_map(db, {offer.company_id})
+    return _offer_out(offer, logos)
 
 
 @router.patch("/{offer_id}/toggle", response_model=OfferOut)
@@ -159,7 +179,8 @@ async def toggle_offer(
     await db.commit()
     await db.refresh(offer)
     await _bust_recommendation_cache()
-    return OfferOut.model_validate(offer)
+    logos = await _company_logo_map(db, {offer.company_id})
+    return _offer_out(offer, logos)
 
 
 @router.get("/{offer_id}", response_model=OfferOut)
@@ -186,7 +207,8 @@ async def get_offer(
     offer = result.scalar_one_or_none()
     if offer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
-    return OfferOut.model_validate(offer)
+    logos = await _company_logo_map(db, {offer.company_id})
+    return _offer_out(offer, logos)
 
 
 @router.put("/{offer_id}", response_model=OfferOut)
@@ -223,7 +245,8 @@ async def update_offer(
     await db.commit()
     await db.refresh(offer)
     await log_audit(db, action="OFFER_UPDATED", actor=current_user, company_id=getattr(current_user, "company_id", None), resource_type="offer", resource_id=offer.id)
-    return OfferOut.model_validate(offer)
+    logos = await _company_logo_map(db, {offer.company_id})
+    return _offer_out(offer, logos)
 
 
 @router.delete("/{offer_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, getProfile } from "@/lib/api";
+import { api, getProfile, offerLogoSrc } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -68,7 +68,7 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
   return (
     <div>
       <div className="flex items-start gap-3">
-        <Avatar name={offer.company} size="lg" />
+        <Avatar name={offer.company} size="lg" src={offerLogoSrc(offer)} />
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-bold leading-tight text-foreground">{offer.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{offer.company}</p>

@@ -265,6 +265,7 @@ async def _build_recruitment_context(
         offer_title=offer.title,
         company_id=company.id if company else (offer.company_id or app.company_id),
         company_name=company.name if company else offer.company,
+        company_logo_url=company.logo_url if company else None,
         peer=_peer_out(peer),
         messages=messages,
     )
@@ -373,7 +374,9 @@ async def list_recruitment_chats(
                 "chat_enabled": True,
                 "offer_id": str(offer.id),
                 "offer_title": offer.title,
+                "company_id": str(company.id) if company else (str(offer.company_id) if offer.company_id else None),
                 "company_name": company.name if company else offer.company,
+                "company_logo_url": company.logo_url if company else None,
                 "peer": _peer_out(peer).model_dump() if _peer_out(peer) else None,
                 "last_message": last.content if last else None,
                 "last_at": last.created_at.isoformat() if last else None,

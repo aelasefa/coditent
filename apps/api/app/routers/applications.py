@@ -10,7 +10,7 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Application, CandidateProfile, Offer, User
+from app.models import Application, CandidateProfile, Company, Offer, User
 from app.services.recruitment_chat import (
     get_or_create_recruitment_conversation,
     is_chat_enabled_for_status,
@@ -31,6 +31,14 @@ async def list_applications(
             .where(Application.candidate_id == current_user.id)
             .order_by(Application.created_at.desc())
         )
+        rows = result.all()
+        company_ids = {offer.company_id for _, offer in rows if offer.company_id is not None}
+        logos: dict[str, str | None] = {}
+        if company_ids:
+            comp_rows = await db.execute(
+                select(Company.id, Company.logo_url).where(Company.id.in_(company_ids))
+            )
+            logos = {str(cid): logo for cid, logo in comp_rows.all()}
         return {"applications": [
             {
                 "id": str(app.id),
@@ -39,9 +47,15 @@ async def list_applications(
                 "chat_enabled": is_chat_enabled_for_status(app.status),
                 "created_at": app.created_at.isoformat(),
                 "updated_at": app.updated_at.isoformat() if app.updated_at else None,
-                "opportunity": {"id": str(offer.id), "title": offer.title, "company": offer.company},
+                "opportunity": {
+                    "id": str(offer.id),
+                    "title": offer.title,
+                    "company": offer.company,
+                    "company_id": str(offer.company_id) if offer.company_id else None,
+                    "company_logo_url": logos.get(str(offer.company_id)) if offer.company_id else None,
+                },
             }
-            for app, offer in result.all()
+            for app, offer in rows
         ]}
     if current_user.role.value == "COMPANY_USER":
         if not current_user.company_id or not can(current_user.company_role, "view_applications"):

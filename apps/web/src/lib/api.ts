@@ -512,6 +512,56 @@ export async function getCompanySubscription(
   return data;
 }
 
+export const COMPANY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const COMPANY_LOGO_EXTENSIONS = ["png", "jpg", "jpeg", "webp"] as const;
+
+export function validateCompanyLogoFile(file: File): string | null {
+  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+  if (!(COMPANY_LOGO_EXTENSIONS as readonly string[]).includes(ext)) {
+    return "Invalid file type. Only PNG, JPG, and WebP are supported.";
+  }
+  if (file.size <= 0) return "Empty file.";
+  if (file.size > COMPANY_LOGO_MAX_BYTES) return "File too large. Maximum size is 2MB.";
+  return null;
+}
+
+/** Public stream URL for a company logo. Null when the company has no logo (caller shows initials). */
+export function companyLogoSrc(company: { id: string; logo_url?: string | null } | null | undefined): string | null {
+  if (!company?.id || !company.logo_url) return null;
+  return `${getApiBaseUrl()}/companies/${company.id}/logo`;
+}
+
+/** Logo URL for an offer row. Prefers the denormalized company_logo_url + company_id. */
+export function offerLogoSrc(offer: {
+  company_id?: string | null;
+  company_logo_url?: string | null;
+} | null | undefined): string | null {
+  if (!offer?.company_id || !offer.company_logo_url) return null;
+  return `${getApiBaseUrl()}/companies/${offer.company_id}/logo`;
+}
+
+export async function uploadCompanyLogo(
+  companyId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ logo_url: string; filename?: string | null; content_type?: string | null; size_bytes?: number | null }> {
+  const validationError = validateCompanyLogoFile(file);
+  if (validationError) throw new Error(validationError);
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+  const { data } = await api.post(`/companies/${companyId}/logo`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+    },
+  });
+  return data;
+}
+
+export async function deleteCompanyLogo(companyId: string): Promise<void> {
+  await api.delete(`/companies/${companyId}/logo`);
+}
+
 export async function getApplication(id: string): Promise<import("@/lib/types").ApplicationItem> {
   const { data } = await api.get(`/applications/${id}`);
   return data;
