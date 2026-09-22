@@ -123,6 +123,7 @@ db_data/
 # 5. OS & IDE Specific Files
 # ==========================================
 docs/frontend-revision-guide.md
+FRONTEND-REVISION.md
 .DS_Store
 .DS_Store?
 ._*

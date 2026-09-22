@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Coditent">
+  <rect width="256" height="256" rx="48" fill="#fffefa"/>
+  <g
+    transform="translate(12.5 65) scale(1.05)"
+    fill="none"
+    stroke="#194d38"
+    stroke-linecap="round"
+  >
+    <path d="M58 30C58 30 20 30 20 60C20 90 58 90 58 90" stroke-width="12"/>
+    <circle cx="110" cy="18" r="8" fill="#194d38" stroke="none"/>
+    <path d="M110 26V92" stroke-width="11"/>
+    <circle cx="110" cy="60" r="32" stroke-width="11"/>
+    <path d="M155 30V90" stroke-width="12"/>
+    <path d="M155 30C155 30 200 30 200 60C200 90 155 90 155 90" stroke-width="12"/>
+  </g>
+</svg>
