@@ -44,6 +44,12 @@
 .inboxNotice a:hover, .inboxNotice button:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
 .thread { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: var(--surface); }
 .thread :global([role="log"]) { flex: 1; min-height: 230px; background: var(--background); }
+.typingRow { display: flex; justify-content: flex-start; margin-top: 0.55rem; }
+.typingBubble { display: inline-flex; min-width: 3.3rem; min-height: 2.35rem; align-items: center; justify-content: center; padding: 0.6rem 0.85rem; border: 1px solid var(--border-subtle); border-radius: 16px 16px 16px 5px; background: var(--surface-secondary); box-shadow: 0 4px 12px rgb(25 77 56 / 5%); }
+.typingDots { display: inline-flex; align-items: center; gap: 0.25rem; }
+.typingDots span { width: 0.34rem; height: 0.34rem; border-radius: 50%; background: var(--muted-foreground); animation: typing-pulse 1.2s ease-in-out infinite; }
+.typingDots span:nth-child(2) { animation-delay: 150ms; }
+.typingDots span:nth-child(3) { animation-delay: 300ms; }
 .chatHeader { padding: 1rem 1.45rem 1.15rem; border-bottom: 1px solid var(--border-subtle); }
 .chatBack { display: none; width: fit-content; margin-bottom: 0.8rem; color: var(--primary); font-size: 0.75rem; font-weight: 750; }
 .chatBack:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
@@ -67,6 +73,11 @@
 .threadNotice strong { color: var(--foreground); font-size: 0.95rem; }
 .threadNotice p { max-width: 38ch; margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.55; }
 .threadNotice button { margin-top: 0.4rem; color: var(--primary); font-size: 0.8rem; font-weight: 750; }
+
+@keyframes typing-pulse {
+  0%, 60%, 100% { opacity: 0.42; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
 
 @media (max-width: 899px) {
   .workspace { display: block; height: auto; min-height: 0; }
@@ -92,4 +103,5 @@
 @media (prefers-reduced-motion: reduce) {
   .searchWrap, .filters button, .conversationRow, .welcome a { transition: none; }
   .welcome a:hover { transform: none; }
+  .typingDots span { animation: none; opacity: 0.72; }
 }

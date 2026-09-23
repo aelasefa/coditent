@@ -457,13 +457,34 @@ async def send_recruitment_message(
 _recruitment_rooms: dict[str, set[WebSocket]] = {}
 
 
-async def _broadcast_recruitment_message(application_id: str, message: ChatMessageOut) -> None:
-    payload = {"type": "message", "message": message.model_dump(mode="json")}
-    for ws in list(_recruitment_rooms.get(application_id, set())):
+async def _broadcast_recruitment_event(
+    application_id: str,
+    payload: dict,
+    *,
+    exclude: WebSocket | None = None,
+) -> None:
+    room = _recruitment_rooms.get(application_id)
+    if not room:
+        return
+    disconnected: list[WebSocket] = []
+    for ws in list(room):
+        if ws is exclude:
+            continue
         try:
             await ws.send_json(payload)
         except Exception:
-            continue
+            disconnected.append(ws)
+    for ws in disconnected:
+        room.discard(ws)
+    if not room:
+        _recruitment_rooms.pop(application_id, None)
+
+
+async def _broadcast_recruitment_message(application_id: str, message: ChatMessageOut) -> None:
+    await _broadcast_recruitment_event(
+        application_id,
+        {"type": "message", "message": message.model_dump(mode="json")},
+    )
 
 
 @router.websocket("/recruitment/{application_id}/ws")
@@ -499,6 +520,7 @@ async def recruitment_chat_ws(
             return
         decision = can_access_recruitment_chat(user, app, offer)
         room = str(app.id)
+        typing_active = False
         _recruitment_rooms.setdefault(room, set()).add(websocket)
         try:
             peer = (
@@ -516,10 +538,17 @@ async def recruitment_chat_ws(
                     incoming = await websocket.receive_json()
                 except WebSocketDisconnect:
                     break
-                content = str(incoming.get("content", "")).strip()
-                if not content:
+                if not isinstance(incoming, dict):
+                    await websocket.send_json({"type": "error", "detail": "Invalid realtime event"})
                     continue
-                # Re-resolve authorization per message: stage/company may change.
+
+                event_type = str(incoming.get("type") or "message_send")
+                if event_type not in {"message_send", "typing_start", "typing_stop"}:
+                    await websocket.send_json({"type": "error", "detail": "Unsupported realtime event"})
+                    continue
+
+                # Re-resolve authorization per event: stage/company membership may change
+                # while a socket remains connected.
                 await db.refresh(user)
                 app_fresh = (
                     await db.execute(select(Application).where(Application.id == app.id))
@@ -532,10 +561,37 @@ async def recruitment_chat_ws(
                     continue
                 live = can_access_recruitment_chat(user, app_fresh, offer_fresh)
                 if not live.allowed or live.peer_id is None:
+                    if typing_active:
+                        await _broadcast_recruitment_event(
+                            room,
+                            {"type": "typing_stop", "sender_id": str(user.id)},
+                            exclude=websocket,
+                        )
+                        typing_active = False
                     await websocket.send_json(
                         {"type": "error", "detail": "Recruitment chat is not available for this application"}
                     )
                     continue
+
+                if event_type in {"typing_start", "typing_stop"}:
+                    typing_active = event_type == "typing_start"
+                    await _broadcast_recruitment_event(
+                        room,
+                        {"type": event_type, "sender_id": str(user.id)},
+                        exclude=websocket,
+                    )
+                    continue
+
+                content = str(incoming.get("content", "")).strip()
+                if not content:
+                    continue
+                if typing_active:
+                    await _broadcast_recruitment_event(
+                        room,
+                        {"type": "typing_stop", "sender_id": str(user.id)},
+                        exclude=websocket,
+                    )
+                    typing_active = False
                 peer_user = (
                     await db.execute(select(User).where(User.id == live.peer_id))
                 ).scalar_one_or_none()
@@ -554,12 +610,20 @@ async def recruitment_chat_ws(
                 out = _message_out(msg, user)
                 # Confirm to sender, fan out to the other participant(s).
                 await websocket.send_json({"type": "message", "message": out.model_dump(mode="json")})
-                for ws in list(_recruitment_rooms.get(room, set())):
-                    if ws is websocket:
-                        continue
-                    try:
-                        await ws.send_json({"type": "message", "message": out.model_dump(mode="json")})
-                    except Exception:
-                        continue
+                await _broadcast_recruitment_event(
+                    room,
+                    {"type": "message", "message": out.model_dump(mode="json")},
+                    exclude=websocket,
+                )
         finally:
-            _recruitment_rooms.get(room, set()).discard(websocket)
+            if typing_active:
+                await _broadcast_recruitment_event(
+                    room,
+                    {"type": "typing_stop", "sender_id": str(user.id)},
+                    exclude=websocket,
+                )
+            room_connections = _recruitment_rooms.get(room)
+            if room_connections is not None:
+                room_connections.discard(websocket)
+                if not room_connections:
+                    _recruitment_rooms.pop(room, None)
