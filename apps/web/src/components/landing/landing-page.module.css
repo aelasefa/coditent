@@ -20,11 +20,12 @@
   overflow-x: clip;
 }
 
-.landingRoot :where(a, button):focus-visible,
-.homeSheet :where(a, button):focus-visible {
+.landingRoot :where(a, button):focus-visible {
   outline: 3px solid #a25c38;
   outline-offset: 3px;
 }
+
+.landingRoot :where(main[id], section[id]) { scroll-margin-top: 7rem; }
 
 .eyebrow {
   margin: 0 0 1.25rem;
@@ -380,24 +381,85 @@
 .footer nav { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; color: #355843; font-size: 0.82rem; }
 .footer nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
 
-.homeHeader { position: sticky; top: 0; z-index: 40; height: 82px; background: #f8f8f3; }
-.homeNav { display: flex; width: min(100% - 4rem, 1280px); height: 70px; align-items: center; justify-content: space-between; gap: 1.5rem; margin: 0.38rem auto 0; padding: 0 0.4rem; border: 1px solid transparent; border-radius: 10px; transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1), background-color 280ms ease, box-shadow 280ms ease, border-color 280ms ease, padding 280ms ease; }
-.homeHeaderScrolled .homeNav { width: min(100% - 2rem, 1230px); padding-inline: 1.2rem; border-color: #dce7da; background: rgb(255 254 250 / 96%); box-shadow: 0 8px 28px rgb(26 58 38 / 10%); backdrop-filter: blur(14px); }
-.homeNavLinks { display: flex; align-items: center; gap: clamp(0.5rem, 1.4vw, 1.3rem); }
-.homeNavLinks a, .homeLogin { padding: 0.5rem; color: #395746; font-size: 0.81rem; font-weight: 600; transition: color 220ms ease; }
-.homeNavLinks a:hover, .homeLogin:hover { color: #1a714a; }
-.homeActions { display: flex; align-items: center; gap: 0.7rem; }
-.homeCta { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0.55rem 1rem; border-radius: 6px; background: #194d38; color: white; font-size: 0.8rem; font-weight: 700; transition: background-color 220ms ease; }
-.homeCta:hover { background: #123e2d; }
-.homeMobile { display: none; align-items: center; gap: 0.4rem; }
-.homeMenuButton { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #cbdacb; border-radius: 6px; background: transparent; color: #173d2c; cursor: pointer; }
-.homeMenuButton:hover { background: #edf2e9; }
-.homeSheet { --background: #fffefa; --surface: #fffefa; --surface-secondary: #edf1e9; --surface-hover: #e4ebe0; --foreground: #192b23; --foreground-secondary: #3e5147; --muted-foreground: #617369; --border: #cfdbcf; --border-subtle: #e3e9df; --primary: #194d38; --primary-hover: #123e2d; --primary-foreground: #ffffff; --focus-ring: #a25c38; }
+.homeHeader {
+  --nav-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: min(100% - 2.5rem, 1160px);
+  height: 90px;
+  margin-inline: auto;
+  padding-top: 18px;
+}
+.homeNav {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding-inline: 24px;
+  transition: transform 280ms var(--nav-ease);
+}
+/* Only the glass surface scales: labels keep their size and the page keeps its space. */
+.homeNav::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid rgb(255 255 255 / 85%);
+  border-radius: 999px;
+  background: #fffefa;
+  box-shadow: 0 8px 30px rgb(25 55 38 / 8%), 0 1px 4px rgb(25 55 38 / 5%), inset 0 -1px 0 rgb(58 89 65 / 9%);
+  pointer-events: none;
+  transition: transform 280ms var(--nav-ease), background-color 280ms ease, box-shadow 280ms ease;
+}
+.homeHeaderScrolled .homeNav { transform: translateY(-4px); }
+.homeHeaderScrolled .homeNav::before { transform: scale(0.96, 0.92); box-shadow: 0 12px 34px rgb(25 55 38 / 12%), 0 1px 4px rgb(25 55 38 / 5%), inset 0 -1px 0 rgb(58 89 65 / 9%); }
+.homeBrand { display: inline-flex; flex-shrink: 0; align-items: center; min-height: 44px; border-radius: 999px; transition: transform 280ms var(--nav-ease); }
+.homeHeaderScrolled .homeBrand { transform: translateX(20px); }
+.homeNavLinks { display: flex; align-items: center; gap: clamp(0.25rem, 1vw, 0.8rem); }
+.homeNavLinks a, .homeLogin { display: inline-flex; align-items: center; min-height: 44px; padding: 0.5rem 0.65rem; border-radius: 999px; color: #244735; font-size: 0.81rem; font-weight: 600; white-space: nowrap; transition: color 220ms ease, background-color 220ms ease; }
+.homeNavLinks a:hover, .homeLogin:hover { background: rgb(25 77 56 / 7%); color: #123e2d; }
+.homeActions { display: flex; flex-shrink: 0; align-items: center; gap: 0.5rem; transition: transform 280ms var(--nav-ease); }
+.homeHeaderScrolled .homeActions { transform: translateX(-20px); }
+.homeCta { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0.6rem 1.15rem; border-radius: 999px; background: #194d38; color: white; font-size: 0.8rem; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 5px rgb(25 77 56 / 12%); transition: background-color 220ms ease, transform 220ms var(--nav-ease); }
+.homeCta:hover { background: #123e2d; transform: translateY(-2px); }
+.homeCta:active { transform: translateY(0); }
+.homeMobile { display: none; align-items: center; gap: 0.35rem; }
+.homeMenuButton { display: grid; width: 44px; height: 44px; flex-shrink: 0; place-items: center; border: 1px solid rgb(25 77 56 / 12%); border-radius: 50%; background: rgb(255 254 250 / 40%); color: #173d2c; cursor: pointer; transition: background-color 220ms ease; }
+.homeMenuButton:hover, .homeMenuButton[aria-expanded="true"] { background: #e4ebe0; }
+.homeMobilePanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline: 0;
+  max-height: calc(100dvh - 104px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 85%);
+  border-radius: 24px;
+  background: #fffefa;
+  box-shadow: 0 18px 48px rgb(25 55 38 / 14%), inset 0 -1px 0 rgb(58 89 65 / 9%);
+}
+.homeMobilePanel:not([hidden]) { animation: home-menu-enter 240ms var(--nav-ease) both; }
 .homeMobileNav { display: flex; flex-direction: column; gap: 0.25rem; }
-.homeMobileNav a { border-radius: 6px; padding: 0.8rem 0.7rem; color: #244b34; font-size: 0.95rem; font-weight: 600; }
+.homeMobileNav a { display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-radius: 12px; padding: 0.8rem 1rem; color: #244b34; font-size: 0.95rem; font-weight: 600; }
 .homeMobileNav a:hover { background: #edf1e9; }
-.homeMobileNav .homeMobileCta { margin-top: 0.6rem; background: #194d38; color: white; text-align: center; }
-.homeMobileNav .homeMobileCta:hover { background: #123e2d; }
+.homeMobileLogin { margin-top: 0.5rem; background: #edf1e9; }
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .homeNav::before, .homeMobilePanel { -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%); }
+  .homeNav::before { background: rgb(255 254 250 / 60%); }
+  .homeHeaderScrolled .homeNav::before { background: rgb(255 254 250 / 72%); }
+  .homeMobilePanel { background: rgb(255 254 250 / 94%); }
+}
+
+@keyframes home-menu-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 @keyframes demo-enter {
   from { opacity: 0; transform: translateY(12px); }
@@ -409,6 +471,16 @@
   .homeNavLinks a { font-size: 0.75rem; }
   .heroInner { gap: 2rem; }
   .heroTitle { font-size: clamp(3.8rem, 6.6vw, 5.6rem); }
+}
+
+@media (max-width: 1023px) {
+  .homeHeader { width: calc(100% - 24px); height: 76px; padding-top: 12px; }
+  .homeNav { height: 64px; gap: 0.5rem; padding-inline: 14px 10px; }
+  .homeNavLinks, .homeActions { display: none; }
+  .homeMobile { display: flex; }
+  .homeHeaderScrolled .homeNav::before { transform: scaleY(0.96); }
+  .homeHeaderScrolled .homeBrand { transform: none; }
+  .homeMobile .homeCta { padding-inline: 0.8rem; font-size: 0.75rem; }
 }
 
 @media (max-width: 900px) {
@@ -425,11 +497,6 @@
 
 @media (max-width: 760px) {
   .heroInner, .sectionShell, .discoveryInner, .companyInner, .finalInner, .footerInner, .capabilityInner { width: min(100% - 2rem, 1280px); }
-  .homeHeader { height: 70px; }
-  .homeNav { width: min(100% - 2rem, 1280px); height: 58px; }
-  .homeHeaderScrolled .homeNav { width: min(100% - 1rem, 1230px); padding-inline: 0.8rem; }
-  .homeNavLinks, .homeActions { display: none; }
-  .homeMobile { display: flex; }
   .capabilityList { grid-template-columns: repeat(2, 1fr); gap: 1rem 0; }
   .capabilityList li:nth-child(odd) { padding-left: 0; border-left: 0; }
   .storyGrid { grid-template-columns: 1fr; margin-top: 3rem; }
@@ -462,7 +529,18 @@
   .finalActions { align-items: flex-start; flex-direction: column; }
 }
 
+@media (max-width: 360px) {
+  .homeNav { gap: 0.25rem; padding-inline: 10px 8px; }
+  .homeMobile .homeCta { padding-inline: 0.65rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .landingRoot *, .homeSheet * { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  .primaryButton:hover, .lightButton:hover, .textButton:hover, .inlineLink:hover { transform: none; }
+  .landingRoot *, .homeNav::before { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .homeHeaderScrolled .homeNav, .homeHeaderScrolled .homeNav::before, .homeHeaderScrolled .homeBrand, .homeHeaderScrolled .homeActions,
+  .homeCta:hover, .primaryButton:hover, .lightButton:hover, .textButton:hover, .inlineLink:hover { transform: none; }
+  .homeMobilePanel:not([hidden]) { animation: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .homeNav::before, .homeHeaderScrolled .homeNav::before, .homeMobilePanel { background: #fffefa; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
