@@ -1,96 +1,58 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getApiBaseUrl,
   getMe,
   getRecruitmentChat,
-  getRecruitmentWsUrl,
   sendRecruitmentMessage,
 } from "@/lib/api";
-import type { ChatMessage } from "@/lib/types";
-import { AUTH_TOKEN_KEY } from "@/lib/constants";
+import type { ChatMessage, RecruitmentChatContext } from "@/lib/types";
 import { ChatWorkspace } from "@/components/candidate/chat-workspace";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
 import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
+import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 
 export default function RecruitmentChatPage({ params }: { params: { applicationId: string } }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { applicationId } = params;
-  const [wsLive, setWsLive] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+
+  const handleRealtimeMessage = useCallback((message: ChatMessage) => {
+    qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => {
+      if (!previous || previous.messages.some((item) => item.id === message.id)) return previous;
+      return { ...previous, messages: [...previous.messages, message] };
+    });
+    qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
+  }, [applicationId, qc]);
+
+  const recruitmentSocket = useRecruitmentChatSocket({
+    applicationId,
+    currentUserId: me?.id,
+    onMessage: handleRealtimeMessage,
+  });
 
   const chatQuery = useQuery({
     queryKey: ["recruitment-chat", applicationId],
     queryFn: () => getRecruitmentChat(applicationId),
-    refetchInterval: wsLive ? false : 3000,
+    refetchInterval: recruitmentSocket.live ? false : 3000,
     retry: false,
   });
   const ctx = chatQuery.data;
   const backHref = me?.role === "CANDIDATE" ? "/chat" : "/company/candidates";
 
   useEffect(() => {
-    if (typeof window === "undefined" || !localStorage.getItem(AUTH_TOKEN_KEY)) return;
-    let closed = false;
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(getRecruitmentWsUrl(applicationId));
-    } catch {
-      return;
-    }
-    wsRef.current = ws;
-    ws.onopen = () => {
-      if (!closed) setWsLive(true);
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const payload = JSON.parse(ev.data as string) as { type: string; message?: ChatMessage };
-        if (payload.type === "message" && payload.message) {
-          qc.setQueryData(["recruitment-chat", applicationId], (prev: typeof ctx) =>
-            prev ? { ...prev, messages: [...prev.messages, payload.message as ChatMessage] } : prev
-          );
-          qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
-        }
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    ws.onclose = () => {
-      if (!closed) setWsLive(false);
-    };
-    ws.onerror = () => {
-      try {
-        ws?.close();
-      } catch {
-        /* noop */
-      }
-    };
-    return () => {
-      closed = true;
-      setWsLive(false);
-      try {
-        ws?.close();
-      } catch {
-        /* noop */
-      }
-      wsRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationId]);
+    if (!ctx?.chat_enabled) recruitmentSocket.stopTyping();
+  }, [ctx?.chat_enabled, recruitmentSocket.stopTyping]);
 
   const sendMut = useMutation({
     mutationFn: async (text: string) => {
-      const sock = wsRef.current;
-      if (sock && sock.readyState === WebSocket.OPEN && ctx?.chat_enabled) {
-        sock.send(JSON.stringify({ content: text }));
-        return null;
-      }
+      if (ctx?.chat_enabled && recruitmentSocket.sendMessage(text)) return null;
       return sendRecruitmentMessage(applicationId, text);
     },
     onSuccess: (created) => {
@@ -114,7 +76,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
           subtitle={ctx?.offer_title}
           context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
           avatarSrc={ctx?.peer?.avatar_url ?? companyLogo}
-          status={ctx ? `${wsLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
+          status={ctx ? `${recruitmentSocket.live ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />
 
@@ -149,11 +111,18 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
 
         {ctx && ctx.chat_enabled && (
           <>
-            <MessageList messages={ctx.messages} myId={me?.id} />
+            <MessageList
+              messages={ctx.messages}
+              myId={me?.id}
+              peerName={peerName}
+              peerIsTyping={recruitmentSocket.peerIsTyping}
+            />
             <Composer
               peerName={peerName}
               pending={sendMut.isPending}
               onSend={(text) => sendMut.mutate(text)}
+              onTyping={recruitmentSocket.notifyTyping}
+              onTypingStop={recruitmentSocket.stopTyping}
             />
           </>
         )}
