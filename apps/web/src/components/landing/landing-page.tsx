@@ -24,7 +24,7 @@ export function LandingPage() {
   return (
     <div className={styles.landingRoot}>
       <SiteHeader variant="home" />
-      <main id="main">
+      <main id="main" tabIndex={-1}>
         <section aria-labelledby="hero-title" className={styles.hero}>
           <div className={styles.heroInner}>
             <div className={styles.heroCopy}>
