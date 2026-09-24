@@ -9,7 +9,6 @@ services:
       - ./apps/api/.env
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      # DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/coditent
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       FRONTEND_URL: http://localhost:3001
@@ -22,9 +21,6 @@ services:
       GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: coditent-vault-token-secret
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
     ports:
       - "8001:8001"
     command: >
@@ -52,7 +48,6 @@ services:
         condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      # DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/coditent
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
@@ -114,19 +109,3 @@ services:
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: coditent-postgres
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     POSTGRES_DB: coditent
-  #   ports:
-  #     - "5433:5432"
-  #   healthcheck:
-  #     test: ["CMD", "pg_isready", "-U", "postgres"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-
