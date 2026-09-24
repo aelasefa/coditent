@@ -4,6 +4,7 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: coditent-api
+    restart: on-failure
     env_file:
       - ./apps/api/.env
     environment:
@@ -58,7 +59,8 @@ services:
     image: redis:7-alpine
     container_name: coditent-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6380:6379"
+
 
   web:
     build:
@@ -87,8 +89,9 @@ services:
     container_name: coditent-proxy
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
+
     depends_on:
       web:
         condition: service_started
@@ -106,5 +109,3 @@ services:
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
-
-

@@ -163,3 +163,9 @@ Security_Role_Mastery_and_Action_Plan.pdf
 ansible/.vault-password*
 ansible/**/vault.yml
 !ansible/vault.example.yml
+
+# ==========================================
+# 8. Markdown Notes & Documentation
+# ==========================================
+*.md
+!/README.md
