@@ -76,7 +76,11 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     company_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    backup_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
 
     company: Mapped["Company | None"] = relationship("Company", back_populates="recruiters", foreign_keys=[company_id])
     profile: Mapped["CandidateProfile | None"] = relationship(

@@ -19,4 +19,4 @@ next_public_supabase_publishable_key: "{{ vault_next_public_supabase_publishable
 
 jwt_secret: "{{ vault_jwt_secret | default(lookup('env', 'JWT_SECRET')) | default('') }}"
 gemini_api_key: "{{ vault_gemini_api_key | default(lookup('env', 'GEMINI_API_KEY')) | default('') }}"
-redis_url: "redis://redis:6379/0"
+redis_url: "redis://redis:6380/0"

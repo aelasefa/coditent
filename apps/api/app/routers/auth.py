@@ -731,6 +731,18 @@ async def login(
             detail="Recruiter account is pending admin approval",
         )
 
+    if user.is_2fa_enabled:
+        from datetime import timedelta
+        mfa_token = create_access_token(
+            {"sub": str(user.id), "type": "mfa_pending"},
+            expires_delta=timedelta(minutes=5),
+        )
+        logger.info("login_2fa_challenge_issued", user_id=str(user.id))
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"require_2fa": True, "mfa_token": mfa_token},
+        )
+
     token = create_access_token(
         {
             "sub": str(user.id),
@@ -740,6 +752,7 @@ async def login(
     )
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
+
 
 
 @router.put("/me/avatar", response_model=UserMeOut)

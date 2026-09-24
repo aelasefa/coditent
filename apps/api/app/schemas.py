@@ -328,6 +328,37 @@ class CVExtractedOut(APIModel):
     portfolio_url: str | None = None
 
 
+class TwoFactorSetupOut(APIModel):
+    secret: str
+    otpauth_uri: str
+    qr_code: str
+
+
+class TwoFactorEnableRequest(APIModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class TwoFactorEnableOut(APIModel):
+    detail: str
+    backup_codes: list[str]
+
+
+class TwoFactorDisableRequest(APIModel):
+    password: str = Field(min_length=1, max_length=128)
+    code: str = Field(min_length=6, max_length=20)
+
+
+class TwoFactorChallengeResponse(APIModel):
+    require_2fa: bool = True
+    mfa_token: str
+
+
+class TwoFactorVerifyRequest(APIModel):
+    mfa_token: str
+    code: str = Field(min_length=6, max_length=20)
+
+
+
 class CVParseOut(APIModel):
     extracted: CVExtractedOut
     warnings: list[str] = []
