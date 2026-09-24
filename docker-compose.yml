@@ -4,6 +4,7 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: coditent-api
+    restart: on-failure
     env_file:
       - ./apps/api/.env
     environment:
