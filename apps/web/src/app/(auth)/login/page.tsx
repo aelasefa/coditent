@@ -114,6 +114,7 @@ function LoginInner() {
       <video
         className={styles.backgroundVideo}
         autoPlay
+        loop
         muted
         playsInline
         preload="auto"
@@ -122,7 +123,7 @@ function LoginInner() {
         tabIndex={-1}
       >
         <source
-          src="/images/auth/Create-a-subtle-polished-3-second-silen.mp4"
+          src="/images/auth/login-background-hd.mp4"
           type="video/mp4"
         />
       </video>
