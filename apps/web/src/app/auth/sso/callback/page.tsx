@@ -212,7 +212,7 @@ export default function SsoCallbackPage() {
         aria-hidden="true"
         tabIndex={-1}
       >
-        <source src="/images/auth/Create-a-subtle-polished-3-second-silen.mp4" type="video/mp4" />
+        <source src="/images/auth/login-background-full-hd.mp4" type="video/mp4" />
       </video>
       <div className={authStyles.loginContent}>
         <header className={authStyles.header}>
