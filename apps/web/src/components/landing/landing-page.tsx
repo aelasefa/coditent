@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
-import { HeroDemo, StorySteps } from "./landing-interactions";
+import { HeroDemo, ScrollTextReveals, StorySteps } from "./landing-interactions";
 import { SiteHeader } from "./site-header";
 import styles from "./landing-page.module.css";
 
@@ -22,7 +22,8 @@ const COMPANY_STEPS = [
 
 export function LandingPage() {
   return (
-    <div className={styles.landingRoot}>
+    <div className={styles.landingRoot} data-landing-root>
+      <ScrollTextReveals />
       <SiteHeader variant="home" />
       <main id="main" tabIndex={-1}>
         <section aria-labelledby="hero-title" className={styles.hero}>
@@ -49,11 +50,12 @@ export function LandingPage() {
             <div className={styles.heroVisual}>
               <div className={styles.heroImage}>
                 <Image
-                  src="/images/landing/career-network.png"
+                  src="/images/landing/career-network-seamless.png"
                   alt="Professionals connected through a branching career network"
                   fill
                   priority
-                  sizes="(max-width: 900px) 100vw, 52vw"
+                  quality={95}
+                  sizes="(max-width: 900px) 130vw, 64vw"
                   className={styles.heroArtwork}
                 />
               </div>
@@ -64,10 +66,12 @@ export function LandingPage() {
 
         <section aria-label="What Coditent helps you do" className={styles.capabilitySection}>
           <div className={styles.capabilityInner}>
-            <p className={styles.capabilityIntro}>One place to move from possibility to progress.</p>
+            <p className={styles.capabilityIntro} data-scroll-reveal>
+              One place to move from possibility to progress.
+            </p>
             <ul className={styles.capabilityList}>
-              {CAPABILITIES.map(({ label, detail }) => (
-                <li key={label}>
+              {CAPABILITIES.map(({ label, detail }, index) => (
+                <li key={label} data-scroll-reveal data-reveal-delay={(index % 4) + 1}>
                   <span className={styles.capabilityLabel}>{label}</span>
                   <span className={styles.capabilityDetail}>{detail}</span>
                 </li>
@@ -79,11 +83,11 @@ export function LandingPage() {
         <section id="how-it-works" aria-labelledby="story-title" className={styles.storySection}>
           <div className={styles.sectionShell}>
             <div className={styles.sectionIntro}>
-              <p className={styles.eyebrow}>For candidates</p>
-              <h2 id="story-title" className={styles.sectionTitle}>
+              <p className={styles.eyebrow} data-scroll-reveal>For candidates</p>
+              <h2 id="story-title" className={styles.sectionTitle} data-scroll-reveal data-reveal-delay="1">
                 One profile. <em>A clear path to hired.</em>
               </h2>
-              <p className={styles.sectionDescription}>
+              <p className={styles.sectionDescription} data-scroll-reveal data-reveal-delay="2">
                 From discovering a role to speaking with a recruiter, each step has a purpose you can understand.
               </p>
             </div>
@@ -94,22 +98,25 @@ export function LandingPage() {
         <section id="candidates" aria-labelledby="discovery-title" className={styles.discoverySection}>
           <div className={styles.discoveryInner}>
             <div className={styles.discoveryCopy}>
-              <p className={styles.eyebrow}>Job discovery</p>
-              <h2 id="discovery-title" className={styles.sectionTitle}>Find work that fits where you want to go.</h2>
-              <p className={styles.sectionDescription}>
+              <p className={styles.eyebrow} data-scroll-reveal>Job discovery</p>
+              <h2 id="discovery-title" className={styles.sectionTitle} data-scroll-reveal data-reveal-delay="1">
+                Find work that fits where you want to go.
+              </h2>
+              <p className={styles.sectionDescription} data-scroll-reveal data-reveal-delay="2">
                 Explore open opportunities by field, region and role. When a position feels right, your profile,
                 practical skills and application progress stay connected.
               </p>
-              <Link href="/offers/all" className={styles.inlineLink}>
+              <Link href="/offers/all" className={styles.inlineLink} data-scroll-reveal data-reveal-delay="3">
                 Browse all opportunities <span aria-hidden="true">↗</span>
               </Link>
             </div>
             <div className={styles.discoveryImage}>
               <Image
-                src="/images/landing/opportunity-horizon.png"
+                src="/images/landing/opportunity-horizon-seamless.png"
                 alt="People following a winding path through a green landscape"
                 fill
-                sizes="(max-width: 900px) 100vw, 48vw"
+                quality={95}
+                sizes="(max-width: 500px) 145vw, (max-width: 900px) 135vw, 74vw"
                 className={styles.discoveryArtwork}
               />
             </div>
@@ -120,20 +127,27 @@ export function LandingPage() {
           <div className={styles.companyPattern} aria-hidden="true" />
           <div className={styles.companyInner}>
             <div className={styles.companyLead}>
-              <p className={styles.eyebrow}>For companies</p>
-              <h2 id="company-title" className={styles.companyTitle}>Hire on demonstrated skill.</h2>
-              <p className={styles.companyDescription}>
+              <p className={styles.eyebrow} data-scroll-reveal>For companies</p>
+              <h2 id="company-title" className={styles.companyTitle} data-scroll-reveal data-reveal-delay="1">
+                Hire on demonstrated skill.
+              </h2>
+              <p className={styles.companyDescription} data-scroll-reveal data-reveal-delay="2">
                 Publish roles, review candidates with match context, run practical assessments, and move people
                 through a clear pipeline.
               </p>
-              <Link href="/register" className={styles.lightButton}>
+              <Link href="/register" className={styles.lightButton} data-scroll-reveal data-reveal-delay="3">
                 Start hiring <span aria-hidden="true">↗</span>
               </Link>
             </div>
             <div className={styles.companyPanel}>
+              <div className={styles.companyStars} aria-hidden="true">
+                {Array.from({ length: 18 }, (_, index) => (
+                  <span key={index} className={styles.companyStar} />
+                ))}
+              </div>
               <ol className={styles.companySteps}>
                 {COMPANY_STEPS.map(([title, description], index) => (
-                  <li key={title}>
+                  <li key={title} data-scroll-reveal data-reveal-delay={(index % 3) + 1}>
                     <span className={styles.companyNumber}>{String(index + 1).padStart(2, "0")}</span>
                     <span>
                       <strong>{title}</strong>
@@ -149,10 +163,14 @@ export function LandingPage() {
         <section aria-labelledby="final-title" className={styles.finalSection}>
           <div className={styles.finalInner}>
             <div>
-              <p className={styles.eyebrow}>Begin here</p>
-              <h2 id="final-title" className={styles.finalTitle}>Your next step starts with an opportunity.</h2>
-              <p>Browse open roles. Create an account when you are ready to apply.</p>
-              <div className={styles.finalActions}>
+              <p className={styles.eyebrow} data-scroll-reveal>Begin here</p>
+              <h2 id="final-title" className={styles.finalTitle} data-scroll-reveal data-reveal-delay="1">
+                Your next step starts with an opportunity.
+              </h2>
+              <p data-scroll-reveal data-reveal-delay="2">
+                Browse open roles. Create an account when you are ready to apply.
+              </p>
+              <div className={styles.finalActions} data-scroll-reveal data-reveal-delay="3">
                 <Link href="/offers/all" className={styles.primaryButton}>
                   Browse opportunities <span aria-hidden="true">↗</span>
                 </Link>
@@ -161,10 +179,11 @@ export function LandingPage() {
             </div>
             <div className={styles.finalImage}>
               <Image
-                src="/images/landing/open-threshold.png"
+                src="/images/landing/open-threshold-seamless.png"
                 alt="Professionals meeting beneath a broad green arch"
                 fill
-                sizes="(max-width: 900px) 100vw, 40vw"
+                quality={95}
+                sizes="(max-width: 500px) 120vw, (max-width: 900px) 110vw, 56vw"
                 className={styles.finalArtwork}
               />
             </div>
