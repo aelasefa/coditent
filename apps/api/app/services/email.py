@@ -1,4 +1,7 @@
 import json
+import html as html_module
+import re
+from email.utils import formataddr
 from urllib import error, request
 
 from app.config import settings
@@ -6,17 +9,28 @@ from app.config import settings
 RESEND_SEND_EMAIL_URL = "https://api.resend.com/emails"
 
 
-def send_email(to_email: str, subject: str, html: str) -> dict:
+def _plain_text(html_content: str) -> str:
+    """Build a readable multipart alternative for mailbox and spam filters."""
+    text = re.sub(r"<\s*br\s*/?>", "\n", html_content, flags=re.IGNORECASE)
+    text = re.sub(r"</(p|div|h[1-6]|li)\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html_module.unescape(text)
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+
+def send_email(to_email: str, subject: str, html: str, text: str | None = None) -> dict:
     """Send an email through Resend API using backend secret key from env."""
     if not settings.resend_api_key:
         raise RuntimeError("RESEND_API_KEY must be set in environment variables.")
 
     from_email = settings.resend_from_email or "onboarding@resend.dev"
+    sender = formataddr((settings.resend_from_name, from_email))
     payload = {
-        "from": from_email,
+        "from": sender,
         "to": [to_email],
         "subject": subject,
         "html": html,
+        "text": text or _plain_text(html),
     }
 
     req = request.Request(

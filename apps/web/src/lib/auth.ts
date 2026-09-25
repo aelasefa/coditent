@@ -1,6 +1,7 @@
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
 const oneWeekInSeconds = 60 * 60 * 24 * 7;
+const TRUSTED_DEVICE_KEY = "coditent_trusted_device";
 
 export function saveToken(token: string): void {
   if (typeof window === "undefined") {
@@ -17,6 +18,18 @@ export function getToken(): string | null {
   }
 
   return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function saveTrustedDevice(token: string): void {
+  if (typeof window !== "undefined") localStorage.setItem(TRUSTED_DEVICE_KEY, token);
+}
+
+export function getTrustedDevice(): string | null {
+  return typeof window === "undefined" ? null : localStorage.getItem(TRUSTED_DEVICE_KEY);
+}
+
+export function removeTrustedDevice(): void {
+  if (typeof window !== "undefined") localStorage.removeItem(TRUSTED_DEVICE_KEY);
 }
 
 export function removeToken(): void {

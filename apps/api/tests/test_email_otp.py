@@ -108,6 +108,13 @@ def test_otp_template_contains_code_but_service_never_logs_it(capsys):
     assert subject
 
 
+def test_email_plain_text_alternative_removes_html():
+    from app.services.email import _plain_text
+
+    text = _plain_text("<div>Hello <strong>there</strong></div><p>Code: 123456</p>")
+    assert text == "Hello there\nCode: 123456"
+
+
 # ---------- live API tests ----------
 
 

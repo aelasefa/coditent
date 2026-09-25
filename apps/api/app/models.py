@@ -79,6 +79,10 @@ class User(Base):
     is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     backup_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    pending_email_otp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pending_email_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pending_email_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

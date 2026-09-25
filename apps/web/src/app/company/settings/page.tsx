@@ -16,6 +16,7 @@ import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/
 import { useTheme } from "@/lib/theme-context";
 import { can } from "@/lib/permissions";
 import { FiCheck, FiMoon, FiSun } from "react-icons/fi";
+import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 
 // Mirrors apps/api/app/core/permissions.py via lib/permissions.ts. Backend remains authority.
 const MATRIX: Array<{ capability: string; roles: string[] }> = [
@@ -228,6 +229,11 @@ export default function SettingsPage() {
                   <p className="mt-3 text-xs text-muted-foreground">Plan changes are handled outside this panel. Only Owner manages subscription per platform policy.</p>
                 </div>
               ),
+            },
+            {
+              id: "security",
+              label: "Security",
+              content: <TwoFactorSecurity />,
             },
             {
               id: "appearance",

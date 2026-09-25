@@ -41,6 +41,7 @@ class ResendVerificationRequest(APIModel):
 class LoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
 class OAuthCompleteRegistrationRequest(APIModel):
@@ -56,6 +57,7 @@ class AdminLoginRequest(APIModel):
 class TokenResponse(APIModel):
     token: str
     user: UserOut
+    trusted_device_token: str | None = None
 
 
 class OAuthCompleteRegistrationResponse(APIModel):
@@ -129,6 +131,27 @@ class OnboardingStateOut(APIModel):
 
 class AvatarUpdate(APIModel):
     avatar_url: str = Field(max_length=5_000_000)
+
+
+class AccountNameUpdate(APIModel):
+    full_name: str = Field(min_length=2, max_length=100)
+
+
+class SensitiveAccountRequest(APIModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    two_factor_code: str | None = Field(default=None, min_length=6, max_length=20)
+
+
+class EmailChangeRequest(SensitiveAccountRequest):
+    new_email: EmailStr
+
+
+class EmailChangeConfirm(APIModel):
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PasswordChangeRequest(SensitiveAccountRequest):
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class UserMeOut(APIModel):
