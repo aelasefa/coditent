@@ -98,6 +98,29 @@ export interface Recommendation {
 export interface TokenResponse {
   token: string;
   user: User;
+  trusted_device_token?: string | null;
+}
+
+export interface MfaChallengeResponse {
+  require_2fa: true;
+  mfa_token: string;
+}
+
+export type LoginResponse = TokenResponse | MfaChallengeResponse;
+
+export interface TwoFactorStatus {
+  is_2fa_enabled: boolean;
+}
+
+export interface TwoFactorSetup {
+  secret: string;
+  otpauth_uri: string;
+  qr_code: string;
+}
+
+export interface TwoFactorEnableResult {
+  detail: string;
+  backup_codes: string[];
 }
 
 export interface OAuthHandoffResult extends TokenResponse {

@@ -1,10 +1,12 @@
 import axios from "axios";
+import type { AxiosRequestConfig } from "axios";
 
-import { removeToken } from "@/lib/auth";
+import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type {
   AdminActivity,
   AdminStats,
+  LoginResponse,
   Offer,
   OAuthHandoffResult,
   OAuthRegistrationHandoff,
@@ -12,6 +14,9 @@ import type {
   Profile,
   Recommendation,
   TokenResponse,
+  TwoFactorEnableResult,
+  TwoFactorSetup,
+  TwoFactorStatus,
   User,
 } from "@/lib/types";
 
@@ -32,6 +37,10 @@ export const api = axios.create({
   baseURL: getApiBaseUrl(),
   withCredentials: true,
 });
+
+const skipAuthRedirectConfig = {
+  skipAuthRedirect: true,
+} as AxiosRequestConfig & { skipAuthRedirect: boolean };
 
 const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/recruiter", "/admin"];
 
@@ -121,16 +130,54 @@ export async function resendVerification(email: string): Promise<RegistrationSta
 export async function login(payload: {
   email: string;
   password: string;
-}): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>("/auth/login", payload);
+}): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>(
+    "/auth/login",
+    { ...payload, trusted_device_token: getTrustedDevice() },
+    skipAuthRedirectConfig
+  );
   return data;
 }
 
 export async function adminLogin(payload: {
   email: string;
   password: string;
-}): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>("/auth/login", payload);
+}): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>(
+    "/auth/login",
+    { ...payload, trusted_device_token: getTrustedDevice() },
+    skipAuthRedirectConfig
+  );
+  return data;
+}
+
+export async function verifyTwoFactor(mfaToken: string, code: string): Promise<TokenResponse> {
+  const { data } = await api.post<TokenResponse>(
+    "/auth/2fa/verify",
+    { mfa_token: mfaToken, code },
+    skipAuthRedirectConfig
+  );
+  return data;
+}
+
+export async function getTwoFactorStatus(): Promise<TwoFactorStatus> {
+  const { data } = await api.get<TwoFactorStatus>("/auth/2fa/status");
+  return data;
+}
+
+export async function setupTwoFactor(): Promise<TwoFactorSetup> {
+  const { data } = await api.post<TwoFactorSetup>("/auth/2fa/setup");
+  return data;
+}
+
+export async function enableTwoFactor(code: string): Promise<TwoFactorEnableResult> {
+  const { data } = await api.post<TwoFactorEnableResult>("/auth/2fa/enable", { code });
+  return data;
+}
+
+export async function disableTwoFactor(password: string, code: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>("/auth/2fa/disable", { password, code });
+  removeTrustedDevice();
   return data;
 }
 

@@ -44,6 +44,7 @@ export const candidateNavItems: NavItem[] = [
   { label: "My Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
   { label: "Messages", href: "/chat", icon: FiMessageSquare, match: "prefix" },
   { label: "Profile", href: "/profile", icon: FiUser, match: "prefix" },
+  { label: "Security", href: "/dashboard/security", icon: FiShield, match: "prefix" },
 ];
 
 // Practice + Assessments hidden: routes do not exist yet. No fake links.

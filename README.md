@@ -15,7 +15,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 
 ## Key features
 
-- Custom JWT auth (register + email OTP, login, Google/LinkedIn SSO), role routing, edge middleware protection.
+- Custom JWT auth (register + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
 - Invitation-only company system (platform→company invites, owner→employee invites, token hashing, expiry, resend rotation).
 - Offer CRUD + responsible-HR assignment + activation toggle.
 - Recommendations: Celery + Gemini ranking with deterministic heuristic fallback; per-offer match scoring with `pending → processing → completed | failed` lifecycle.
@@ -980,7 +980,7 @@ bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require
 - Interviews: status string only; scheduling/detail/feedback NOT IMPLEMENTED.
 - Notifications (in-app/email/push) for product events: NOT IMPLEMENTED (audit + emails for invites/OTP only).
 - Public company self-registration; ownership transfer; org deletion: NOT IMPLEMENTED.
-- Password reset, token refresh/logout revocation, 2FA: NOT IMPLEMENTED.
+- Password reset and token refresh/logout revocation: NOT IMPLEMENTED. TOTP 2FA with single-use recovery codes is implemented for login and account settings.
 - RLS policies: none in repo (bypassed by design; dashboard state TO-VERIFY).
 - WS multi-replica fan-out (needs Redis pub/sub per code comment), idempotency keys, periodic cleanup jobs (no beat): NOT IMPLEMENTED.
 - Frontend/backend mismatches M1–M10 (join 410, company PATCH full-payload 422, OAuth key workaround, register RECRUITER rejected, sparse shapes vs rich TS types, unvalidated status strings, legacy `recruiter_id` checks, `updateRequestStatus` admin 403, admin first-page-only, WS token key) — documented, not fixed here.
@@ -1022,7 +1022,7 @@ Previous README claimed 12 pts including the full User-mgmt major "needs friends
 - **Invitation security:** token hashing + UNIQUE + single-use + expiry (7 d / 72 h) + email-match + resend rotation + lazy-expiry.
 - **WS authorization:** JWT from query + full viewer re-check + per-message re-auth; close codes 4401/4403/4404.
 - **Known issues (pre-existing, documented honestly):** B1 offer `toggle` skips `can()` (`offers.py:164`); B2 `GET /chat/with/{uid}` no peer check (`chat.py:74`); B3 `POST /companies` open to any recruiter (`companies.py:70`); B4 `updateRequestStatus` 403s PLATFORM_ADMIN (legacy `ADMIN` check); B5 company PATCH needs full `name` (422 on partial) + audit substring filter (`core/audit.py:31`); B6 `GET /admin/activity` returns `[]` on DB error. Risks: RLS bypassed by design, WS token in URL, no non-auth rate limits verified, CVs stored un-scanned, deploy downtime (compose rebuild).
-- **NOT IMPLEMENTED:** password reset, token refresh/revocation, 2FA, RLS, E2E encryption, attachment scanning, audit tamper protection.
+- **NOT IMPLEMENTED:** password reset, token refresh/revocation, RLS, E2E encryption, attachment scanning, audit tamper protection.
 
 ---
 

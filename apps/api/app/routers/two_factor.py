@@ -1,3 +1,4 @@
+import hashlib
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -130,6 +131,7 @@ async def two_factor_enable(
 async def two_factor_disable(
     data: TwoFactorDisableRequest,
     request: Request,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
@@ -159,6 +161,15 @@ async def two_factor_disable(
     current_user.totp_secret = None
     current_user.backup_codes = None
     await db.commit()
+    from app.config import settings
+
+    response.delete_cookie(
+        key=settings.trusted_device_cookie_name,
+        path="/",
+        secure=settings.access_token_cookie_secure,
+        httponly=True,
+        samesite=settings.access_token_cookie_samesite,
+    )
 
     logger.info("2fa_disabled_success", user_id=str(current_user.id))
     return {"detail": "Two-factor authentication disabled successfully."}
@@ -216,5 +227,29 @@ async def two_factor_verify_challenge(
         }
     )
     _set_access_cookie(response, final_token)
+    from datetime import timedelta
+    from app.config import settings
+
+    trusted_device_token = create_access_token(
+        {
+            "sub": str(user.id),
+            "type": "trusted_device",
+            "factor": hashlib.sha256((user.totp_secret or "").encode()).hexdigest(),
+        },
+        expires_delta=timedelta(days=settings.trusted_device_expire_days),
+    )
+    response.set_cookie(
+        key=settings.trusted_device_cookie_name,
+        value=trusted_device_token,
+        httponly=True,
+        secure=settings.access_token_cookie_secure,
+        samesite=settings.access_token_cookie_samesite,
+        max_age=settings.trusted_device_expire_days * 24 * 60 * 60,
+        path="/",
+    )
     logger.info("2fa_login_success", user_id=str(user.id))
-    return TokenResponse(token=final_token, user=UserOut.model_validate(user))
+    return TokenResponse(
+        token=final_token,
+        user=UserOut.model_validate(user),
+        trusted_device_token=trusted_device_token,
+    )

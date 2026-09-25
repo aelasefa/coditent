@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import html as html_module
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -61,6 +62,7 @@ def attempts_exceeded(attempts: int) -> bool:
 def build_otp_email(full_name: str, otp: str) -> tuple[str, str]:
     """Return (subject, html). Caller sends; never logs the OTP itself."""
     first = (full_name or "").strip().split()[0] if full_name else "there"
+    first = html_module.escape(first)
     subject = "Your CODITENT verification code"
     html = f"""
     <div style="font-family:Inter,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181B;">

@@ -156,6 +156,9 @@ function VerifyInner() {
         )}
       </div>
       <p className="mt-4 text-center text-sm text-muted-foreground">
+        Delivery can take a minute. If it is not in your inbox, check Spam and mark the message as “Not spam”.
+      </p>
+      <p className="mt-2 text-center text-sm text-muted-foreground">
         Wrong email?{" "}
         <Link href="/register" className="font-semibold text-primary hover:underline">
           Start over

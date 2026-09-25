@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -28,6 +29,7 @@ from app.schemas import (
     RegisterRequest,
     ResendVerificationRequest,
     TokenResponse,
+    TwoFactorChallengeResponse,
     UserMeOut,
     UserOut,
     VerifyEmailRequest,
@@ -57,7 +59,7 @@ from app.services.oauth_service import (
     verify_onboarding_session,
     verify_oauth_state,
 )
-from app.utils.jwt import create_access_token
+from app.utils.jwt import create_access_token, verify_token
 
 
 router = APIRouter()
@@ -703,13 +705,13 @@ async def resend_verification(
     return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse | TwoFactorChallengeResponse)
 @limiter.limit("5/minute")
 async def login(
     data: LoginRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> TokenResponse:
+) -> TokenResponse | TwoFactorChallengeResponse:
     email = data.email.strip().lower()
 
     result = await db.execute(select(User).where(User.email == email))
@@ -725,7 +727,21 @@ async def login(
             detail="Recruiter account is pending admin approval",
         )
 
-    if user.is_2fa_enabled:
+    trusted_device = data.trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
+    trusted_device_valid = False
+    if user.is_2fa_enabled and trusted_device:
+        try:
+            trusted_payload = verify_token(trusted_device)
+            trusted_device_valid = (
+                trusted_payload.get("type") == "trusted_device"
+                and trusted_payload.get("sub") == str(user.id)
+                and trusted_payload.get("factor")
+                == hashlib.sha256((user.totp_secret or "").encode()).hexdigest()
+            )
+        except ValueError:
+            trusted_device_valid = False
+
+    if user.is_2fa_enabled and not trusted_device_valid:
         from datetime import timedelta
         mfa_token = create_access_token(
             {"sub": str(user.id), "type": "mfa_pending"},
@@ -736,6 +752,9 @@ async def login(
             status_code=status.HTTP_200_OK,
             content={"require_2fa": True, "mfa_token": mfa_token},
         )
+
+    if user.is_2fa_enabled:
+        logger.info("login_trusted_device", user_id=str(user.id))
 
     token = create_access_token(
         {

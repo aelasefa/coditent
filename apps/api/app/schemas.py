@@ -41,6 +41,7 @@ class ResendVerificationRequest(APIModel):
 class LoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
 class OAuthCompleteRegistrationRequest(APIModel):
@@ -56,6 +57,7 @@ class AdminLoginRequest(APIModel):
 class TokenResponse(APIModel):
     token: str
     user: UserOut
+    trusted_device_token: str | None = None
 
 
 class OAuthCompleteRegistrationResponse(APIModel):
