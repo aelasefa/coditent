@@ -1,6 +1,7 @@
 "use client";
 
 import axios from "axios";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ function normalizeTotp(value: string): string {
 }
 
 export function TwoFactorSecurity() {
+  const queryClient = useQueryClient();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null);
   const [code, setCode] = useState("");
@@ -40,11 +42,15 @@ export function TwoFactorSecurity() {
   useEffect(() => {
     let active = true;
     getTwoFactorStatus()
-      .then((result) => active && setEnabled(result.is_2fa_enabled))
+      .then((result) => {
+        if (!active) return;
+        setEnabled(result.is_2fa_enabled);
+        queryClient.setQueryData(["two-factor-status"], result);
+      })
       .catch((err) => active && setError(apiError(err, "Could not load two-factor status.")))
       .finally(() => active && setBusy(null));
     return () => { active = false; };
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     if (setup) codeRef.current?.focus();
@@ -64,6 +70,7 @@ export function TwoFactorSecurity() {
     try {
       const result = await enableTwoFactor(code);
       setEnabled(true); setSetup(null); setCode(""); setBackupCodes(result.backup_codes);
+      queryClient.setQueryData(["two-factor-status"], { is_2fa_enabled: true });
       setSuccess("Two-factor authentication is enabled. Save the recovery codes below now.");
     } catch (err) { setError(apiError(err, "Could not enable two-factor authentication.")); }
     finally { setBusy(null); }
@@ -76,6 +83,7 @@ export function TwoFactorSecurity() {
     try {
       await disableTwoFactor(password, disableCode.trim());
       setEnabled(false); setPassword(""); setDisableCode(""); setSetup(null); setBackupCodes(null);
+      queryClient.setQueryData(["two-factor-status"], { is_2fa_enabled: false });
       setSuccess("Two-factor authentication has been disabled.");
     } catch (err) { setError(apiError(err, "Could not disable two-factor authentication.")); }
     finally { setBusy(null); }

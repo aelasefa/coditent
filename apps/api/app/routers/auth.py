@@ -21,11 +21,15 @@ from app.limiter import limiter
 from app.observability import get_logger
 from app.schemas import (
     AvatarUpdate,
+    AccountNameUpdate,
+    EmailChangeConfirm,
+    EmailChangeRequest,
     LoginRequest,
     OAuthCompleteRegistrationRequest,
     OAuthCompleteRegistrationResponse,
     OAuthHandoffExchangeRequest,
     OAuthHandoffExchangeResponse,
+    PasswordChangeRequest,
     RegisterRequest,
     ResendVerificationRequest,
     TokenResponse,
@@ -42,6 +46,7 @@ from app.services.email_verification import (
     is_expired,
     otp_expiry,
     send_otp_email,
+    send_email_change_code,
     verify_otp,
 )
 from app.services.oauth_service import (
@@ -60,11 +65,27 @@ from app.services.oauth_service import (
     verify_oauth_state,
 )
 from app.utils.jwt import create_access_token, verify_token
+from app.services.two_factor import verify_and_consume_backup_code, verify_totp_code
 
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = get_logger("auth")
+
+
+def _verify_sensitive_action(user: User, password: str, two_factor_code: str | None) -> None:
+    if not pwd_context.verify(password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid account password.")
+    if not user.is_2fa_enabled:
+        return
+    if not two_factor_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Two-factor code is required.")
+    totp_valid = verify_totp_code(user.totp_secret or "", two_factor_code)
+    backup_valid, remaining = verify_and_consume_backup_code(user.backup_codes, two_factor_code)
+    if not (totp_valid or backup_valid):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid authenticator or recovery code.")
+    if backup_valid:
+        user.backup_codes = remaining
 
 
 def _new_candidate_profile(user_id) -> CandidateProfile:
@@ -766,6 +787,108 @@ async def login(
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
+
+
+@router.put("/account/name", response_model=UserMeOut)
+async def update_account_name(
+    data: AccountNameUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserMeOut:
+    full_name = data.full_name.strip()
+    if len(full_name) < 2:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Name must contain at least two characters.")
+    current_user.full_name = full_name
+    await db.commit()
+    result = await db.execute(
+        select(User).options(joinedload(User.profile)).where(User.id == current_user.id)
+    )
+    return UserMeOut.model_validate(result.scalar_one())
+
+
+@router.post("/account/email/request", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("5/hour")
+async def request_email_change(
+    data: EmailChangeRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    _verify_sensitive_action(current_user, data.current_password, data.two_factor_code)
+    new_email = str(data.new_email).strip().lower()
+    if new_email == current_user.email.lower():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This is already your email address.")
+    existing = await db.scalar(select(User.id).where(User.email == new_email))
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That email address is already in use.")
+    otp = generate_otp()
+    current_user.pending_email = new_email
+    current_user.pending_email_otp_hash = hash_otp(otp)
+    current_user.pending_email_expires_at = otp_expiry()
+    current_user.pending_email_attempts = 0
+    try:
+        send_email_change_code(new_email, current_user.full_name, otp)
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not send the verification code.")
+    await db.commit()
+    return {"detail": "Verification code sent to the new email address.", "email": new_email}
+
+
+@router.post("/account/email/confirm", response_model=TokenResponse)
+@limiter.limit("10/hour")
+async def confirm_email_change(
+    data: EmailChangeConfirm,
+    request: Request,
+    response: Response,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TokenResponse:
+    if not current_user.pending_email or not current_user.pending_email_otp_hash or not current_user.pending_email_expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email change is pending.")
+    if is_expired(current_user.pending_email_expires_at):
+        current_user.pending_email = current_user.pending_email_otp_hash = None
+        current_user.pending_email_expires_at = None
+        current_user.pending_email_attempts = 0
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code expired. Request a new one.")
+    if not verify_otp(data.otp, current_user.pending_email_otp_hash):
+        current_user.pending_email_attempts += 1
+        if current_user.pending_email_attempts >= settings.otp_max_attempts:
+            current_user.pending_email = current_user.pending_email_otp_hash = None
+            current_user.pending_email_expires_at = None
+            current_user.pending_email_attempts = 0
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code.")
+    new_email = current_user.pending_email
+    current_user.email = new_email
+    current_user.pending_email = current_user.pending_email_otp_hash = None
+    current_user.pending_email_expires_at = None
+    current_user.pending_email_attempts = 0
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That email address is already in use.") from exc
+    token = create_access_token({"sub": str(current_user.id), "email": current_user.email, "role": current_user.role.value})
+    _set_access_cookie(response, token)
+    return TokenResponse(token=token, user=UserOut.model_validate(current_user))
+
+
+@router.post("/account/password")
+@limiter.limit("5/hour")
+async def change_account_password(
+    data: PasswordChangeRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    _verify_sensitive_action(current_user, data.current_password, data.two_factor_code)
+    if pwd_context.verify(data.new_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different from the current password.")
+    current_user.password_hash = pwd_context.hash(data.new_password)
+    await db.commit()
+    return {"detail": "Password changed successfully."}
 
 
 @router.put("/me/avatar", response_model=UserMeOut)

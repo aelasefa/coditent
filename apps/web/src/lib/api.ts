@@ -234,6 +234,34 @@ export async function updateAvatar(avatarUrl: string): Promise<User> {
   return data;
 }
 
+export async function updateAccountName(fullName: string): Promise<User> {
+  const { data } = await api.put<User>("/auth/account/name", { full_name: fullName });
+  return data;
+}
+
+export async function requestEmailChange(payload: {
+  new_email: string;
+  current_password: string;
+  two_factor_code?: string;
+}): Promise<{ detail: string; email: string }> {
+  const { data } = await api.post("/auth/account/email/request", payload);
+  return data;
+}
+
+export async function confirmEmailChange(otp: string): Promise<TokenResponse> {
+  const { data } = await api.post<TokenResponse>("/auth/account/email/confirm", { otp });
+  return data;
+}
+
+export async function changeAccountPassword(payload: {
+  current_password: string;
+  new_password: string;
+  two_factor_code?: string;
+}): Promise<{ detail: string }> {
+  const { data } = await api.post("/auth/account/password", payload);
+  return data;
+}
+
 export async function getProfile(): Promise<Profile> {
   const { data } = await api.get<Profile>("/candidates/profile");
   return data;

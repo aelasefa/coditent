@@ -86,6 +86,22 @@ def build_otp_email(full_name: str, otp: str) -> tuple[str, str]:
     return subject, html
 
 
+def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
+    from app.services.email import send_email
+
+    first = html_module.escape((full_name or "there").strip().split()[0])
+    subject = "Confirm your new CODITENT email address"
+    body = f"""
+    <div style="font-family:Inter,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181B;">
+      <h2>Hi {first}, confirm your new email</h2>
+      <p>Enter this code in CODITENT. It expires in {settings.otp_expire_minutes} minutes.</p>
+      <div style="font-size:32px;font-weight:800;letter-spacing:0.35em;text-align:center;padding:16px;background:#FAFAF9;border:1px solid #E4E4E7;border-radius:12px;">{otp}</div>
+      <p style="font-size:12px;color:#71717A;">If you did not request this change, keep your current email and change your password.</p>
+    </div>
+    """
+    send_email(to_email, subject, body)
+
+
 def send_otp_email(to_email: str, full_name: str, otp: str, expires_at: datetime) -> None:
     from app.services.email import send_email
 
