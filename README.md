@@ -1152,6 +1152,20 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 
 ---
 
+## Security architecture
+
+The CODITENT platform implements multi-layer defense-in-depth security:
+
+1. **Reverse Proxy & WAF (ModSecurity)**: Nginx reverse proxy running OWASP ModSecurity CRS to inspect and block malicious web requests, SQLi, and XSS payloads.
+2. **Security Headers & HSTS**: Enforces `Strict-Transport-Security`, `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Permissions-Policy`.
+3. **HashiCorp Vault Secret Management**: Dynamic secret fetching and management via HashiCorp Vault (`http://vault:8200`), avoiding unencrypted static secrets.
+4. **Two-Factor Authentication (2FA / TOTP)**: `POST /auth/2fa/setup` & `/enable` with 6-digit TOTP validation, QR code rendering, and 8 single-use emergency backup codes. Intercepts logins with `mfa_pending` short-lived JWT tokens.
+5. **GDPR Data Rights**: Compliant `POST /auth/gdpr/export` (personal data JSON portability) and password-authenticated `DELETE /auth/gdpr/delete` (Right to Erasure).
+6. **Container Non-Root Hardening**: Docker applications run under unprivileged non-root users (`appuser`, UID 10001) to prevent container escape and privilege escalation.
+7. **Input Sanitization**: Dynamic HTML Bleach text sanitization stripping script tags and unsafe attributes on user inputs.
+
+---
+
 ## Developer learning guide
 
 Study in this order (files are exact):

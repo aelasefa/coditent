@@ -11,7 +11,7 @@ from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics
-from app.routers import admin, applications, assessments, auth, audit, candidates, chat, companies, offers, invitations, recommendations, requests, two_factor
+from app.routers import admin, applications, assessments, auth, audit, candidates, chat, companies, offers, invitations, recommendations, requests, two_factor, gdpr
 
 
 
@@ -43,6 +43,18 @@ app.add_middleware(
 
 app.middleware("http")(record_request_metrics)
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(admin.router, tags=["Admin"])
 app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
@@ -56,6 +68,7 @@ app.include_router(assessments.router, prefix="/assessments", tags=["Assessments
 app.include_router(audit.router, prefix="/audit", tags=["Audit"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(two_factor.router, prefix="/auth/2fa", tags=["Two-Factor Authentication"])
+app.include_router(gdpr.router, prefix="/auth/gdpr", tags=["GDPR Data Rights"])
 
 
 
