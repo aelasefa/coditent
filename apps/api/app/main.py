@@ -14,7 +14,7 @@ from app.health import router as health_router
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
-from app.routers import account_recovery, admin, applications, auth, audit, candidates, chat, companies, friends, institutions, missions, notifications, offers, invitations, recommendations, requests, support, two_factor
+from app.routers import account_recovery, admin, applications, auth, audit, candidates, chat, companies, friends, gdpr, institutions, missions, notifications, offers, invitations, recommendations, requests, support, two_factor
 
 
 
@@ -40,6 +40,18 @@ app.add_middleware(
 
 app.middleware("http")(record_request_metrics)
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(account_recovery.router, prefix="/auth", tags=["Account Recovery"])
 app.include_router(admin.router, tags=["Admin"])
@@ -59,6 +71,7 @@ app.include_router(notifications.router, prefix="/notifications", tags=["Notific
 app.include_router(institutions.router, prefix="/institutions", tags=["Institutions"])
 app.include_router(health_router, tags=["Health"])
 app.include_router(support.router, tags=["Support"])
+app.include_router(gdpr.router, prefix="/auth/gdpr", tags=["GDPR Data Rights"])
 
 
 
