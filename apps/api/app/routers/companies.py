@@ -1,7 +1,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +11,23 @@ from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user, require_company_admin, require_company_member, require_recruiter
 from app.models import Company, User, UserRole
-from app.schemas import CompanyCreate, CompanyOut
+from app.observability import get_logger
+from app.schemas import CompanyCreate, CompanyLogoMetaOut, CompanyOut
+from app.services.company_logo import (
+    CONTENT_TYPE_BY_EXT,
+    MAX_LOGO_BYTES,
+    LogoStorageError,
+    assert_company_logo_path,
+    build_logo_path,
+    check_logo_magic_bytes,
+    delete_logo,
+    download_logo,
+    upload_logo,
+    validate_logo_file,
+)
 
 router = APIRouter()
+logger = get_logger("companies")
 
 
 @router.get("", response_model=dict[str, list[CompanyOut]])
@@ -154,6 +169,124 @@ async def update_company(
     cnt = await db.execute(select(func.count()).select_from(User).where(User.company_id == company.id))
     count = cnt.scalar() or 0
     return CompanyOut(id=company.id, name=company.name, region=company.region, description=company.description, logo_url=company.logo_url, industry=company.industry, location=company.location, website=company.website, company_size=company.company_size, contact_email=company.contact_email, contact_phone=company.contact_phone, status=company.status, owner_id=company.owner_id, created_at=company.created_at, recruiter_count=count)
+
+
+def _logo_media(ext: str) -> str:
+    return CONTENT_TYPE_BY_EXT.get(ext.lower(), "application/octet-stream")
+
+
+@router.get("/{company_id}/logo")
+async def get_company_logo(company_id: UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Public logo stream for candidate-facing pages (cards, detail, applications).
+
+    No auth: candidates must see company branding without membership. The DB
+    stores only the private storage path; this endpoint re-resolves it and
+    enforces the company-prefix scope on every request.
+    """
+    result = await db.execute(select(Company).where(Company.id == company_id))
+    company = result.scalar_one_or_none()
+    if not company or not company.logo_url:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+    try:
+        assert_company_logo_path(company.logo_url, str(company.id))
+        data = download_logo(company.logo_url)
+    except LogoStorageError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+    filename = company.logo_url.rsplit("/", 1)[-1]
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return StreamingResponse(
+        iter([data]),
+        media_type=_logo_media(ext),
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.post("/{company_id}/logo", response_model=CompanyLogoMetaOut, status_code=status.HTTP_201_CREATED)
+async def upload_company_logo(
+    company_id: UUID,
+    file: UploadFile,
+    current_user: Annotated[User, Depends(require_company_member)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CompanyLogoMetaOut:
+    """Upload or replace the company logo. OWNER/ADMIN of the same company only."""
+    if str(current_user.company_id) != str(company_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+    if not can(current_user.company_role, "edit_company"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
+    filename = file.filename or ""
+    try:
+        data = await file.read()
+    finally:
+        await file.close()
+    try:
+        ext = validate_logo_file(filename, file.content_type, len(data))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if len(data) > MAX_LOGO_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large. Maximum size is 2MB")
+    try:
+        check_logo_magic_bytes(data, ext)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    result = await db.execute(select(Company).where(Company.id == company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+
+    # Delete previous logo first (best effort, scope-enforced).
+    old_path = company.logo_url
+    if old_path:
+        try:
+            assert_company_logo_path(old_path, str(company.id))
+            delete_logo(old_path)
+        except LogoStorageError:
+            pass
+
+    path = build_logo_path(str(company.id), ext)
+    try:
+        upload_logo(path, data, CONTENT_TYPE_BY_EXT[ext])
+    except LogoStorageError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    company.logo_url = path
+    await db.commit()
+    await db.refresh(company)
+    await log_audit(db, action="COMPANY_LOGO_UPDATED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
+    logger.info("company_logo_uploaded", company_id=str(company.id))
+    return CompanyLogoMetaOut(logo_url=path, filename=filename, content_type=CONTENT_TYPE_BY_EXT[ext], size_bytes=len(data))
+
+
+@router.delete("/{company_id}/logo", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_company_logo(
+    company_id: UUID,
+    current_user: Annotated[User, Depends(require_company_member)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """Remove the company logo. OWNER/ADMIN of the same company only."""
+    if str(current_user.company_id) != str(company_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+    if not can(current_user.company_role, "edit_company"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
+    result = await db.execute(select(Company).where(Company.id == company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+    if not company.logo_url:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+    try:
+        assert_company_logo_path(company.logo_url, str(company.id))
+        delete_logo(company.logo_url)
+    except LogoStorageError as exc:
+        if str(exc) == "Forbidden":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+        # Storage missing but DB points to it: still clear DB to stay consistent.
+        logger.error("company_logo_delete_storage_miss")
+    company.logo_url = None
+    await db.commit()
+    await log_audit(db, action="COMPANY_LOGO_REMOVED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
+    logger.info("company_logo_deleted", company_id=str(company.id))
+    return None
 
 
 @router.patch("/{company_id}/members/{user_id}", response_model=dict)

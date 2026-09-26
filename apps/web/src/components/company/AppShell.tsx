@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getAuditLogs, getCompany, getMe } from "@/lib/api";
+import { getAuditLogs, getCompany, getMe, companyLogoSrc } from "@/lib/api";
+import { Avatar } from "@/components/ui/avatar";
 import { useTheme } from "@/lib/theme-context";
 import { StatusBadge } from "./StatusBadge";
 import { AppShell as SharedShell } from "@/components/shell/app-shell";
@@ -83,15 +84,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ]}
       onLogout={logout}
       workspaceCard={
-        <div className="mt-3 rounded-lg border border-border-subtle bg-surface-secondary px-3 py-2">
-          <p className="truncate text-xs font-semibold text-foreground">
-            {company?.name || "Company Workspace"}
-          </p>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] text-muted-foreground">
-              {company?.industry || "HR and Talent"}
-            </span>
-            <StatusBadge status={String(me?.company_role ?? "RECRUITER")} size="sm" showDot={false} />
+        <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-border-subtle bg-surface-secondary px-3 py-2">
+          <Avatar src={company ? companyLogoSrc(company) : null} name={company?.name || "Company Workspace"} size="sm" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-foreground">
+              {company?.name || "Company Workspace"}
+            </p>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="truncate text-[11px] text-muted-foreground">
+                {company?.industry || "HR and Talent"}
+              </span>
+              <StatusBadge status={String(me?.company_role ?? "RECRUITER")} size="sm" showDot={false} />
+            </div>
           </div>
         </div>
       }

@@ -20,13 +20,23 @@ function timeLabel(iso: string): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function MessageList({ messages, myId }: { messages: ChatMessage[]; myId?: string }) {
+export function MessageList({
+  messages,
+  myId,
+  peerName = "Someone",
+  peerIsTyping = false,
+}: {
+  messages: ChatMessage[];
+  myId?: string;
+  peerName?: string;
+  peerIsTyping?: boolean;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+  }, [messages.length, peerIsTyping]);
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && !peerIsTyping) {
     return <div role="log" aria-label="Messages" className="flex min-h-[240px] flex-1 flex-col items-center justify-center p-6 text-center">
       <p className="text-sm font-semibold text-foreground">No messages yet</p>
       <p className="mt-1 max-w-xs text-[13px] leading-relaxed text-muted-foreground">Start the conversation with a message.</p>
@@ -36,7 +46,7 @@ export function MessageList({ messages, myId }: { messages: ChatMessage[]; myId?
   let lastDay = "";
   let lastSender = "";
   return (
-    <div role="log" aria-label="Messages" aria-live="polite" className="space-y-1 overflow-y-auto p-4">
+    <div role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions text" className="space-y-1 overflow-y-auto p-4">
       {messages.map((m) => {
         const day = dayLabel(m.created_at);
         const showDay = day && day !== lastDay;
@@ -65,6 +75,18 @@ export function MessageList({ messages, myId }: { messages: ChatMessage[]; myId?
           </div>
         );
       })}
+      {peerIsTyping ? (
+        <div className={styles.typingRow}>
+          <div className={styles.typingBubble}>
+            <span className="sr-only">{peerName} is typing</span>
+            <span aria-hidden="true" className={styles.typingDots}>
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        </div>
+      ) : null}
       <div ref={bottomRef} />
     </div>
   );
@@ -76,12 +98,16 @@ export function Composer({
   disabled,
   disabledReason,
   onSend,
+  onTyping,
+  onTypingStop,
 }: {
   peerName: string;
   pending: boolean;
   disabled?: boolean;
   disabledReason?: string;
   onSend: (text: string) => void;
+  onTyping?: (value: string) => void;
+  onTypingStop?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +125,7 @@ export function Composer({
     if (!text || pending || disabled) return;
     setError(null);
     try {
+      onTypingStop?.();
       onSend(text);
       setValue("");
     } catch {
@@ -124,7 +151,12 @@ export function Composer({
           ref={composerRef}
           id="chat-composer"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            const nextValue = e.target.value;
+            setValue(nextValue);
+            onTyping?.(nextValue);
+          }}
+          onBlur={() => onTypingStop?.()}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

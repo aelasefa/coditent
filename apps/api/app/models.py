@@ -76,7 +76,15 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     company_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    backup_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    pending_email_otp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pending_email_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pending_email_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
 
     company: Mapped["Company | None"] = relationship("Company", back_populates="recruiters", foreign_keys=[company_id])
     profile: Mapped["CandidateProfile | None"] = relationship(
@@ -253,6 +261,23 @@ class ChatMessage(Base):
         Index("ix_chat_messages_sender", "sender_id"),
         Index("ix_chat_messages_receiver", "receiver_id"),
         Index("ix_chat_messages_application_id", "application_id"),
+        # Canonical per-application ordering for the single logical
+        # recruitment conversation (one application_id = one conversation).
+        Index("ix_chat_messages_application_created", "application_id", "created_at"),
+        # Direct/general inbox lookup: only rows with application_id IS NULL.
+        # Keeps recruitment messages out of the direct inbox at the index
+        # level and documents the separation between the two conversation
+        # kinds. NOTE: UNIQUE(application_id) must NOT be applied to this
+        # table — one recruitment conversation HOLDS MANY messages. The
+        # uniqueness guarantee lives on applications.id (PK) + the single
+        # entry per application_id enforced in list_recruitment_chats.
+        Index(
+            "ix_chat_messages_direct_pair",
+            "sender_id",
+            "receiver_id",
+            "created_at",
+            postgresql_where="application_id IS NULL",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

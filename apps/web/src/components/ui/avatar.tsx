@@ -36,7 +36,7 @@ export function Avatar({ src, name, size = "md", className }: AvatarProps) {
       )}
     >
       {src ? (
-        <Image src={src} alt="" width={64} height={64} className="h-full w-full object-cover" />
+        <Image src={src} alt="" width={64} height={64} unoptimized className="h-full w-full object-cover" />
       ) : (
         <span aria-hidden>{initials(name)}</span>
       )}

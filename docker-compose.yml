@@ -4,6 +4,7 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: coditent-api
+    restart: on-failure
     env_file:
       - ./apps/api/.env
     environment:
@@ -18,6 +19,10 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: coditent-vault-token-secret
+    volumes:
+      - ./apps/api:/app
     ports:
       - "8001:8001"
     command: >
@@ -56,7 +61,8 @@ services:
     image: redis:7-alpine
     container_name: coditent-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6380:6379"
+
 
   web:
     build:
@@ -77,3 +83,31 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "3001:3000"
+
+  proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: coditent-proxy
+    restart: always
+    ports:
+      - "8080:80"
+      - "8443:443"
+
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+
+  vault:
+    image: hashicorp/vault:1.15.0
+    container_name: coditent-vault
+    restart: always
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "coditent-vault-token-secret"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK

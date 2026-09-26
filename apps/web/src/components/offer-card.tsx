@@ -1,5 +1,6 @@
 import type { Offer } from "@/lib/types";
 import { MdCard } from "@/components/ui/md-card";
+import { offerLogoSrc } from "@/lib/api";
 
 interface OfferCardProps {
   offer: Offer;
@@ -23,15 +24,21 @@ function avatarForOffer(offer: Offer): string {
 
 export function OfferCard({ offer, score, reasoning, action }: OfferCardProps) {
   const avatar = avatarForOffer(offer);
+  const logoSrc = offerLogoSrc(offer);
 
   return (
     <MdCard className="group relative overflow-hidden rounded-2xl border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-5 backdrop-blur-[14px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_60px_-30px_rgba(0,0,0,0.7)]">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="relative mt-0.5">
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-lg backdrop-blur">
-              {avatar}
-            </span>
+            {logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoSrc} alt="" className="h-11 w-11 rounded-xl border border-white/10 object-cover" />
+            ) : (
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-lg backdrop-blur">
+                {avatar}
+              </span>
+            )}
             <span className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/10 text-[11px] backdrop-blur">
               {offer.type === "JOB" ? "💼" : "🎓"}
             </span>

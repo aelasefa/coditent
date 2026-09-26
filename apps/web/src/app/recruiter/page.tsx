@@ -110,6 +110,12 @@ export default function RecruiterPage() {
           <div className="flex items-center gap-2">
             <Link
               className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
+              href="/recruiter/security"
+            >
+              Security
+            </Link>
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-full border border-md-outline/60 px-4 text-sm font-medium text-md-primary transition-all duration-300 ease-md hover:bg-md-primary/10 active:scale-95"
               href="/dashboard/recommendations"
             >
               Recommendations

@@ -73,6 +73,39 @@ export function HeroDemo() {
   );
 }
 
+export function ScrollTextReveals() {
+  useEffect(() => {
+    const root = document.querySelector<HTMLElement>("[data-landing-root]");
+    if (!root) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (reducedMotion.matches) return;
+
+    const elements = Array.from(root.querySelectorAll<HTMLElement>("[data-scroll-reveal]"));
+    root.dataset.revealReady = "true";
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          (entry.target as HTMLElement).dataset.revealed = "true";
+          observer.unobserve(entry.target);
+        });
+      },
+      { rootMargin: "0px 0px -10% 0px", threshold: 0.15 }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+
+    return () => {
+      observer.disconnect();
+      delete root.dataset.revealReady;
+    };
+  }, []);
+
+  return null;
+}
+
 export function StorySteps() {
   const [active, setActive] = useState(0);
   const items = useRef<(HTMLLIElement | null)[]>([]);
@@ -99,7 +132,7 @@ export function StorySteps() {
       <div className={styles.storyVisual} aria-hidden="true">
         <div className={styles.storyVisualTop}>
           <span>CODITENT / CANDIDATE JOURNEY</span>
-          <span>0{active + 1} — 05</span>
+          <span>0{active + 1} / 05</span>
         </div>
         <div key={active} className={styles.storyVisualContent}>
           <span className={styles.storyVisualMarker}>0{active + 1}</span>

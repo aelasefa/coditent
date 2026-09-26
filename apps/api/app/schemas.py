@@ -3,10 +3,15 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+<<<<<<< HEAD
+=======
+from app.utils.sanitizer import sanitize_input_text
+>>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class UserOut(APIModel):
@@ -22,6 +27,7 @@ class UserOut(APIModel):
 
 class RegisterRequest(APIModel):
     email: EmailStr
+<<<<<<< HEAD
     password: str = Field(min_length=12, max_length=128)
     full_name: str = Field(min_length=2)
     # Compatibility-only: the server always assigns CANDIDATE. Company users
@@ -44,6 +50,11 @@ class RegisterRequest(APIModel):
         if missing:
             raise ValueError(f"Password must include {', '.join(missing)}")
         return password
+=======
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=2, max_length=100)
+    role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
+>>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 
 class VerifyEmailRequest(APIModel):
@@ -57,17 +68,20 @@ class ResendVerificationRequest(APIModel):
 
 class LoginRequest(APIModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
+    trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
 class AdminLoginRequest(APIModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
+
 
 
 class TokenResponse(APIModel):
     token: str
     user: UserOut
+    trusted_device_token: str | None = None
 
 
 class OAuthHandoffExchangeRequest(APIModel):
@@ -91,6 +105,11 @@ class ProfileUpdate(APIModel):
     years_of_experience: int | None = Field(default=None, ge=0, le=40)
     linkedin_url: str | None = Field(default=None, max_length=255)
     portfolio_url: str | None = Field(default=None, max_length=255)
+
+    @field_validator("headline", "bio", "city", "field_of_study", "university", "skills", mode="before")
+    @classmethod
+    def sanitize_text(cls, v: str | None) -> str | None:
+        return sanitize_input_text(v)
 
 
 class ProfileOut(APIModel):
@@ -132,6 +151,27 @@ class AvatarUpdate(APIModel):
     avatar_url: str = Field(max_length=5_000_000)
 
 
+class AccountNameUpdate(APIModel):
+    full_name: str = Field(min_length=2, max_length=100)
+
+
+class SensitiveAccountRequest(APIModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    two_factor_code: str | None = Field(default=None, min_length=6, max_length=20)
+
+
+class EmailChangeRequest(SensitiveAccountRequest):
+    new_email: EmailStr
+
+
+class EmailChangeConfirm(APIModel):
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PasswordChangeRequest(SensitiveAccountRequest):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class UserMeOut(APIModel):
     id: uuid.UUID
     email: str
@@ -154,13 +194,20 @@ class RecruiterApprovalOut(APIModel):
 
 
 class OfferCreate(APIModel):
-    title: str = Field(min_length=2)
-    company: str = Field(min_length=2)
-    region: str
-    field: str
+    title: str = Field(min_length=2, max_length=150)
+    company: str = Field(min_length=2, max_length=150)
+    region: str = Field(min_length=2, max_length=100)
+    field: str = Field(min_length=2, max_length=100)
     type: Literal["JOB", "INTERNSHIP"]
-    description: str = Field(min_length=10)
-    requirements: str = Field(min_length=10)
+    description: str = Field(min_length=10, max_length=10000)
+    requirements: str = Field(min_length=10, max_length=10000)
+
+    @field_validator("title", "company", "description", "requirements", "region", "field", mode="before")
+    @classmethod
+    def sanitize_offer_text(cls, v: str | None) -> str | None:
+        return sanitize_input_text(v)
+
+
 
 
 class OfferOut(APIModel):
@@ -179,6 +226,16 @@ class OfferOut(APIModel):
     company_id: uuid.UUID | None = None
     created_by: uuid.UUID | None = None
     responsible_hr_id: uuid.UUID | None = None
+    # Denormalized branding for candidate-facing cards/detail. Storage path
+    # is resolved via GET /companies/{id}/logo — never a raw storage URL.
+    company_logo_url: str | None = None
+
+
+class CompanyLogoMetaOut(APIModel):
+    logo_url: str
+    filename: str | None = None
+    content_type: str | None = None
+    size_bytes: int | None = None
 
 
 class ResponsibleHrUpdate(APIModel):
@@ -299,6 +356,7 @@ class RecruitmentChatContext(APIModel):
     offer_title: str
     company_id: uuid.UUID | None = None
     company_name: str | None = None
+    company_logo_url: str | None = None
     peer: RecruitmentPeer | None = None
     messages: list[ChatMessageOut] = []
 
@@ -324,6 +382,37 @@ class CVExtractedOut(APIModel):
     phone: str | None = None
     linkedin_url: str | None = None
     portfolio_url: str | None = None
+
+
+class TwoFactorSetupOut(APIModel):
+    secret: str
+    otpauth_uri: str
+    qr_code: str
+
+
+class TwoFactorEnableRequest(APIModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class TwoFactorEnableOut(APIModel):
+    detail: str
+    backup_codes: list[str]
+
+
+class TwoFactorDisableRequest(APIModel):
+    password: str = Field(min_length=1, max_length=128)
+    code: str = Field(min_length=6, max_length=20)
+
+
+class TwoFactorChallengeResponse(APIModel):
+    require_2fa: bool = True
+    mfa_token: str
+
+
+class TwoFactorVerifyRequest(APIModel):
+    mfa_token: str
+    code: str = Field(min_length=6, max_length=20)
+
 
 
 class CVParseOut(APIModel):

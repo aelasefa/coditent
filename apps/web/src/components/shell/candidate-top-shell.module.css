@@ -105,7 +105,7 @@
   .mobileLink:hover { background: var(--surface-secondary); color: var(--primary); }
   .mobileLinkActive { background: #eaf2e9; color: var(--primary); }
   .mobileLink svg, .mobileLinkActive svg { width: 1rem; height: 1rem; }
-  .mobileAccount { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.8rem; padding: 0.8rem 0.5rem 0; border-top: 1px solid var(--border-subtle); }
+  .mobileAccount { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.8rem; padding: 0.8rem 0.5rem 0; border-top: 1px solid var(--border-subtle); }
   .mobileAccount > div { display: flex; min-width: 0; align-items: center; gap: 0.6rem; }
   .mobileAccount span:last-child { display: grid; min-width: 0; }
   .mobileAccount strong, .mobileAccount small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -113,6 +113,8 @@
   .mobileAccount small { color: var(--muted-foreground); font-size: 0.7rem; }
   .mobileAccount button { flex: none; padding: 0.55rem 0.65rem; border-radius: 6px; color: var(--danger); font-size: 0.78rem; font-weight: 700; }
   .mobileAccount button:hover { background: var(--danger-background); }
+  .mobileAccount > a { margin-left: auto; padding: 0.55rem 0.65rem; border-radius: 6px; color: var(--primary); font-size: 0.78rem; font-weight: 700; }
+  .mobileAccount > a:hover { background: var(--surface-secondary); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -96,6 +96,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
               <div id={accountPanelId} className={styles.accountPanel}>
                 <p className={styles.accountEmail}>{user.email ?? "Candidate account"}</p>
                 <Link href="/profile" onClick={() => setAccountOpen(false)}>View profile</Link>
+                <Link href="/dashboard/settings" onClick={() => setAccountOpen(false)}>Settings</Link>
                 <button type="button" onClick={onLogout}>Log out</button>
               </div>
             ) : null}
@@ -122,6 +123,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
               </nav>
               <div className={styles.mobileAccount}>
                 <div><Avatar name={user.name} src={avatarPreview ?? user.avatarUrl} size="sm" /><span><strong>{user.name}</strong>{user.email ? <small>{user.email}</small> : null}</span></div>
+                <Link href="/dashboard/settings" onClick={() => setMobileOpen(false)}>Settings</Link>
                 <button type="button" onClick={onLogout}>Log out</button>
               </div>
             </div>

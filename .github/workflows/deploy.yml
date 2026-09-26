@@ -66,7 +66,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6379/0' }}
+          REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6380/0' }}
           FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
         run: |
           python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"

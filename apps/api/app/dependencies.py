@@ -33,6 +33,8 @@ async def get_current_user(
 
     try:
         payload = verify_token(token)
+        if payload.get("type") is not None:
+            raise ValueError("This token cannot be used as an access token")
         subject = payload.get("sub")
         if not subject:
             raise ValueError("Missing subject")

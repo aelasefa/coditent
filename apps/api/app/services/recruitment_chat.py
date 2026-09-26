@@ -13,6 +13,9 @@ from the database against the authenticated user.
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models import Application, Offer, User
 
 # Chat becomes available once the candidate moves past initial review into a
@@ -107,3 +110,35 @@ def can_access_recruitment_chat(
         )
 
     return RecruitmentChatDecision(False, "forbidden_role")
+
+
+async def get_or_create_recruitment_conversation(
+    db: AsyncSession,
+    application_id: uuid.UUID,
+) -> Application:
+    """Idempotent entry point for every recruitment-conversation flow.
+
+    There is no separate conversation table by design: one application row is
+    exactly one logical recruitment conversation (see ChatMessage.application_id
+    docs). This helper is therefore a locked, validated fetch — never an
+    insert — so concurrent stage updates / accepts / retries all resolve to
+    the SAME conversation identity (the application PK) and can never create
+    a second recruitment conversation for the same application_id.
+
+    Must be used by: application acceptance, stage/status changes, chat
+    initialization, recruiter/HR actions, and message sends.
+    """
+    result = await db.execute(
+        select(Application)
+        .where(Application.id == application_id)
+        .with_for_update()
+    )
+    application = result.scalar_one_or_none()
+    if application is None:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found",
+        )
+    return application
