@@ -229,14 +229,10 @@ function LoginInner() {
                     New to Coditent?{" "}
                     <Link href="/register">Create a candidate account</Link>
                   </p>
-<<<<<<< HEAD
                   {activeRole === "recruiter" ? (
                     <p className={styles.registerPrompt}>Company team accounts are created through an invitation.</p>
                   ) : null}
-                </form>
-=======
                 </form>}
->>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
               </div>
             </div>
           </section>

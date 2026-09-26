@@ -3,13 +3,7 @@
 # CODITENT — Talent Workflow Platform for Morocco
 
 ## Description
-<<<<<<< HEAD
-Coditent connects candidates and invited company hiring teams in one expressive workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar), company teams publish offers, and an AI recommendation engine ranks offers per candidate by field/region/type. Platform admins invite companies, moderate offers/users, and view activity.
-
-Key features: JWT auth (candidate/company user/platform admin), candidate-only public signup, invitation-only company access, OAuth Google/LinkedIn, profile builder with avatar upload (`PUT /auth/me/avatar`), offer CRUD, AI recommendations (Gemini + fallback scoring), role-based routing, Supabase SSR session refresh.
-=======
-
-CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins approve accounts, moderate content, impersonate users for support, and audit activity.
+CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins invite companies, moderate content, impersonate users for support, and audit activity.
 
 ## Project goals
 
@@ -20,7 +14,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 
 ## Key features
 
-- Custom JWT auth (register + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
+- Custom JWT auth (candidate-only registration + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
 - Invitation-only company system (platform→company invites, owner→employee invites, token hashing, expiry, resend rotation).
 - Offer CRUD + responsible-HR assignment + activation toggle.
 - Recommendations: Celery + Gemini ranking with deterministic heuristic fallback; per-offer match scoring with `pending → processing → completed | failed` lifecycle.
@@ -74,7 +68,6 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 37. [Questions I should be able to answer](#questions-i-should-be-able-to-answer)
 
 ---
->>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 ## Instructions
 
@@ -1149,34 +1142,6 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 
 ## Known limitations
 
-<<<<<<< HEAD
-## Database Schema
-- `users(id UUID PK, email, password_hash, role ENUM[CANDIDATE,COMPANY_USER,PLATFORM_ADMIN], company_id, company_role, is_approved, full_name, avatar_url, oauth_provider, oauth_id)` — candidate profiles are linked one-to-one
-- `candidate_profiles(id, user_id FK, city, phone, headline, bio, field_of_study, university, study_level, skills, years_of_experience, linkedin_url, portfolio_url, updated_at)`
-- `offers(id, recruiter_id FK, title, company, region, field, type, description, requirements, active, posted_at)`
-- `saved_recommendations(id, candidate_id FK, offer_id FK, ai_score, ai_reasoning)`
-- Relations: `users 1—1 candidate_profiles`, `users 1—n offers`, `users 1—n saved_recommendations`
-
-## Features List
-- Auth: candidate-only register/login, JWT, OAuth Google/LinkedIn, invitation-only company onboarding, `GET /auth/me` (`aelasefa`)
-- Profile builder: headline/bio/skills/experience/education/links/avatar (`PUT /auth/me/avatar`, `PUT /candidates/profile`) (`mohammedelmahf`)
-- Offers: invited company users create/toggle, list, mine (`POST /offers`, `GET /offers`) (`VYMNN47`)
-- Recommendations: `POST /recommendations/generate` (Celery + Gemini + fallback) + `GET /recommendations` (`aelasefa`)
-- Admin: company invitations, stats/users/offers/activity (`apps/api/app/routers/admin.py` and `apps/api/app/routers/invitations.py`)
-
-## Modules
-| Module | Pts | How implemented |
-|--------|-----|-----------------|
-| Web Major: Framework front+back (Next.js + FastAPI) | 2 | `apps/web` + `apps/api/app/main.py:17` |
-| Web Minor: ORM | 1 | SQLAlchemy + Alembic `apps/api/app/database.py` |
-| Web Minor: Advanced search | 1 | Offer filter by region/field/type `apps/api/app/routers/offers.py:17` |
-| Web Minor: File upload | 1 | Avatar `PUT /auth/me/avatar` + CV upload |
-| User Major: Standard user mgmt | 2 | Profile + avatar, needs friends+online to validate (add `POST /friends`) |
-| User Minor: OAuth 2.0 | 1 | Google/LinkedIn `apps/api/app/routers/auth.py:188` |
-| User Major: Advanced permissions | 2 | Platform roles CANDIDATE/COMPANY_USER/PLATFORM_ADMIN plus invitation-assigned company roles |
-| AI Major: Recommendation system | 2 | Gemini ranking `apps/api/app/services/ai.py:14` + fallback `recommendation_jobs.py:23` |
-| **Total claimed** | **12** | Need +2pts: add friends system (2) OR Public API key (2) OR Analytics (2) |
-=======
 - `SUPABASE_SERVICE_KEY` must be `sb_secret_...` (service_role) for storage; publishable fails (previous README note; consistent with `app/db.py` admin usage).
 - Gemini model name drift risk (`gemini-3-flash-preview` pinned in 3 backend files + frontend bio REST; a 404 requires a coordinated bump).
 - Legacy `RECRUITER`/`ADMIN` roles readable but deprecated; several compat paths drift (M4/M7/M8 mismatches + B3/B4).
@@ -1187,7 +1152,6 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 ---
 
 ## Developer learning guide
->>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 Study in this order (files are exact):
 

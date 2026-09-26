@@ -3,10 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-<<<<<<< HEAD
-=======
 from app.utils.sanitizer import sanitize_input_text
->>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 
 class APIModel(BaseModel):
@@ -27,9 +24,8 @@ class UserOut(APIModel):
 
 class RegisterRequest(APIModel):
     email: EmailStr
-<<<<<<< HEAD
     password: str = Field(min_length=12, max_length=128)
-    full_name: str = Field(min_length=2)
+    full_name: str = Field(min_length=2, max_length=100)
     # Compatibility-only: the server always assigns CANDIDATE. Company users
     # are created exclusively through company or employee invitations.
     role: Literal["CANDIDATE"] | None = None
@@ -50,11 +46,6 @@ class RegisterRequest(APIModel):
         if missing:
             raise ValueError(f"Password must include {', '.join(missing)}")
         return password
-=======
-    password: str = Field(min_length=8, max_length=128)
-    full_name: str = Field(min_length=2, max_length=100)
-    role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
->>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 
 class VerifyEmailRequest(APIModel):

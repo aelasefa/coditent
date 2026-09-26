@@ -18,14 +18,14 @@ import styles from "./register-page.module.css";
 
 const registerSchema = z.object({
   email: z.string().email("Enter a valid email"),
-<<<<<<< HEAD
   password: z.string()
     .min(12, "Password must be at least 12 characters")
+    .max(128, "Password must not exceed 128 characters")
     .regex(/[a-z]/, "Password must include a lowercase letter")
     .regex(/[A-Z]/, "Password must include an uppercase letter")
     .regex(/[0-9]/, "Password must include a number")
     .regex(/[^A-Za-z0-9\s]/, "Password must include a symbol"),
-  full_name: z.string().min(2, "Name is required"),
+  full_name: z.string().min(2, "Name is required").max(100, "Name must not exceed 100 characters"),
 });
 
 const passwordRequirements = [
@@ -35,13 +35,6 @@ const passwordRequirements = [
   { label: "One number", test: (value: string) => /[0-9]/.test(value) },
   { label: "One symbol", test: (value: string) => /[^A-Za-z0-9\s]/.test(value) },
 ] as const;
-=======
-  password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password must not exceed 128 characters"),
-  full_name: z.string().min(2, "Name is required").max(100, "Name must not exceed 100 characters"),
-  role: z.enum(["candidate", "recruiter"]),
-});
-
->>>>>>> 7d7f1d9241f2adccea3ef7eed613ca7f7461ada2
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
