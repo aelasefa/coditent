@@ -35,7 +35,7 @@ invitation_expiration_hours: 72
 
 # Resend Mail Configuration
 resend_api_key: ""
-resend_from_email: "coditent@yourdomain.com"
+resend_from_email: "notifications@maelmahf.dev"
 resend_from_name: "CODITENT"
 
 # OAuth Defaults (optional)

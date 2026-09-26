@@ -23,9 +23,12 @@ class Settings(BaseSettings):
     gemini_api_key: str
     resend_api_key: str | None = None
     resend_from_email: str | None = None
+    resend_from_name: str = "CODITENT"
     access_token_cookie_name: str = "access_token"
     access_token_cookie_secure: bool = True
     access_token_cookie_samesite: str = "lax"
+    trusted_device_cookie_name: str = "trusted_device"
+    trusted_device_expire_days: int = 30
     oauth_onboarding_cookie_name: str = "oauth_onboarding"
     oauth_onboarding_expire_minutes: int = 10
     oauth_onboarding_cookie_secure: bool = False

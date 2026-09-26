@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { Suspense, useState } from "react";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
-import { api, getCandidateOnboarding } from "@/lib/api";
-import { saveToken } from "@/lib/auth";
+import { login, verifyTwoFactor } from "@/lib/api";
+import { saveToken, saveTrustedDevice } from "@/lib/auth";
+import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import type { TokenResponse } from "@/lib/types";
 import styles from "./login-page.module.css";
 
@@ -23,12 +25,35 @@ function safeNext(raw: string | null): string | null {
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [activeRole, setActiveRole] = useState<LoginRole>("candidate");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+
+  async function finishLogin(data: TokenResponse) {
+    if (data.trusted_device_token) saveTrustedDevice(data.trusted_device_token);
+    const nextPath = safeNext(searchParams.get("next"));
+    if (data.user.role === "PLATFORM_ADMIN" || data.user.role === "ADMIN") {
+      saveToken(data.token); router.push(nextPath ?? "/admin"); return;
+    }
+    if (data.user.role === "COMPANY_USER") {
+      saveToken(data.token); router.push(nextPath ?? "/company"); return;
+    }
+    const expectedRole = activeRole === "candidate" ? "CANDIDATE" : "RECRUITER";
+    if (data.user.role !== expectedRole) {
+      setErrorMessage(activeRole === "candidate"
+        ? "This account is registered as a Recruiter. Use the Recruiter tab to sign in."
+        : "This account is registered as a Candidate. Use the Candidate tab to sign in.");
+      return;
+    }
+    saveToken(data.token);
+    router.push(await getPostAuthDestination(queryClient, data.user, { next: nextPath }));
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,44 +61,13 @@ function LoginInner() {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const response = await api.post<TokenResponse>("/auth/login", { email, password });
-      const data = response.data;
-      const nextPath = safeNext(searchParams.get("next"));
-
-      if (data.user.role === "PLATFORM_ADMIN" || data.user.role === "ADMIN") {
-        saveToken(data.token);
-        router.push(nextPath ?? "/admin");
+      const data = await login({ email, password });
+      if ("require_2fa" in data) {
+        setMfaToken(data.mfa_token);
+        setMfaCode("");
         return;
       }
-      if (data.user.role === "COMPANY_USER") {
-        saveToken(data.token);
-        router.push(nextPath ?? "/company");
-        return;
-      }
-
-      const expectedRole = activeRole === "candidate" ? "CANDIDATE" : "RECRUITER";
-      if (data.user.role !== expectedRole) {
-        setErrorMessage(
-          activeRole === "candidate"
-            ? "This account is registered as a Recruiter. Use the Recruiter tab to sign in."
-            : "This account is registered as a Candidate. Use the Candidate tab to sign in."
-        );
-        return;
-      }
-
-      saveToken(data.token);
-      if (data.user.role === "CANDIDATE") {
-        const onboarding = await getCandidateOnboarding();
-        if (!onboarding.onboarding_completed) {
-          router.push("/get-started");
-          return;
-        }
-      }
-      if (nextPath) {
-        router.push(nextPath);
-        return;
-      }
-      router.push(data.user.role === "RECRUITER" ? "/recruiter" : "/dashboard");
+      await finishLogin(data);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
@@ -93,6 +87,28 @@ function LoginInner() {
     }
   }
 
+  async function handleMfaSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!mfaToken || isSubmitting) return;
+    const code = mfaCode.trim();
+    if (!/^\d{6}$/.test(code) && !/^[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}$/.test(code)) {
+      setErrorMessage("Enter a six-digit authenticator code or a valid recovery code.");
+      return;
+    }
+    setIsSubmitting(true); setErrorMessage(null);
+    try { await finishLogin(await verifyTwoFactor(mfaToken, code)); }
+    catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        setMfaToken(null); setMfaCode(""); setPassword("");
+        setErrorMessage("Your verification session expired. Please sign in again.");
+      } else if (axios.isAxiosError(error) && error.response?.status === 400) {
+        setErrorMessage("Invalid authenticator or recovery code.");
+      } else if (axios.isAxiosError(error) && !error.response) {
+        setErrorMessage("Cannot reach server. Check connection and try again.");
+      } else setErrorMessage("Something went wrong. Please try again.");
+    } finally { setIsSubmitting(false); }
+  }
+
   return (
     <main className={styles.page}>
       <video
@@ -106,7 +122,7 @@ function LoginInner() {
         tabIndex={-1}
       >
         <source
-          src="/images/auth/Create-a-subtle-polished-3-second-silen.mp4"
+          src="/images/auth/login-background-full-hd.mp4"
           type="video/mp4"
         />
       </video>
@@ -130,7 +146,7 @@ function LoginInner() {
               <p className={styles.subtitle}>Sign in to return to your profile, applications, and conversations.</p>
 
               <div id="auth-form" className={styles.formArea}>
-                <div className={styles.roleTabs} role="tablist" aria-label="Account type">
+                {!mfaToken ? <div className={styles.roleTabs} role="tablist" aria-label="Account type">
                   {(["candidate", "recruiter"] as LoginRole[]).map((r) => (
                     <button
                       key={r}
@@ -146,9 +162,17 @@ function LoginInner() {
                       {r === "candidate" ? "Candidate" : "Recruiter"}
                     </button>
                   ))}
-                </div>
+                </div> : null}
 
-                <form className={styles.form} onSubmit={handleSubmit}>
+                {mfaToken ? (
+                <form className={styles.form} onSubmit={handleMfaSubmit}>
+                  <p className={styles.subtitle}>Enter the code from your authenticator app, or use one of your recovery codes.</p>
+                  <Input label="Authenticator or recovery code" id="mfa-code" autoFocus required autoComplete="one-time-code" inputMode="text" maxLength={20} value={mfaCode} disabled={isSubmitting} onChange={(e) => { setMfaCode(e.target.value); setErrorMessage(null); }} helper="Six digits or a recovery code such as AB12-CD34" />
+                  {errorMessage ? <p id="login-error" role="alert" className={styles.error}>{errorMessage}</p> : null}
+                  <Button type="submit" loading={isSubmitting} className={styles.submitButton}>Verify and continue</Button>
+                  <Button type="button" variant="ghost" disabled={isSubmitting} onClick={() => { setMfaToken(null); setMfaCode(""); setErrorMessage(null); }}>Back to sign in</Button>
+                </form>
+                ) : <form className={styles.form} onSubmit={handleSubmit}>
                   <SocialLoginButtons className={styles.socialLogin} separator="or continue with email" />
                   <Input
                     label="Email"
@@ -205,7 +229,7 @@ function LoginInner() {
                     New to Coditent?{" "}
                     <Link href={`/register?role=${activeRole}`}>Create an account</Link>
                   </p>
-                </form>
+                </form>}
               </div>
             </div>
           </section>

@@ -87,6 +87,36 @@ async def _run_job(candidate_id: uuid.UUID, criteria: dict) -> list[dict]:
         return await generate_recommendations_for_candidate(db, candidate_id, criteria)
 
 
+@celery_app.task(name="recommendations.score_single")
+def score_match_task(candidate_id: str, offer_id: str) -> None:
+    """Per-offer candidate match scorer. Persists completed/failed on the row."""
+    from app.services.match_scoring import score_single_match
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(engine.dispose())
+
+        async def _run() -> None:
+            async with AsyncSessionLocal() as db:
+                try:
+                    await score_single_match(
+                        db, uuid.UUID(candidate_id), uuid.UUID(offer_id)
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "match_job_failed",
+                        candidate_id=candidate_id,
+                        offer_id=offer_id,
+                        error=str(exc)[:300],
+                    )
+
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+
 @celery_app.task(name="applications.screen")
 def screen_application_task(application_id: str) -> None:
     """Recruiter AI screening. Records completed/failed on the row itself."""

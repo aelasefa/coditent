@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { api, generateRecommendations, getProfile, getRecommendationJob, getRecommendations } from "@/lib/api";
+import { api, generateRecommendations, getProfile, getRecommendationJob, getRecommendations, scoreRecommendation } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -107,6 +107,29 @@ function RecommendationsContent() {
   });
 
   const recs = recsQuery.data ?? [];
+  // Newly published jobs arrive as pending rows from GET /recommendations.
+  // Trigger per-offer scoring for rows with no completed analysis, then
+  // refetch so the real score replaces "Match analysis pending".
+  useEffect(() => {
+    if (recsQuery.isLoading || recsQuery.isError) return;
+    const pending = (recsQuery.data ?? []).filter((r) => {
+      const st = (r as { status?: string }).status;
+      const sc = (r as { ai_score?: number; score?: number }).ai_score ?? (r as { score?: number }).score;
+      return st === "pending" || st === "failed" || (!st && !(typeof sc === "number" && sc > 0));
+    }).slice(0, 10);
+    if (pending.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      await Promise.allSettled(pending.map((r) => scoreRecommendation(r.offer.id)));
+      if (cancelled) return;
+      // Give the worker a moment, then reload real statuses/scores.
+      await new Promise((res) => setTimeout(res, 4000));
+      if (cancelled) return;
+      await queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recsQuery.data?.length, recsQuery.isLoading, recsQuery.isError]);
   const appliedOfferIds = useMemo(
     () => new Set([...(appsQuery.data ?? []).map((a) => a.opportunity_id), ...applied]),
     [appsQuery.data, applied]

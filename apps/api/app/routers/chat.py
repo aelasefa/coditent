@@ -19,6 +19,7 @@ from app.schemas import (
 )
 from app.services.recruitment_chat import (
     can_access_recruitment_chat,
+    get_or_create_recruitment_conversation,
     is_chat_enabled_for_status,
     resolve_responsible_hr_id,
 )
@@ -76,13 +77,17 @@ async def get_conversation(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    # Direct/general thread ONLY. Recruitment messages (application_id NOT NULL)
+    # must never leak here, otherwise the same peer appears twice in the inbox
+    # (once as recruitment, once as direct) with the same preview.
     result = await db.execute(
         select(ChatMessage)
         .where(
+            ChatMessage.application_id.is_(None),
             or_(
                 and_(ChatMessage.sender_id == current_user.id, ChatMessage.receiver_id == user_id),
                 and_(ChatMessage.sender_id == user_id, ChatMessage.receiver_id == current_user.id),
-            )
+            ),
         )
         .order_by(ChatMessage.created_at.asc())
         .limit(100)
@@ -101,9 +106,17 @@ async def list_conversations(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    # Direct/general inbox ONLY. Recruitment messages live under
+    # /chat/recruitment (keyed by application_id) and must not create a
+    # second inbox entry for the same peer here.
     # distinct conversation partners
     result = await db.execute(
-        select(ChatMessage).where(or_(ChatMessage.sender_id == current_user.id, ChatMessage.receiver_id == current_user.id)).order_by(ChatMessage.created_at.desc())
+        select(ChatMessage)
+        .where(
+            ChatMessage.application_id.is_(None),
+            or_(ChatMessage.sender_id == current_user.id, ChatMessage.receiver_id == current_user.id),
+        )
+        .order_by(ChatMessage.created_at.desc())
     )
     msgs = result.scalars().all()
     seen = set()
@@ -252,6 +265,7 @@ async def _build_recruitment_context(
         offer_title=offer.title,
         company_id=company.id if company else (offer.company_id or app.company_id),
         company_name=company.name if company else offer.company,
+        company_logo_url=company.logo_url if company else None,
         peer=_peer_out(peer),
         messages=messages,
     )
@@ -267,6 +281,11 @@ async def list_recruitment_chats(
     Candidate: one entry per accepted application (per offer — multiple
     applications stay separate, never merged). HR: one entry per application
     they are responsible for.
+
+    Exactly ONE entry per application_id: results are de-duplicated by
+    application_id so retries / double stage updates can never produce a
+    second inbox row. Stage changes update the existing entry's metadata
+    (status/last message), never append a new entry.
     """
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     items: list[dict] = []
@@ -308,6 +327,13 @@ async def list_recruitment_chats(
     for a in apps:
         if not is_chat_enabled_for_status(a.status):
             continue
+        # Canonical guard: exactly one inbox entry per application_id, even if
+        # the upstream query ever returned the same application twice (join
+        # fan-out, retry, race). First occurrence wins; metadata is refreshed
+        # from the application row on every call.
+        app_key = str(a.id)
+        if any(e["application_id"] == app_key for e in items):
+            continue
         offer = (
             await db.execute(select(Offer).where(Offer.id == a.opportunity_id))
         ).scalar_one_or_none()
@@ -348,7 +374,9 @@ async def list_recruitment_chats(
                 "chat_enabled": True,
                 "offer_id": str(offer.id),
                 "offer_title": offer.title,
+                "company_id": str(company.id) if company else (str(offer.company_id) if offer.company_id else None),
                 "company_name": company.name if company else offer.company,
+                "company_logo_url": company.logo_url if company else None,
                 "peer": _peer_out(peer).model_dump() if _peer_out(peer) else None,
                 "last_message": last.content if last else None,
                 "last_at": last.created_at.isoformat() if last else None,
@@ -378,8 +406,16 @@ async def send_recruitment_message(
 
     Receiver is derived server-side (candidate → responsible HR, HR →
     candidate). Any client-supplied peer IDs are ignored by design.
+    The conversation is resolved idempotently via
+    get_or_create_recruitment_conversation: repeated calls and concurrent
+    requests reuse the same application_id, never a second conversation.
     """
-    app, offer, _ = await _load_recruitment_context(db, application_id)
+    app = await get_or_create_recruitment_conversation(db, application_id)
+    offer = (
+        await db.execute(select(Offer).where(Offer.id == app.opportunity_id))
+    ).scalar_one_or_none()
+    if offer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
     decision = can_access_recruitment_chat(current_user, app, offer)
     if not decision.allowed or decision.peer_id is None:
         if decision.reason in ("not_application_candidate",):
@@ -421,13 +457,34 @@ async def send_recruitment_message(
 _recruitment_rooms: dict[str, set[WebSocket]] = {}
 
 
-async def _broadcast_recruitment_message(application_id: str, message: ChatMessageOut) -> None:
-    payload = {"type": "message", "message": message.model_dump(mode="json")}
-    for ws in list(_recruitment_rooms.get(application_id, set())):
+async def _broadcast_recruitment_event(
+    application_id: str,
+    payload: dict,
+    *,
+    exclude: WebSocket | None = None,
+) -> None:
+    room = _recruitment_rooms.get(application_id)
+    if not room:
+        return
+    disconnected: list[WebSocket] = []
+    for ws in list(room):
+        if ws is exclude:
+            continue
         try:
             await ws.send_json(payload)
         except Exception:
-            continue
+            disconnected.append(ws)
+    for ws in disconnected:
+        room.discard(ws)
+    if not room:
+        _recruitment_rooms.pop(application_id, None)
+
+
+async def _broadcast_recruitment_message(application_id: str, message: ChatMessageOut) -> None:
+    await _broadcast_recruitment_event(
+        application_id,
+        {"type": "message", "message": message.model_dump(mode="json")},
+    )
 
 
 @router.websocket("/recruitment/{application_id}/ws")
@@ -463,6 +520,7 @@ async def recruitment_chat_ws(
             return
         decision = can_access_recruitment_chat(user, app, offer)
         room = str(app.id)
+        typing_active = False
         _recruitment_rooms.setdefault(room, set()).add(websocket)
         try:
             peer = (
@@ -480,10 +538,17 @@ async def recruitment_chat_ws(
                     incoming = await websocket.receive_json()
                 except WebSocketDisconnect:
                     break
-                content = str(incoming.get("content", "")).strip()
-                if not content:
+                if not isinstance(incoming, dict):
+                    await websocket.send_json({"type": "error", "detail": "Invalid realtime event"})
                     continue
-                # Re-resolve authorization per message: stage/company may change.
+
+                event_type = str(incoming.get("type") or "message_send")
+                if event_type not in {"message_send", "typing_start", "typing_stop"}:
+                    await websocket.send_json({"type": "error", "detail": "Unsupported realtime event"})
+                    continue
+
+                # Re-resolve authorization per event: stage/company membership may change
+                # while a socket remains connected.
                 await db.refresh(user)
                 app_fresh = (
                     await db.execute(select(Application).where(Application.id == app.id))
@@ -496,10 +561,37 @@ async def recruitment_chat_ws(
                     continue
                 live = can_access_recruitment_chat(user, app_fresh, offer_fresh)
                 if not live.allowed or live.peer_id is None:
+                    if typing_active:
+                        await _broadcast_recruitment_event(
+                            room,
+                            {"type": "typing_stop", "sender_id": str(user.id)},
+                            exclude=websocket,
+                        )
+                        typing_active = False
                     await websocket.send_json(
                         {"type": "error", "detail": "Recruitment chat is not available for this application"}
                     )
                     continue
+
+                if event_type in {"typing_start", "typing_stop"}:
+                    typing_active = event_type == "typing_start"
+                    await _broadcast_recruitment_event(
+                        room,
+                        {"type": event_type, "sender_id": str(user.id)},
+                        exclude=websocket,
+                    )
+                    continue
+
+                content = str(incoming.get("content", "")).strip()
+                if not content:
+                    continue
+                if typing_active:
+                    await _broadcast_recruitment_event(
+                        room,
+                        {"type": "typing_stop", "sender_id": str(user.id)},
+                        exclude=websocket,
+                    )
+                    typing_active = False
                 peer_user = (
                     await db.execute(select(User).where(User.id == live.peer_id))
                 ).scalar_one_or_none()
@@ -518,12 +610,20 @@ async def recruitment_chat_ws(
                 out = _message_out(msg, user)
                 # Confirm to sender, fan out to the other participant(s).
                 await websocket.send_json({"type": "message", "message": out.model_dump(mode="json")})
-                for ws in list(_recruitment_rooms.get(room, set())):
-                    if ws is websocket:
-                        continue
-                    try:
-                        await ws.send_json({"type": "message", "message": out.model_dump(mode="json")})
-                    except Exception:
-                        continue
+                await _broadcast_recruitment_event(
+                    room,
+                    {"type": "message", "message": out.model_dump(mode="json")},
+                    exclude=websocket,
+                )
         finally:
-            _recruitment_rooms.get(room, set()).discard(websocket)
+            if typing_active:
+                await _broadcast_recruitment_event(
+                    room,
+                    {"type": "typing_stop", "sender_id": str(user.id)},
+                    exclude=websocket,
+                )
+            room_connections = _recruitment_rooms.get(room)
+            if room_connections is not None:
+                room_connections.discard(websocket)
+                if not room_connections:
+                    _recruitment_rooms.pop(room, None)

@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, getProfile } from "@/lib/api";
+import { api, getProfile, offerLogoSrc } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -23,7 +24,9 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
   const offer = rec.offer;
   const score = rec.score ?? rec.ai_score ?? null;
   const reasoning = rec.reasoning ?? rec.ai_reasoning ?? null;
-  const matchState = getMatchState(score, reasoning);
+  const matchStatus = rec.status ?? null;
+  const matchState = getMatchState(score, reasoning, matchStatus);
+  const [retrying, setRetrying] = useState(false);
   const skills = parseSkills(offer.required_skills);
   const location = offerLocation(offer);
   const posted = formatDate(offer.posted_at);
@@ -66,10 +69,11 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
   return (
     <div>
       <div className="flex items-start gap-3">
-        <Avatar name={offer.company} size="lg" />
+        <Avatar name={offer.company} size="lg" src={offerLogoSrc(offer)} />
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-bold leading-tight text-foreground">{offer.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{offer.company}</p>
+          {offer.company_id ? <Link href={`/dashboard/companies/${encodeURIComponent(offer.company_id)}?from=discover`} className="mt-1 inline-block text-[13px] font-semibold text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring">View company profile</Link> : null}
           <p className="mt-1 text-[13px] text-muted-foreground">
             {[location, offer.type === "INTERNSHIP" ? "Internship" : "Job", offer.work_mode, offer.field]
               .filter(Boolean)
@@ -82,7 +86,7 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <MatchScore score={score} reasoning={reasoning} />
+        <MatchScore score={score} reasoning={reasoning} status={matchStatus} />
         {offer.required_experience ? (
           <span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs text-foreground-secondary">
             {offer.required_experience}
@@ -151,7 +155,28 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
         ) : matchState === "pending" ? (
           <p className="mt-2 text-sm text-muted-foreground">Match analysis in progress. Check back soon.</p>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">We could not generate a match analysis.</p>
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">We could not generate a match analysis.</p>
+            <button
+              type="button"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                try {
+                  await api.post(`/recommendations/score/${offer.id}`);
+                  queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+                  toast("Match scoring restarted", { variant: "info" });
+                } catch {
+                  toast("Could not restart scoring", { description: "Check connection, then retry.", variant: "error" });
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+              className="mt-2 text-sm font-semibold text-primary underline disabled:opacity-50"
+            >
+              {retrying ? "Restarting…" : "Retry match analysis"}
+            </button>
+          </>
         )}
       </section>
     </div>

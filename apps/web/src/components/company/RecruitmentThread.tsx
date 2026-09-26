@@ -1,84 +1,47 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getMe, getRecruitmentChat, getRecruitmentWsUrl, sendRecruitmentMessage } from "@/lib/api";
-import type { ChatMessage } from "@/lib/types";
-import { AUTH_TOKEN_KEY } from "@/lib/constants";
+import { getMe, getRecruitmentChat, sendRecruitmentMessage } from "@/lib/api";
+import type { ChatMessage, RecruitmentChatContext } from "@/lib/types";
 import { MessageList, Composer } from "@/components/candidate/chat-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 
 export function RecruitmentThread({ applicationId, peerName }: { applicationId: string; peerName: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [wsLive, setWsLive] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
+
+  const handleRealtimeMessage = useCallback((message: ChatMessage) => {
+    qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => {
+      if (!previous || previous.messages.some((item) => item.id === message.id)) return previous;
+      return { ...previous, messages: [...previous.messages, message] };
+    });
+  }, [applicationId, qc]);
+
+  const recruitmentSocket = useRecruitmentChatSocket({
+    applicationId,
+    currentUserId: me?.id,
+    onMessage: handleRealtimeMessage,
+  });
 
   const chatQuery = useQuery({
     queryKey: ["recruitment-chat", applicationId],
     queryFn: () => getRecruitmentChat(applicationId),
-    refetchInterval: wsLive ? false : 3000,
+    refetchInterval: recruitmentSocket.live ? false : 3000,
     retry: false,
   });
   const ctx = chatQuery.data;
 
   useEffect(() => {
-    if (typeof window === "undefined" || !localStorage.getItem(AUTH_TOKEN_KEY)) return;
-    let closed = false;
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(getRecruitmentWsUrl(applicationId));
-    } catch {
-      return;
-    }
-    wsRef.current = ws;
-    ws.onopen = () => {
-      if (!closed) setWsLive(true);
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const payload = JSON.parse(ev.data as string) as { type: string; message?: ChatMessage };
-        if (payload.type === "message" && payload.message) {
-          qc.setQueryData(["recruitment-chat", applicationId], (prev: typeof ctx) =>
-            prev ? { ...prev, messages: [...prev.messages, payload.message as ChatMessage] } : prev
-          );
-        }
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    ws.onclose = () => {
-      if (!closed) setWsLive(false);
-    };
-    ws.onerror = () => {
-      try {
-        ws?.close();
-      } catch {
-        /* noop */
-      }
-    };
-    return () => {
-      closed = true;
-      setWsLive(false);
-      try {
-        ws?.close();
-      } catch {
-        /* noop */
-      }
-      wsRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationId]);
+    if (!ctx?.chat_enabled) recruitmentSocket.stopTyping();
+  }, [ctx?.chat_enabled, recruitmentSocket.stopTyping]);
 
   const sendMut = useMutation({
     mutationFn: async (text: string) => {
-      const sock = wsRef.current;
-      if (sock && sock.readyState === WebSocket.OPEN && ctx?.chat_enabled) {
-        sock.send(JSON.stringify({ content: text }));
-        return null;
-      }
+      if (ctx?.chat_enabled && recruitmentSocket.sendMessage(text)) return null;
       return sendRecruitmentMessage(applicationId, text);
     },
     onSuccess: (created) => {
@@ -119,12 +82,23 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <p className="border-b border-border-subtle px-4 py-2 text-[11px] text-muted-foreground">
-        {wsLive ? "Live" : "Auto-refresh"} · private recruitment conversation
+        {recruitmentSocket.live ? "Live" : "Auto-refresh"} · private recruitment conversation
       </p>
       <div className="min-h-0 flex-1">
-        <MessageList messages={ctx.messages} myId={me?.id} />
+        <MessageList
+          messages={ctx.messages}
+          myId={me?.id}
+          peerName={peerName}
+          peerIsTyping={recruitmentSocket.peerIsTyping}
+        />
       </div>
-      <Composer peerName={peerName} pending={sendMut.isPending} onSend={(t) => sendMut.mutate(t)} />
+      <Composer
+        peerName={peerName}
+        pending={sendMut.isPending}
+        onSend={(text) => sendMut.mutate(text)}
+        onTyping={recruitmentSocket.notifyTyping}
+        onTypingStop={recruitmentSocket.stopTyping}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { MatchScore } from "./match-score";
 import { formatDate, offerLocation, parseSkills } from "./offer-utils";
+import { offerLogoSrc } from "@/lib/api";
 import type { Recommendation } from "@/lib/types";
 import styles from "./candidate-pages.module.css";
 
@@ -20,6 +21,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
   const offer = rec.offer;
   const score = rec.score ?? rec.ai_score ?? null;
   const reasoning = rec.reasoning ?? rec.ai_reasoning ?? null;
+  const matchStatus = rec.status ?? null;
   const skills = parseSkills(offer.required_skills).slice(0, 3);
   const location = offerLocation(offer);
   const posted = formatDate(offer.posted_at);
@@ -27,7 +29,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
   const body = (
     <>
       <div className="flex items-start gap-3">
-        <Avatar name={offer.company} size="md" />
+        <Avatar name={offer.company} size="md" src={offerLogoSrc(offer)} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold text-foreground">{offer.title}</p>
           <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{offer.company}</p>
@@ -38,7 +40,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <MatchScore score={score} reasoning={reasoning} />
+        <MatchScore score={score} reasoning={reasoning} status={matchStatus} />
         {applied ? <span className="text-xs font-semibold text-success">Applied</span> : null}
       </div>
       {skills.length > 0 ? (

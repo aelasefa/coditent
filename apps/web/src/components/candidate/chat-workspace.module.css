@@ -1,0 +1,107 @@
+.page { padding-top: clamp(1.5rem, 3vw, 2.6rem); }
+.eyebrow { color: var(--accent); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; }
+.pageHeading { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.55rem; }
+.pageHeading h1 { margin: 0.2rem 0 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.5rem, 4vw, 3.65rem); font-weight: 400; letter-spacing: -0.055em; line-height: 1; }
+.pageHeading p { margin: 0.65rem 0 0; color: var(--muted-foreground); font-size: 0.9rem; }
+.workspace { display: grid; grid-template-columns: minmax(315px, 0.9fr) minmax(0, 1.7fr); height: clamp(580px, calc(100dvh - 190px), 760px); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 40px rgb(25 77 56 / 5%); }
+.inbox { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-right: 1px solid var(--border-subtle); background: var(--surface); }
+.inboxHeader { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.4rem 1.35rem 1rem; }
+.inboxHeader h2 { margin: 0.2rem 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; font-weight: 400; letter-spacing: -0.035em; }
+.count { min-width: 1.65rem; padding: 0.24rem 0.4rem; border-radius: 100px; background: var(--surface-secondary); color: var(--primary); font-size: 0.73rem; font-weight: 750; text-align: center; }
+.searchWrap { display: flex; align-items: center; gap: 0.55rem; height: 42px; margin: 0 1.35rem 0.85rem; padding: 0 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--muted-foreground); transition: border-color var(--duration-normal) var(--ease-standard); }
+.searchWrap:focus-within { border-color: var(--primary); box-shadow: none; }
+.searchWrap > svg { width: 0.98rem; height: 0.98rem; flex: none; }
+.searchWrap input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--foreground); font-size: 0.8rem; }
+.searchWrap input:focus-visible { outline: none; }
+.searchWrap input::-webkit-search-cancel-button { appearance: none; }
+.searchWrap input::placeholder { color: var(--muted-foreground); }
+.searchWrap button { display: grid; width: 28px; height: 28px; flex: none; place-items: center; border-radius: 5px; }
+.searchWrap button:hover { background: var(--surface-secondary); }
+.filters { display: flex; gap: 0.22rem; padding: 0 1.35rem 1rem; border-bottom: 1px solid var(--border-subtle); }
+.filters button { min-height: 34px; padding: 0.4rem 0.68rem; border-radius: 6px; color: var(--muted-foreground); font-size: 0.76rem; font-weight: 700; transition: background-color var(--duration-normal) var(--ease-standard), color var(--duration-normal) var(--ease-standard); }
+.filters button:hover { background: var(--surface-secondary); color: var(--primary); }
+.filters button[aria-pressed="true"] { background: var(--surface-secondary); color: var(--primary); }
+.inboxBody { min-height: 0; flex: 1; overflow-y: auto; }
+.skeletonList { display: grid; gap: 0.6rem; padding: 1rem; }
+.conversationList { margin: 0; padding: 0; list-style: none; }
+.conversationList li + li { border-top: 1px solid var(--border-subtle); }
+.conversationRow { display: flex; min-width: 0; gap: 0.8rem; padding: 1rem 1.2rem; border-left: 3px solid transparent; transition: background-color var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard); }
+.conversationRow:hover { background: var(--background); }
+.conversationRow[aria-current="page"] { border-left-color: var(--primary); background: var(--surface-secondary); }
+.conversationRow > span:first-child { margin-top: 0.15rem; }
+.rowText { display: grid; min-width: 0; flex: 1; gap: 0.2rem; }
+.rowTop { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.rowTop strong { overflow: hidden; color: var(--foreground); font-size: 0.83rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.rowTop time { flex: none; color: var(--muted-foreground); font-size: 0.68rem; }
+.rowContext { overflow: hidden; color: var(--primary); font-size: 0.78rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.rowDetail, .rowPreview { overflow: hidden; color: var(--muted-foreground); font-size: 0.73rem; text-overflow: ellipsis; white-space: nowrap; }
+.rowPreview { margin-top: 0.18rem; color: var(--foreground-secondary); }
+.inboxNotice { display: grid; justify-items: start; gap: 0.5rem; padding: 2rem 1.35rem; }
+.inboxNotice > svg { width: 1.5rem; height: 1.5rem; margin-bottom: 0.4rem; color: var(--accent); }
+.inboxNotice strong { color: var(--foreground); font-size: 0.92rem; }
+.inboxNotice p { max-width: 28ch; margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.55; }
+.inboxNotice a, .inboxNotice button { display: inline-flex; align-items: center; gap: 0.3rem; margin-top: 0.45rem; color: var(--primary); font-size: 0.78rem; font-weight: 750; }
+.inboxNotice a:hover, .inboxNotice button:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
+.thread { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: var(--surface); }
+.thread :global([role="log"]) { flex: 1; min-height: 230px; background: var(--background); }
+.typingRow { display: flex; justify-content: flex-start; margin-top: 0.55rem; }
+.typingBubble { display: inline-flex; min-width: 3.3rem; min-height: 2.35rem; align-items: center; justify-content: center; padding: 0.6rem 0.85rem; border: 1px solid var(--border-subtle); border-radius: 16px 16px 16px 5px; background: var(--surface-secondary); box-shadow: 0 4px 12px rgb(25 77 56 / 5%); }
+.typingDots { display: inline-flex; align-items: center; gap: 0.25rem; }
+.typingDots span { width: 0.34rem; height: 0.34rem; border-radius: 50%; background: var(--muted-foreground); animation: typing-pulse 1.2s ease-in-out infinite; }
+.typingDots span:nth-child(2) { animation-delay: 150ms; }
+.typingDots span:nth-child(3) { animation-delay: 300ms; }
+.chatHeader { padding: 1rem 1.45rem 1.15rem; border-bottom: 1px solid var(--border-subtle); }
+.chatBack { display: none; width: fit-content; margin-bottom: 0.8rem; color: var(--primary); font-size: 0.75rem; font-weight: 750; }
+.chatBack:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
+.chatHeaderMain { display: flex; min-width: 0; align-items: center; gap: 0.8rem; }
+.chatHeaderText { min-width: 0; flex: 1; }
+.chatHeaderText h2 { overflow: hidden; margin: 0.1rem 0 0; color: var(--foreground); font-size: 1rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.chatSubtitle, .chatContext { overflow: hidden; margin: 0.08rem 0 0; font-size: 0.76rem; text-overflow: ellipsis; white-space: nowrap; }
+.chatSubtitle { color: var(--primary); font-weight: 700; }
+.chatContext { color: var(--muted-foreground); }
+.chatStatus { max-width: 13rem; flex: none; padding: 0.37rem 0.55rem; border: 1px solid var(--border); border-radius: 6px; color: var(--foreground-secondary); font-size: 0.68rem; line-height: 1.35; text-align: right; }
+.welcome { position: relative; display: flex; min-height: 100%; flex: 1; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 3rem; text-align: center; isolation: isolate; }
+.welcome::before { position: absolute; z-index: -1; inset: 0; background: url("/images/candidate/chat-branching-paths.webp") center / cover no-repeat; content: ""; opacity: 0.7; }
+.welcomeMark { display: grid; width: 3.4rem; height: 3.4rem; place-items: center; margin-bottom: 1.35rem; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); color: var(--primary); box-shadow: 0 7px 20px rgb(25 77 56 / 7%); }
+.welcomeMark svg { width: 1.35rem; height: 1.35rem; }
+.welcome h2 { max-width: 12ch; margin: 0.45rem 0 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.85rem, 3vw, 2.7rem); font-weight: 400; letter-spacing: -0.05em; line-height: 1.13; }
+.welcome p { max-width: 40ch; margin: 0.85rem 0 0; color: var(--muted-foreground); font-size: 0.85rem; line-height: 1.6; }
+.welcome a { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1.45rem; padding: 0.7rem 0.9rem; border-radius: 7px; background: var(--primary); color: var(--primary-foreground); font-size: 0.78rem; font-weight: 750; transition: transform var(--duration-normal) var(--ease-standard), background-color var(--duration-normal) var(--ease-standard); }
+.welcome a:hover { transform: translateY(-2px); background: var(--primary-hover); }
+.threadLoading { display: grid; gap: 0.6rem; padding: 1.3rem; }
+.threadNotice { display: grid; justify-items: center; gap: 0.5rem; margin: auto; padding: 2rem; text-align: center; }
+.threadNotice strong { color: var(--foreground); font-size: 0.95rem; }
+.threadNotice p { max-width: 38ch; margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.55; }
+.threadNotice button { margin-top: 0.4rem; color: var(--primary); font-size: 0.8rem; font-weight: 750; }
+
+@keyframes typing-pulse {
+  0%, 60%, 100% { opacity: 0.42; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (max-width: 899px) {
+  .workspace { display: block; height: auto; min-height: 0; }
+  .inbox { min-height: 430px; border-right: 0; }
+  .thread { display: none; }
+  .workspaceWithThread .inbox { display: none; }
+  .workspaceWithThread .thread { display: flex; min-height: calc(100dvh - 215px); }
+  .chatBack { display: block; }
+  .pageHeading { margin-bottom: 1.2rem; }
+}
+
+@media (max-width: 599px) {
+  .page { padding: 1.1rem 0.8rem 2rem; }
+  .pageHeading { align-items: start; padding: 0 0.3rem; }
+  .pageHeading h1 { font-size: 2.45rem; }
+  .pageHeading p { max-width: 29ch; font-size: 0.77rem; }
+  .workspace { border-radius: 10px; }
+  .workspaceWithThread .thread { min-height: calc(100dvh - 190px); }
+  .chatHeader { padding: 0.85rem 1rem 1rem; }
+  .chatStatus { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchWrap, .filters button, .conversationRow, .welcome a { transition: none; }
+  .welcome a:hover { transform: none; }
+  .typingDots span { animation: none; opacity: 0.72; }
+}

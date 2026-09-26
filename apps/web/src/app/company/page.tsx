@@ -8,7 +8,8 @@ import { StatCard } from "@/components/company/StatCard";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { EmptyState } from "@/components/company/EmptyState";
 import { StatCardsSkeleton } from "@/components/company/LoadingSkeleton";
-import { getMe, getApplications, getAssessments, getAuditLogs, getCompany, getApiBaseUrl } from "@/lib/api";
+import { getMe, getApplications, getAssessments, getAuditLogs, getCompany, getApiBaseUrl, offerLogoSrc } from "@/lib/api";
+import { Avatar } from "@/components/ui/avatar";
 import { candidateName, jobTitleFor } from "@/components/company/hiring";
 import type { ApplicationItem, Offer } from "@/lib/types";
 import { FiArrowRight, FiBriefcase, FiFileText, FiPlus, FiUserCheck, FiUsers } from "react-icons/fi";
@@ -240,10 +241,13 @@ export default function CompanyDashboard() {
             <ul className="mt-3 space-y-2">
               {offers.slice(0, 4).map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface px-4 py-3">
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-foreground">{o.title}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {o.region} · {apps.filter((a) => a.opportunity_id === o.id).length} applicants
+                  <span className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <Avatar name={o.company} size="sm" src={offerLogoSrc(o)} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-foreground">{o.title}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {o.region} · {apps.filter((a) => a.opportunity_id === o.id).length} applicants
+                      </span>
                     </span>
                   </span>
                   <StatusBadge status={o.active ? "active" : "paused"} size="sm" showDot={false} />

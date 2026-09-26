@@ -1,0 +1,122 @@
+.shell {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.skipLink {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60;
+  padding: 0.65rem 0.9rem;
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 700;
+  transform: translateY(-160%);
+}
+.skipLink:focus { transform: translateY(0); }
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--candidate-header-height, 4.5rem);
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgb(255 254 250 / 94%);
+  backdrop-filter: blur(16px);
+}
+
+.headerInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  width: min(100% - 3rem, 1280px);
+  height: 100%;
+  margin-inline: auto;
+}
+
+.brand { display: inline-flex; width: max-content; align-items: center; }
+.desktopNav { display: flex; align-items: center; gap: 0.15rem; }
+.navLink, .navLinkActive {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0.65rem 0.9rem;
+  border-radius: 7px;
+  color: var(--foreground-secondary);
+  font-size: 0.82rem;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: background-color 240ms var(--ease-standard), color 240ms var(--ease-standard);
+}
+.navLink:hover { background: var(--surface-secondary); color: var(--primary); }
+.navLinkActive { background: #eaf2e9; color: var(--primary); }
+
+.account { position: relative; justify-self: end; }
+.accountButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 42px;
+  padding: 0.25rem 0.6rem 0.25rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition: border-color 240ms var(--ease-standard), background-color 240ms var(--ease-standard);
+}
+.accountButton:hover, .accountButton[aria-expanded="true"] { border-color: var(--border); background: var(--surface-secondary); }
+.accountButton > svg { width: 0.9rem; height: 0.9rem; color: var(--muted-foreground); }
+.accountName { display: block; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountPanel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 210px;
+  padding: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 14px 32px rgb(25 77 56 / 14%);
+}
+.accountEmail { margin: 0 0 0.25rem; padding: 0.55rem 0.6rem; overflow: hidden; border-bottom: 1px solid var(--border-subtle); color: var(--muted-foreground); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+.accountPanel a, .accountPanel button { display: block; width: 100%; padding: 0.65rem 0.6rem; border-radius: 6px; color: var(--foreground-secondary); font-size: 0.8rem; text-align: left; }
+.accountPanel a:hover, .accountPanel button:hover { background: var(--surface-secondary); color: var(--primary); }
+.accountPanel button { color: var(--danger); }
+
+.mobileToggle, .mobilePanel { display: none; }
+.content { min-height: calc(100dvh - var(--candidate-header-height, 4.5rem)); }
+
+@media (max-width: 1023px) {
+  .headerInner { display: flex; justify-content: space-between; width: min(100% - 2rem, 1280px); }
+  .desktopNav, .account { display: none; }
+  .mobileToggle { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid var(--border); border-radius: 8px; color: var(--primary); }
+  .mobileToggle:hover, .mobileToggle[aria-expanded="true"] { background: var(--surface-secondary); }
+  .mobileToggle svg { width: 1.25rem; height: 1.25rem; }
+  .mobilePanel { position: absolute; top: 100%; right: 0; left: 0; display: block; max-height: calc(100dvh - var(--candidate-header-height, 4.5rem)); overflow-y: auto; border-bottom: 1px solid var(--border); background: var(--surface); box-shadow: 0 18px 30px rgb(25 77 56 / 10%); }
+  .mobilePanelInner { width: min(100% - 2rem, 1280px); margin-inline: auto; padding: 0.75rem 0 1rem; }
+  .mobileNav { display: grid; gap: 0.2rem; }
+  .mobileLink, .mobileLinkActive { display: flex; align-items: center; gap: 0.8rem; min-height: 46px; padding: 0.7rem 0.85rem; border-radius: 8px; color: var(--foreground-secondary); font-size: 0.9rem; font-weight: 650; }
+  .mobileLink:hover { background: var(--surface-secondary); color: var(--primary); }
+  .mobileLinkActive { background: #eaf2e9; color: var(--primary); }
+  .mobileLink svg, .mobileLinkActive svg { width: 1rem; height: 1rem; }
+  .mobileAccount { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.8rem; padding: 0.8rem 0.5rem 0; border-top: 1px solid var(--border-subtle); }
+  .mobileAccount > div { display: flex; min-width: 0; align-items: center; gap: 0.6rem; }
+  .mobileAccount span:last-child { display: grid; min-width: 0; }
+  .mobileAccount strong, .mobileAccount small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobileAccount strong { font-size: 0.8rem; }
+  .mobileAccount small { color: var(--muted-foreground); font-size: 0.7rem; }
+  .mobileAccount button { flex: none; padding: 0.55rem 0.65rem; border-radius: 6px; color: var(--danger); font-size: 0.78rem; font-weight: 700; }
+  .mobileAccount button:hover { background: var(--danger-background); }
+  .mobileAccount > a { margin-left: auto; padding: 0.55rem 0.65rem; border-radius: 6px; color: var(--primary); font-size: 0.78rem; font-weight: 700; }
+  .mobileAccount > a:hover { background: var(--surface-secondary); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLink, .navLinkActive, .accountButton { transition: none; }
+}

@@ -41,6 +41,7 @@ class ResendVerificationRequest(APIModel):
 class LoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
 class OAuthCompleteRegistrationRequest(APIModel):
@@ -56,6 +57,7 @@ class AdminLoginRequest(APIModel):
 class TokenResponse(APIModel):
     token: str
     user: UserOut
+    trusted_device_token: str | None = None
 
 
 class OAuthCompleteRegistrationResponse(APIModel):
@@ -131,6 +133,27 @@ class AvatarUpdate(APIModel):
     avatar_url: str = Field(max_length=5_000_000)
 
 
+class AccountNameUpdate(APIModel):
+    full_name: str = Field(min_length=2, max_length=100)
+
+
+class SensitiveAccountRequest(APIModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    two_factor_code: str | None = Field(default=None, min_length=6, max_length=20)
+
+
+class EmailChangeRequest(SensitiveAccountRequest):
+    new_email: EmailStr
+
+
+class EmailChangeConfirm(APIModel):
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class PasswordChangeRequest(SensitiveAccountRequest):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class UserMeOut(APIModel):
     id: uuid.UUID
     email: str
@@ -185,6 +208,16 @@ class OfferOut(APIModel):
     company_id: uuid.UUID | None = None
     created_by: uuid.UUID | None = None
     responsible_hr_id: uuid.UUID | None = None
+    # Denormalized branding for candidate-facing cards/detail. Storage path
+    # is resolved via GET /companies/{id}/logo — never a raw storage URL.
+    company_logo_url: str | None = None
+
+
+class CompanyLogoMetaOut(APIModel):
+    logo_url: str
+    filename: str | None = None
+    content_type: str | None = None
+    size_bytes: int | None = None
 
 
 class ResponsibleHrUpdate(APIModel):
@@ -201,6 +234,10 @@ class RecommendationOut(APIModel):
     id: uuid.UUID
     ai_score: int
     ai_reasoning: str
+    status: str = "completed"
+    error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     offer: OfferOut
 
 
@@ -301,6 +338,7 @@ class RecruitmentChatContext(APIModel):
     offer_title: str
     company_id: uuid.UUID | None = None
     company_name: str | None = None
+    company_logo_url: str | None = None
     peer: RecruitmentPeer | None = None
     messages: list[ChatMessageOut] = []
 
