@@ -553,7 +553,7 @@ async def register(
                     "now": now,
                 },
             )
-            await db.commit()
+            await db.flush()
         except IntegrityError:
             # Lost a concurrent race: another request created the row first.
             await db.rollback()
@@ -569,19 +569,21 @@ async def register(
             ),
             {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
         )
-        await db.commit()
+        await db.flush()
 
     try:
         send_otp_email(email, data.full_name.strip(), otp, expires_at)
     except RuntimeError:
-        # Never leave a pending record the user cannot complete.
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
-        await db.commit()
+        # Roll back the challenge rotation. A previously delivered code stays
+        # usable; a brand-new undelivered challenge is never persisted.
+        await db.rollback()
         logger.warning("register_failed", email=email, reason="otp_email_failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not send verification email. Please try again.",
         )
+
+    await db.commit()
 
     logger.info("register_otp_sent", email=email)
     return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
@@ -625,12 +627,22 @@ async def verify_email(
         )
 
     if not verify_otp(code, pending["otp_hash"]):
-        await db.execute(
-            text("UPDATE pending_registrations SET otp_attempts = otp_attempts + 1 WHERE email=:email"),
-            {"email": email},
-        )
+        next_attempt = pending["otp_attempts"] + 1
+        if attempts_exceeded(next_attempt):
+            # Destroy the challenge as soon as its final allowed attempt is
+            # spent. A correct guess after this point can never revive it.
+            await db.execute(
+                text("DELETE FROM pending_registrations WHERE email=:email"),
+                {"email": email},
+            )
+        else:
+            await db.execute(
+                text("UPDATE pending_registrations SET otp_attempts=:attempts WHERE email=:email"),
+                {"attempts": next_attempt, "email": email},
+            )
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
+        detail = "Too many attempts. Please register again." if attempts_exceeded(next_attempt) else "Invalid verification code"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     result = await db.execute(select(User).where(User.email == email))
     if result.scalar_one_or_none() is not None:

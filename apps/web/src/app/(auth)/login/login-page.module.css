@@ -48,7 +48,6 @@
   object-fit: cover;
   object-position: center;
   filter: saturate(1.04) contrast(1.025);
-  transform: scale(1.008);
   pointer-events: none;
 }
 
