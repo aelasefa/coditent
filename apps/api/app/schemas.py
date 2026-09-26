@@ -24,9 +24,28 @@ class UserOut(APIModel):
 
 class RegisterRequest(APIModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=12, max_length=128)
     full_name: str = Field(min_length=2, max_length=100)
-    role: Literal["CANDIDATE"]  # public registration only for candidates; company users via invitation
+    # Compatibility-only: the server always assigns CANDIDATE. Company users
+    # are created exclusively through company or employee invitations.
+    role: Literal["CANDIDATE"] | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_candidate_password(cls, password: str) -> str:
+        requirements = (
+            (any(char.islower() for char in password), "one lowercase letter"),
+            (any(char.isupper() for char in password), "one uppercase letter"),
+            (any(char.isdigit() for char in password), "one number"),
+            (
+                any(not char.isalnum() and not char.isspace() for char in password),
+                "one symbol",
+            ),
+        )
+        missing = [label for is_met, label in requirements if not is_met]
+        if missing:
+            raise ValueError(f"Password must include {', '.join(missing)}")
+        return password
 
 
 class VerifyEmailRequest(APIModel):
@@ -44,10 +63,6 @@ class LoginRequest(APIModel):
     trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
-class OAuthCompleteRegistrationRequest(APIModel):
-    role: Literal["candidate", "recruiter"]
-
-
 class AdminLoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
@@ -58,12 +73,6 @@ class TokenResponse(APIModel):
     token: str
     user: UserOut
     trusted_device_token: str | None = None
-
-
-class OAuthCompleteRegistrationResponse(APIModel):
-    handoff_code: str
-    attempt_id: str
-    provider: str
 
 
 class OAuthHandoffExchangeRequest(APIModel):

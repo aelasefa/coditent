@@ -25,8 +25,6 @@ from app.schemas import (
     EmailChangeConfirm,
     EmailChangeRequest,
     LoginRequest,
-    OAuthCompleteRegistrationRequest,
-    OAuthCompleteRegistrationResponse,
     OAuthHandoffExchangeRequest,
     OAuthHandoffExchangeResponse,
     PasswordChangeRequest,
@@ -55,13 +53,10 @@ from app.services.oauth_service import (
     create_oauth_state,
     create_oauth_handoff,
     consume_oauth_handoff,
-    create_onboarding_session,
     exchange_code_for_access_token,
     fetch_user_identity,
     get_oauth_provider,
     resolve_redirect_uri,
-    validate_oauth_role,
-    verify_onboarding_session,
     verify_oauth_state,
 )
 from app.utils.jwt import create_access_token, verify_token
@@ -147,22 +142,22 @@ async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthI
     return user
 
 
-async def _create_sso_user(db: AsyncSession, identity: OAuthIdentity, role: UserRole) -> User:
+async def _create_sso_candidate(db: AsyncSession, identity: OAuthIdentity) -> User:
     user = User(
         email=identity.email,
         password_hash=pwd_context.hash(secrets.token_urlsafe(32)),
-        role=role,
-        is_approved=role != UserRole.RECRUITER,
+        role=UserRole.CANDIDATE,
+        is_approved=True,
         full_name=identity.full_name,
         oauth_provider=identity.provider,
         oauth_id=identity.oauth_id,
         avatar_url=identity.avatar_url,
+        company_id=None,
+        company_role=None,
     )
     db.add(user)
     await db.flush()
-
-    if role == UserRole.CANDIDATE:
-        db.add(_new_candidate_profile(user.id))
+    db.add(_new_candidate_profile(user.id))
 
     await db.commit()
     await db.refresh(user)
@@ -226,50 +221,6 @@ def _build_sso_error_response(
         )
         return RedirectResponse(url=callback_url, status_code=status.HTTP_302_FOUND)
     raise HTTPException(status_code=status_code, detail=detail)
-
-
-def _build_onboarding_response(
-    request: Request,
-    onboarding_token: str,
-    popup_origin: str,
-    attempt_id: str,
-) -> Response:
-    accept_header = request.headers.get("accept", "").lower()
-    wants_html = "text/html" in accept_header
-
-    if wants_html:
-        response: Response = RedirectResponse(
-            url=f"{popup_origin}/choose-role?{urlencode({'attempt': attempt_id})}",
-            status_code=status.HTTP_302_FOUND,
-        )
-    else:
-        response = JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content={"detail": "oauth_role_required"},
-        )
-
-    response.set_cookie(
-        key=settings.oauth_onboarding_cookie_name,
-        value=onboarding_token,
-        httponly=True,
-        secure=settings.oauth_onboarding_cookie_secure,
-        samesite=settings.oauth_onboarding_cookie_samesite,
-        max_age=settings.oauth_onboarding_expire_minutes * 60,
-        path="/",
-    )
-    return response
-
-
-def _clear_onboarding_cookie(response: Response) -> None:
-    response.set_cookie(
-        key=settings.oauth_onboarding_cookie_name,
-        value="",
-        httponly=True,
-        secure=settings.oauth_onboarding_cookie_secure,
-        samesite=settings.oauth_onboarding_cookie_samesite,
-        max_age=0,
-        path="/",
-    )
 
 
 @router.get("/sso/providers")
@@ -356,13 +307,11 @@ async def sso_callback(
             oauth_provider.name, locals().get("popup_origin"), locals().get("attempt_id"),
         )
 
-    if user is None:
-        onboarding_token = create_onboarding_session(identity, popup_origin, attempt_id)
-        response = _build_onboarding_response(request, onboarding_token, popup_origin, attempt_id)
-        logger.info("sso_onboarding", provider=oauth_provider.name, email=identity.email)
-        return response
-
-    user = await _sync_existing_sso_user(db, user, identity)
+    is_new_registration = user is None
+    if is_new_registration:
+        user = await _create_sso_candidate(db, identity)
+    else:
+        user = await _sync_existing_sso_user(db, user, identity)
     token = create_access_token(
         {
             "sub": str(user.id),
@@ -371,101 +320,16 @@ async def sso_callback(
         }
     )
     wants_html = "text/html" in request.headers.get("accept", "").lower()
-    handoff_code = await create_oauth_handoff(token, str(user.id), False) if wants_html else ""
+    handoff_code = (
+        await create_oauth_handoff(token, str(user.id), is_new_registration)
+        if wants_html
+        else ""
+    )
 
     response = _build_sso_response(
         request, token, user, handoff_code, popup_origin, attempt_id, oauth_provider.name
     )
     logger.info("sso_success", provider=oauth_provider.name, user_id=str(user.id))
-    return response
-
-
-@router.post("/oauth/complete-registration", response_model=OAuthCompleteRegistrationResponse)
-async def complete_oauth_registration(
-    data: OAuthCompleteRegistrationRequest,
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> OAuthCompleteRegistrationResponse:
-    try:
-        role = validate_oauth_role(data.role)
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_400_BAD_REQUEST:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid role selected",
-            ) from exc
-        raise
-    onboarding_token = request.cookies.get(settings.oauth_onboarding_cookie_name)
-    logger.info(
-        "sso_complete_registration_start",
-        role=role,
-        has_onboarding_cookie=bool(onboarding_token),
-    )
-    if not onboarding_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="OAuth session missing",
-        )
-
-    try:
-        onboarding = verify_onboarding_session(onboarding_token)
-        identity = onboarding.identity
-        logger.info(
-            "sso_complete_registration_identity",
-            email=identity.email,
-            provider=identity.provider,
-            role=role,
-        )
-        result = await db.execute(select(User).where(User.email == identity.email))
-        user = result.scalar_one_or_none()
-
-        if user is None:
-            user_role = UserRole(role.upper())
-            user = await _create_sso_user(db, identity, user_role)
-        else:
-            user = await _sync_existing_sso_user(db, user, identity)
-    except HTTPException as exc:
-        logger.warning(
-            "sso_complete_registration_failed",
-            role=role,
-            provider=getattr(locals().get("identity"), "provider", None),
-        )
-        if exc.detail == "oauth_onboarding_invalid":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session expired, please login again",
-            ) from exc
-        raise
-    except Exception as exc:
-        logger.exception("sso_complete_registration_failed", role=role)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="oauth_complete_registration_failed",
-        ) from exc
-
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
-    handoff_code = await create_oauth_handoff(token, str(user.id), True)
-
-    response = JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=OAuthCompleteRegistrationResponse(
-            handoff_code=handoff_code,
-            attempt_id=onboarding.attempt_id,
-            provider=identity.provider,
-        ).model_dump(mode="json"),
-    )
-    _clear_onboarding_cookie(response)
-    logger.info(
-        "sso_complete_registration",
-        provider=identity.provider,
-        user_id=str(user.id),
-    )
     return response
 
 
@@ -512,10 +376,6 @@ async def register(
     if result.scalar_one_or_none() is not None:
         logger.warning("register_failed", email=email, reason="email_in_use")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
-
-    # Enforce candidate-only public registration — prevent mass assignment
-    if data.role != "CANDIDATE":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only CANDIDATE registration is public")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     res = await db.execute(

@@ -227,8 +227,11 @@ function LoginInner() {
                   </Button>
                   <p className={styles.registerPrompt}>
                     New to Coditent?{" "}
-                    <Link href={`/register?role=${activeRole}`}>Create an account</Link>
+                    <Link href="/register">Create a candidate account</Link>
                   </p>
+                  {activeRole === "recruiter" ? (
+                    <p className={styles.registerPrompt}>Company team accounts are created through an invitation.</p>
+                  ) : null}
                 </form>}
               </div>
             </div>

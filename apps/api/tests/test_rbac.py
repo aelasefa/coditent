@@ -74,7 +74,7 @@ async def test_candidate_cannot_escalate():
     async with httpx.AsyncClient(base_url=BASE) as c:
         # Register as candidate, try to use company endpoint
         email = f"pytest-cand-{uuid.uuid4().hex[:6]}@example.com"
-        r = await c.post("/auth/register", json={"email": email, "password":"Pass12345!","full_name":"Test","role":"CANDIDATE"})
+        r = await c.post("/auth/register", json={"email": email, "password":"StrongPass123!","full_name":"Test","role":"CANDIDATE"})
         assert r.status_code == 200
         token = r.json()["token"]
         # Try to access company members

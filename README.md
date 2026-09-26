@@ -3,8 +3,7 @@
 # CODITENT — Talent Workflow Platform for Morocco
 
 ## Description
-
-CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins approve accounts, moderate content, impersonate users for support, and audit activity.
+CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins invite companies, moderate content, impersonate users for support, and audit activity.
 
 ## Project goals
 
@@ -15,7 +14,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 
 ## Key features
 
-- Custom JWT auth (register + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
+- Custom JWT auth (candidate-only registration + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
 - Invitation-only company system (platform→company invites, owner→employee invites, token hashing, expiry, resend rotation).
 - Offer CRUD + responsible-HR assignment + activation toggle.
 - Recommendations: Celery + Gemini ranking with deterministic heuristic fallback; per-offer match scoring with `pending → processing → completed | failed` lifecycle.

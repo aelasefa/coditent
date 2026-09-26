@@ -48,7 +48,7 @@ async def test_unauthorized_user_cannot_invite():
     # Create a fresh candidate via API to avoid DB conversion issues
     email = f"tmp-cand-{uuid.uuid4().hex[:6]}@example.com"
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/auth/register", json={"email": email, "password": "Pass12345!", "full_name": "Tmp Cand", "role": "CANDIDATE"})
+        r = await c.post("/auth/register", json={"email": email, "password": "StrongPass123!", "full_name": "Tmp Cand", "role": "CANDIDATE"})
         assert r.status_code == 200, r.text
         tok = r.json()["token"]
         # Try to invite as candidate
