@@ -64,9 +64,9 @@ OAuth callback URLs to register in provider dashboards:
 ## Recommended Test Order
 
 1. Register candidate
-2. Register recruiter
+2. Accept a company or employee invitation
 3. Candidate login
 4. Update candidate profile
-5. Recruiter login + create offer
+5. Invited company user login + create offer
 6. Candidate generate recommendations
 7. Candidate list saved recommendations

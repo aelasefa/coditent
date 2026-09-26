@@ -10,7 +10,7 @@ export default function PrivacyPage() {
           <li>Account: email, password hash, full name, role, avatar URL, OAuth identifiers</li>
           <li>Profile: headline, bio, skills, city, phone, education, links</li>
           <li>Content: offers, recommendations, activity logs</li>
-          <li>Technical: cookies (access_token, oauth_onboarding), logs/metrics</li>
+          <li>Technical: access-token cookies and operational logs/metrics</li>
         </ul>
         <h2 className="text-base font-semibold text-white">Use</h2>
         <p>To provide auth, matching/recommendations (Gemini with fallback), and platform operation. Legal basis: contract + legitimate interest.</p>

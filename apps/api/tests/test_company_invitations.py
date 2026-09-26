@@ -51,7 +51,7 @@ async def test_admin_can_invite_company():
 async def test_non_admin_cannot_invite_company():
     email = f"tmp-cand-{uuid.uuid4().hex[:6]}@example.com"
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/auth/register", json={"email": email, "password": "Pass12345!", "full_name": "Tmp", "role": "CANDIDATE"})
+        r = await c.post("/auth/register", json={"email": email, "password": "StrongPass123!", "full_name": "Tmp", "role": "CANDIDATE"})
         assert r.status_code == 200, r.text
         tok = r.json()["token"]
         r = await c.post(
@@ -118,12 +118,12 @@ async def test_raw_token_never_stored():
 async def test_candidate_signup_stays_candidate():
     email = f"pure-{uuid.uuid4().hex[:6]}@example.com"
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/auth/register", json={"email": email, "password": "Pass12345!", "full_name": "Pure", "role": "CANDIDATE"})
+        r = await c.post("/auth/register", json={"email": email, "password": "StrongPass123!", "full_name": "Pure", "role": "CANDIDATE"})
         assert r.status_code == 200, r.text
         assert r.json()["user"]["role"] == "CANDIDATE"
         for bad_role in ["RECRUITER", "ADMIN", "OWNER", "COMPANY_USER"]:
             r = await c.post(
                 "/auth/register",
-                json={"email": f"bad-{uuid.uuid4().hex[:6]}@example.com", "password": "Pass12345!", "full_name": "Bad", "role": bad_role},
+                json={"email": f"bad-{uuid.uuid4().hex[:6]}@example.com", "password": "StrongPass123!", "full_name": "Bad", "role": bad_role},
             )
             assert r.status_code in (400, 422), r.text

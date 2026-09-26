@@ -19,7 +19,6 @@ from app.observability import get_logger
 
 oauth_state_expire_minutes = 10
 oauth_handoff_expire_seconds = 90
-allowed_oauth_roles = {"candidate", "recruiter"}
 
 logger = get_logger("oauth")
 
@@ -42,13 +41,6 @@ class OAuthIdentity:
     oauth_id: str
     avatar_url: str | None
     provider: str
-
-
-@dataclass(frozen=True)
-class OAuthOnboardingContext:
-    identity: OAuthIdentity
-    popup_origin: str
-    attempt_id: str
 
 
 def get_oauth_provider(provider: str) -> OAuthProvider:
@@ -81,21 +73,6 @@ def get_oauth_provider(provider: str) -> OAuthProvider:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="sso_not_configured")
 
     return config
-
-
-def validate_oauth_role(role: str | None) -> str:
-    if not role:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role is required",
-        )
-    normalized_role = role.strip().lower()
-    if normalized_role not in allowed_oauth_roles:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role must be candidate or recruiter",
-        )
-    return normalized_role
 
 
 def validate_popup_origin(origin: str | None) -> str:
@@ -150,57 +127,6 @@ def verify_oauth_state(state_token: str, provider: str) -> tuple[str, str]:
     if not attempt_id or len(attempt_id) > 120:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     return popup_origin, attempt_id
-
-
-def create_onboarding_session(identity: OAuthIdentity, popup_origin: str, attempt_id: str) -> str:
-    payload = {
-        "purpose": "oauth_onboarding",
-        "provider": identity.provider,
-        "email": identity.email,
-        "full_name": identity.full_name,
-        "oauth_id": identity.oauth_id,
-        "avatar_url": identity.avatar_url,
-        "popup_origin": validate_popup_origin(popup_origin),
-        "attempt_id": attempt_id,
-        "exp": datetime.now(timezone.utc)
-        + timedelta(minutes=settings.oauth_onboarding_expire_minutes),
-    }
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-
-
-def verify_onboarding_session(token: str) -> OAuthOnboardingContext:
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="oauth_onboarding_invalid") from exc
-
-    if payload.get("purpose") != "oauth_onboarding":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="oauth_onboarding_invalid")
-
-    email = str(payload.get("email") or "").strip().lower()
-    provider = str(payload.get("provider") or "").strip().lower()
-    full_name = str(payload.get("full_name") or "").strip()
-    oauth_id = str(payload.get("oauth_id") or "").strip()
-    avatar_url = payload.get("avatar_url")
-    if not email or not provider:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="oauth_onboarding_invalid")
-
-    popup_origin = validate_popup_origin(str(payload.get("popup_origin") or ""))
-    attempt_id = str(payload.get("attempt_id") or "")
-    if not attempt_id or len(attempt_id) > 120:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="oauth_onboarding_invalid")
-
-    return OAuthOnboardingContext(
-        identity=OAuthIdentity(
-            email=email,
-            full_name=full_name or _name_from_email(email),
-            oauth_id=oauth_id or email,
-            avatar_url=str(avatar_url).strip() if avatar_url else None,
-            provider=provider,
-        ),
-        popup_origin=popup_origin,
-        attempt_id=attempt_id,
-    )
 
 
 def _handoff_key(code: str) -> str:

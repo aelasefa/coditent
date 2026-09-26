@@ -121,7 +121,7 @@ users --< admin_activity_logs.admin_id(-)   [target_user_id: no FK]
 - **RESEND** (`POST /auth/resend-verification`, 5/min): new OTP invalidates old, attempts reset, cooldown 429 with `retry_after_seconds`; mail failure rolls back to old code (502).
 - **LOGIN** (`POST /auth/login`, 5/min): bcrypt check → 401; legacy unapproved RECRUITER → 403; returns `TokenResponse`, sets no cookie.
 - **No logout endpoint** (frontend clears storage, `web/src/lib/auth.ts:22-29`). **No token refresh** (no `refresh_token` anywhere; interceptor only logs out on 401). **No password reset** (only seed flag in `admin_seed.py:17,48`).
-- **SSO** (`/auth/sso/*`): authorize redirect with signed state → callback exchanges code server-side, verifies email, existing user linked by email (+profile backfill), new email → onboarding cookie → `POST /oauth/complete-registration` (candidate-only roles). Ends with the same CODITENT JWT + HttpOnly cookie. OAuth never creates company roles.
+- **SSO** (`/auth/sso/*`): authorize redirect with signed state → callback exchanges code server-side, verifies email, links an existing user by email (+profile backfill), or creates a candidate directly for a new email. Ends with the same CODITENT JWT + HttpOnly cookie. OAuth never creates company roles.
 - **Frontend:** login routes by `user.role` (`(auth)/login/page.tsx:42-68`); register → `/verify-email?email=`; verify → token → `/profile`. Axios injects `Authorization: Bearer <localStorage>` (`lib/api.ts:55-64`, `withCredentials:true`); WS uses `?token=` (`lib/api.ts:541-548`). **No frontend user-ID trust found**: candidate/company/receiver IDs are derived server-side (`applications.py:122-123`, `chat.py:66,377-404`, `offers.py:57-69`); remaining client IDs are validated + gated.
 
 ## 5. User types and RBAC
@@ -245,7 +245,7 @@ Write paths double-gate (dependency + `can()`). **401** = unauthenticated only. 
 
 Grouped map (auth/roles/side effects per endpoint; evidence in subagent reports above):
 
-- **Auth** (`/auth`): `GET sso/providers`, `GET sso/{provider}/start`, `GET sso/{provider}/callback`, `POST oauth/complete-registration`, `POST register`→202, `POST verify-email`→TokenResponse, `POST resend-verification`→202, `POST login`, `PUT me/avatar`, `GET me`. No logout/refresh/reset endpoints.
+- **Auth** (`/auth`): `GET sso/providers`, `GET sso/{provider}/start`, `GET sso/{provider}/callback`, `POST register`→202, `POST verify-email`→TokenResponse, `POST resend-verification`→202, `POST login`, `PUT me/avatar`, `GET me`. Public password and OAuth registration create candidates only. No logout/refresh/reset endpoints.
 - **Candidates** (`/candidates`): `GET/PUT profile`, `POST/GET(meta,download)/DELETE cv`, `POST cv/parse` — all `require_candidate`, own-scope.
 - **Companies** (`/companies`): public list/get; `POST` (recruiter, becomes OWNER); `POST {id}/join` always 410; recruiters/members reads; `PATCH {id}` (edit_company); member role change/remove (admin); owner-only subscription read.
 - **Invitations** (`/invites`): company invite/list/get/revoke/resend/validate/accept; employee invite/list/validate/revoke/resend/accept/accept-existing — as §6.
@@ -412,7 +412,6 @@ ARCHITECTURE RISKS:
 
 STALE/DEAD CODE:
 - `friendships` migration remnants (created then dropped; no model/usage)
-- `oauth_onboarding_*` cookie flow partially superseded? (still used — keep)
 - Legacy `RECRUITER`/`ADMIN` branches, `/join` 410 stub, `recruiter_id` legacy FK, `opportunity_status` unused string, `OfferStatus`/`CompanyStatus` enums unused by columns
 - Unused UI primitives removed in Phase 8; `three/gsap/ogl` remain unimported in `package.json`
 

@@ -26,10 +26,6 @@ class Settings(BaseSettings):
     access_token_cookie_name: str = "access_token"
     access_token_cookie_secure: bool = True
     access_token_cookie_samesite: str = "lax"
-    oauth_onboarding_cookie_name: str = "oauth_onboarding"
-    oauth_onboarding_expire_minutes: int = 10
-    oauth_onboarding_cookie_secure: bool = False
-    oauth_onboarding_cookie_samesite: str = "lax"
     otp_expire_minutes: int = 10
     otp_max_attempts: int = 5
     otp_resend_cooldown_seconds: int = 60

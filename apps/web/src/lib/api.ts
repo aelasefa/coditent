@@ -7,7 +7,6 @@ import type {
   AdminStats,
   Offer,
   OAuthHandoffResult,
-  OAuthRegistrationHandoff,
   OnboardingState,
   Profile,
   Recommendation,
@@ -99,7 +98,6 @@ export async function register(payload: {
   email: string;
   password: string;
   full_name: string;
-  role: "CANDIDATE" | "RECRUITER";
 }): Promise<RegistrationStarted> {
   const { data } = await api.post<RegistrationStarted>("/auth/register", payload);
   return data;
@@ -132,44 +130,6 @@ export async function adminLogin(payload: {
 }): Promise<TokenResponse> {
   const { data } = await api.post<TokenResponse>("/auth/login", payload);
   return data;
-}
-
-export async function completeOauthRegistration(payload: {
-  role: "candidate" | "recruiter";
-}): Promise<OAuthRegistrationHandoff> {
-  const response = await fetch(
-    `${getApiBaseUrl()}/auth/oauth/complete-registration`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-
-  let data: OAuthRegistrationHandoff | { detail?: string } | null = null;
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    try {
-      data = (await response.json()) as OAuthRegistrationHandoff | { detail?: string };
-    } catch {
-      data = null;
-    }
-  }
-
-  if (!response.ok) {
-    const detail = typeof data === "object" && data && "detail" in data ? data.detail : null;
-    const textBody = !detail ? await response.text().catch(() => "") : "";
-    const error = new Error(
-      typeof detail === "string" ? detail : textBody || "Complete registration failed"
-    );
-    (error as { status?: number }).status = response.status;
-    throw error;
-  }
-
-  return data as OAuthRegistrationHandoff;
 }
 
 export async function exchangeOAuthHandoff(code: string): Promise<OAuthHandoffResult> {

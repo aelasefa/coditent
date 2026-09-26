@@ -117,7 +117,7 @@ async def test_register_does_not_activate_without_verification():
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
         r = await c.post(
             "/auth/register",
-            json={"email": email, "password": "LiveTest123!", "full_name": "No Act", "role": "CANDIDATE"},
+            json={"email": email, "password": "LiveTestPass123!", "full_name": "No Act", "role": "CANDIDATE"},
         )
         # Either the code was emailed (202) or delivery failed and the
         # pending row was rolled back (502). Either way: no token, no user.
@@ -232,7 +232,7 @@ async def test_verified_email_cannot_register_again():
         assert r.status_code == 200
         r = await c.post(
             "/auth/register",
-            json={"email": email, "password": "LiveTest123!", "full_name": "Dup", "role": "CANDIDATE"},
+            json={"email": email, "password": "LiveTestPass123!", "full_name": "Dup", "role": "CANDIDATE"},
         )
         assert r.status_code == 400
 
@@ -245,7 +245,7 @@ async def test_pending_reregister_does_not_duplicate():
         # last_otp_sent_at is now → cooldown path, no duplicate row possible
         r = await c.post(
             "/auth/register",
-            json={"email": email, "password": "LiveTest123!", "full_name": "Again", "role": "CANDIDATE"},
+            json={"email": email, "password": "LiveTestPass123!", "full_name": "Again", "role": "CANDIDATE"},
         )
         assert r.status_code in (429, 502)
     await engine.dispose()

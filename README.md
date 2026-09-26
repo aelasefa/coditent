@@ -3,9 +3,9 @@
 # Coditent — Talent Workflow Platform for Morocco
 
 ## Description
-Coditent connects candidates and recruiters in one expressive workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar), recruiters publish offers, and an AI recommendation engine ranks offers per candidate by field/region/type. Admins approve recruiters, moderate offers/users, and view activity.
+Coditent connects candidates and invited company hiring teams in one expressive workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar), company teams publish offers, and an AI recommendation engine ranks offers per candidate by field/region/type. Platform admins invite companies, moderate offers/users, and view activity.
 
-Key features: JWT auth (candidate/recruiter/admin), OAuth Google/LinkedIn, profile builder with avatar upload (`PUT /auth/me/avatar`), offer CRUD, AI recommendations (Gemini + fallback scoring), role-based routing, Supabase SSR session refresh.
+Key features: JWT auth (candidate/company user/platform admin), candidate-only public signup, invitation-only company access, OAuth Google/LinkedIn, profile builder with avatar upload (`PUT /auth/me/avatar`), offer CRUD, AI recommendations (Gemini + fallback scoring), role-based routing, Supabase SSR session refresh.
 
 ## Instructions
 **Prerequisites:** Docker + Docker Compose, Node 20, Python 3.12 (for local dev), active **Supabase project** (sole database — no local PostgreSQL)
@@ -68,18 +68,18 @@ Backend-only secrets (`DATABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`) are 
 - **Other:** Supabase SSR (`@supabase/ssr`) + Supabase admin client (`app/db.py`), Gemini (`google-generativeai`), Docker (api/worker/redis/web only)
 
 ## Database Schema
-- `users(id UUID PK, email, password_hash, role ENUM[CANDIDATE,RECRUITER,ADMIN], is_approved, full_name, avatar_url, oauth_provider, oauth_id)` — FK to `candidate_profiles`
+- `users(id UUID PK, email, password_hash, role ENUM[CANDIDATE,COMPANY_USER,PLATFORM_ADMIN], company_id, company_role, is_approved, full_name, avatar_url, oauth_provider, oauth_id)` — candidate profiles are linked one-to-one
 - `candidate_profiles(id, user_id FK, city, phone, headline, bio, field_of_study, university, study_level, skills, years_of_experience, linkedin_url, portfolio_url, updated_at)`
 - `offers(id, recruiter_id FK, title, company, region, field, type, description, requirements, active, posted_at)`
 - `saved_recommendations(id, candidate_id FK, offer_id FK, ai_score, ai_reasoning)`
 - Relations: `users 1—1 candidate_profiles`, `users 1—n offers`, `users 1—n saved_recommendations`
 
 ## Features List
-- Auth: register/login, JWT, OAuth Google/LinkedIn, role selection, `GET /auth/me` (`aelasefa`)
+- Auth: candidate-only register/login, JWT, OAuth Google/LinkedIn, invitation-only company onboarding, `GET /auth/me` (`aelasefa`)
 - Profile builder: headline/bio/skills/experience/education/links/avatar (`PUT /auth/me/avatar`, `PUT /candidates/profile`) (`mohammedelmahf`)
-- Offers: recruiter create/toggle, list, mine (`POST /offers`, `GET /offers`) (`VYMNN47`)
+- Offers: invited company users create/toggle, list, mine (`POST /offers`, `GET /offers`) (`VYMNN47`)
 - Recommendations: `POST /recommendations/generate` (Celery + Gemini + fallback) + `GET /recommendations` (`aelasefa`)
-- Admin: pending recruiters approve/reject, stats/users/offers/activity (`apps/api/app/routers/admin.py:52`)
+- Admin: company invitations, stats/users/offers/activity (`apps/api/app/routers/admin.py` and `apps/api/app/routers/invitations.py`)
 
 ## Modules
 | Module | Pts | How implemented |
@@ -90,7 +90,7 @@ Backend-only secrets (`DATABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`) are 
 | Web Minor: File upload | 1 | Avatar `PUT /auth/me/avatar` + CV upload |
 | User Major: Standard user mgmt | 2 | Profile + avatar, needs friends+online to validate (add `POST /friends`) |
 | User Minor: OAuth 2.0 | 1 | Google/LinkedIn `apps/api/app/routers/auth.py:188` |
-| User Major: Advanced permissions | 2 | Roles CANDIDATE/RECRUITER/ADMIN `apps/api/app/dependencies.py:66` |
+| User Major: Advanced permissions | 2 | Platform roles CANDIDATE/COMPANY_USER/PLATFORM_ADMIN plus invitation-assigned company roles |
 | AI Major: Recommendation system | 2 | Gemini ranking `apps/api/app/services/ai.py:14` + fallback `recommendation_jobs.py:23` |
 | **Total claimed** | **12** | Need +2pts: add friends system (2) OR Public API key (2) OR Analytics (2) |
 
