@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/ui/logo";
 import { resendVerification, verifyEmail } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
+import authStyles from "../(auth)/login/login-page.module.css";
+import styles from "./verify-email.module.css";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -102,69 +104,94 @@ function VerifyInner() {
     }
   }
 
-  if (!email) {
-    return (
-      <AuthLayout title="Check your email" subtitle="We need your email address first.">
-        <p className="text-sm text-muted-foreground">Register first and we will send a verification code.</p>
-        <Link href="/register" className="mt-4 inline-block text-sm font-semibold text-primary hover:underline">
-          Back to registration
-        </Link>
-      </AuthLayout>
-    );
-  }
-
   return (
-    <AuthLayout title="Check your email" subtitle={`We sent a verification code to ${email}.`}>
-      <form onSubmit={handleVerify} className="space-y-4">
-        <Input
-          label="Verification code"
-          id="otp"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          placeholder="6-digit code"
-          maxLength={6}
-          value={otp}
-          disabled={isVerifying}
-          onChange={(e) => handleOtpChange(e.target.value)}
-        />
-        {errorMessage ? (
-          <p role="alert" className="text-sm font-medium text-danger">
-            {errorMessage}
-          </p>
-        ) : null}
-        {infoMessage ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {infoMessage}
-          </p>
-        ) : null}
-        <Button type="submit" loading={isVerifying} disabled={otp.trim().length !== 6} className="w-full">
-          Verify
-        </Button>
-      </form>
-      <div className="mt-4 text-center text-sm text-muted-foreground">
-        {cooldown > 0 ? (
-          <span role="status">Resend available in {cooldown}s</span>
-        ) : (
-          <button
-            type="button"
-            onClick={handleResend}
-            disabled={isResending}
-            className="font-semibold text-primary hover:underline disabled:opacity-50"
-          >
-            {isResending ? "Sending…" : "Resend code"}
-          </button>
-        )}
+    <main className={authStyles.page}>
+      <video
+        className={authStyles.backgroundVideo}
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        poster="/images/auth/sign-in-background.png"
+        aria-hidden="true"
+        tabIndex={-1}
+      >
+        <source src="/images/auth/login-background-full-hd.mp4" type="video/mp4" />
+      </video>
+
+      <div className={authStyles.loginContent}>
+        <a href="#auth-form" className={authStyles.skipLink}>Skip to verification form</a>
+        <header className={authStyles.header}>
+          <Link href="/" aria-label="Coditent home"><Logo size="md" /></Link>
+          <Link href="/offers/all" className={authStyles.headerLink}>
+            Browse opportunities <span aria-hidden="true">↗</span>
+          </Link>
+        </header>
+
+        <div className={`${authStyles.shell} ${styles.shell}`}>
+          <section className={authStyles.formColumn} aria-labelledby="verify-title">
+            <div className={`${authStyles.formInner} ${styles.formInner}`}>
+              <p className={authStyles.eyebrow}>One final step</p>
+              <h1 id="verify-title" className={authStyles.title}>Verify your <em>email.</em></h1>
+              <p className={authStyles.subtitle}>
+                {email ? <>We sent a six-digit code to <strong className={styles.email}>{email}</strong>.</> : "Register first and we will send you a verification code."}
+              </p>
+
+              <div id="auth-form" className={`${authStyles.formArea} ${styles.formArea}`}>
+                {email ? (
+                  <>
+                    <div className={styles.expiryNotice}>
+                      <span className={styles.noticeDot} aria-hidden="true" />
+                      The code expires in 5 minutes. Do not share it with anyone.
+                    </div>
+
+                    <form onSubmit={handleVerify} className={`${authStyles.form} ${styles.form}`}>
+                      <Input
+                        label="Verification code"
+                        id="otp"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        placeholder="000000"
+                        maxLength={6}
+                        value={otp}
+                        disabled={isVerifying}
+                        autoFocus
+                        className={`${authStyles.input} ${styles.codeInput}`}
+                        onChange={(e) => handleOtpChange(e.target.value)}
+                      />
+                      {errorMessage ? <p role="alert" className={authStyles.error}>{errorMessage}</p> : null}
+                      {infoMessage ? <p role="status" className={styles.info}>{infoMessage}</p> : null}
+                      <Button type="submit" loading={isVerifying} disabled={otp.trim().length !== 6} className={authStyles.submitButton}>
+                        Verify and continue
+                      </Button>
+                    </form>
+
+                    <div className={styles.actions}>
+                      {cooldown > 0 ? (
+                        <span role="status">Resend available in {cooldown}s</span>
+                      ) : (
+                        <button type="button" onClick={handleResend} disabled={isResending} className={styles.textButton}>
+                          {isResending ? "Sending…" : "Resend code"}
+                        </button>
+                      )}
+                      <span aria-hidden="true">·</span>
+                      <Link href="/register">Use a different email</Link>
+                    </div>
+
+                    <p className={styles.deliveryHelp}>Not in your inbox? Check Spam and mark the message as “Not spam”.</p>
+                  </>
+                ) : (
+                  <div className={styles.missingEmail}>
+                    <p>We need your email address before we can verify your account.</p>
+                    <Link href="/register" className={styles.primaryLink}>Back to registration</Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        Delivery can take a minute. If it is not in your inbox, check Spam and mark the message as “Not spam”.
-      </p>
-      <p className="mt-2 text-center text-sm text-muted-foreground">
-        Wrong email?{" "}
-        <Link href="/register" className="font-semibold text-primary hover:underline">
-          Start over
-        </Link>
-      </p>
-    </AuthLayout>
+    </main>
   );
 }
 

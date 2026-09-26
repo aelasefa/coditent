@@ -18,7 +18,13 @@ def _plain_text(html_content: str) -> str:
     return "\n".join(line.strip() for line in text.splitlines() if line.strip())
 
 
-def send_email(to_email: str, subject: str, html: str, text: str | None = None) -> dict:
+def send_email(
+    to_email: str,
+    subject: str,
+    html: str,
+    text: str | None = None,
+    attachments: list[dict[str, str]] | None = None,
+) -> dict:
     """Send an email through Resend API using backend secret key from env."""
     if not settings.resend_api_key:
         raise RuntimeError("RESEND_API_KEY must be set in environment variables.")
@@ -32,6 +38,8 @@ def send_email(to_email: str, subject: str, html: str, text: str | None = None) 
         "html": html,
         "text": text or _plain_text(html),
     }
+    if attachments:
+        payload["attachments"] = attachments
 
     req = request.Request(
         RESEND_SEND_EMAIL_URL,

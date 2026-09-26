@@ -32,7 +32,7 @@ async def _insert_pending(email: str, expired: bool = False, attempts: int = 0) 
 
     await engine.dispose()
     now = datetime.utcnow()
-    exp = now - timedelta(hours=1) if expired else now + timedelta(minutes=10)
+    exp = now - timedelta(hours=1) if expired else now + timedelta(minutes=5)
     async with AsyncSessionLocal() as db:
         await db.execute(
             text(
@@ -94,6 +94,9 @@ def test_expiry_cooldown_attempts_helpers():
     from datetime import datetime, timedelta
 
     now = datetime.utcnow()
+    assert ev.otp_expiry(now) == now + timedelta(minutes=5)
+    assert ev.is_expired(now + timedelta(minutes=5), now + timedelta(minutes=4, seconds=59)) is False
+    assert ev.is_expired(now + timedelta(minutes=5), now + timedelta(minutes=5)) is True
     assert ev.is_expired(now - timedelta(minutes=1), now) is True
     assert ev.is_expired(now + timedelta(minutes=1), now) is False
     assert ev.cooldown_remaining_seconds(now, now) == 60
@@ -103,9 +106,31 @@ def test_expiry_cooldown_attempts_helpers():
 
 
 def test_otp_template_contains_code_but_service_never_logs_it(capsys):
+    from app.services.email import _plain_text
+
     subject, html = ev.build_otp_email("Jane Doe", "123456")
     assert "123456" in html and "Jane" in html
+    assert "This verification code expires in 5 minutes." in html
+    assert "Do not share this code with anyone." in html
+    assert 'src="cid:coditent-verification-art"' in html
+    assert 'width="100%"' in html and "max-width:600px" in html
+    plain = _plain_text(html)
+    assert "123456" in plain
+    assert "This verification code expires in 5 minutes." in plain
+    assert "Do not share this code with anyone." in plain
     assert subject
+
+
+def test_verification_art_is_embedded_as_cid_attachment():
+    import base64
+
+    attachment = ev.verification_art_attachment()
+    assert attachment["content_id"] == "coditent-verification-art"
+    assert attachment["content_type"] == "image/jpeg"
+    assert attachment["filename"].endswith(".jpg")
+    decoded = base64.b64decode(attachment["content"])
+    assert decoded.startswith(b"\xff\xd8\xff")
+    assert len(decoded) < 100_000
 
 
 def test_email_plain_text_alternative_removes_html():
@@ -165,12 +190,15 @@ async def test_attempts_limit_blocks_and_clears():
     email = _email("locked")
     await _insert_pending(email)
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
+        final_wrong = None
         for _ in range(5):
             r = await c.post("/auth/verify-email", json={"email": email, "otp": "000000"})
             assert r.status_code == 400
+            final_wrong = r
+        assert final_wrong is not None and "attempt" in final_wrong.text.lower()
         r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
         assert r.status_code == 400
-        assert "attempt" in r.text.lower()
+        assert "invalid or expired" in r.text.lower()
     assert await _pending_row(email) is None
     assert await _user_row(email) is None
     # let the shared IP rate window drain before the remaining verify tests
@@ -203,6 +231,30 @@ async def test_correct_otp_creates_account_and_rejects_reuse():
     assert await _pending_row(email) is None
     user = await _user_row(email)
     assert user is not None
+
+
+@pytest.mark.asyncio
+async def test_rotating_code_invalidates_previous_code():
+    """A resend stores only the new hash; the former code can no longer win."""
+    email = _email("rotated")
+    new_code = "654321"
+    await _insert_pending(email)
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text(
+                "UPDATE pending_registrations SET otp_hash=:otp, otp_attempts=0 "
+                "WHERE email=:email"
+            ),
+            {"otp": ev.hash_otp(new_code), "email": email},
+        )
+        await db.commit()
+
+    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+        old = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        assert old.status_code == 400
+        fresh = await c.post("/auth/verify-email", json={"email": email, "otp": new_code})
+        assert fresh.status_code == 200, fresh.text
 
 
 @pytest.mark.asyncio

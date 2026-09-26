@@ -76,7 +76,7 @@ function RegisterInner() {
         tabIndex={-1}
       >
         <source
-          src="/images/auth/login-background-full-hd.mp4"
+          src="/images/auth/login-background-hd.mp4?v=2"
           type="video/mp4"
         />
       </video>

@@ -106,7 +106,7 @@ cp apps/web/.env.example apps/web/.env.local  # frontend: public vars only
 | `INVITATION_EXPIRATION_HOURS` | API (employee invites) | Employee invitation TTL (company invites use fixed 7 days in code) | No | No | `72` |
 | `RESEND_API_KEY` | API (`apps/api/app/services/email.py`) | Resend key for OTP + invitation emails | For email | Yes | *(empty allowed; email logged as warning)* |
 | `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | API | Sender identity | For email | No | `coditent@yourdomain.com` / `CODITENT` |
-| `OTP_EXPIRE_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_RESEND_COOLDOWN_SECONDS` | API (auth OTP) | `10` / `5` / `60` defaults | No | No | `10` / `5` / `60` |
+| `OTP_EXPIRE_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_RESEND_COOLDOWN_SECONDS` | API (auth OTP) | `5` / `5` / `60` defaults | No | No | `5` / `5` / `60` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | API (SSO) | Google OAuth; both-or-neither enforced in `app/config.py` | For SSO | Secret mixed | `http://localhost:8001/auth/sso/google/callback` |
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | API (SSO) | LinkedIn OAuth; both-or-neither enforced | For SSO | Secret mixed | `http://localhost:8001/auth/sso/linkedin/callback` |
 
