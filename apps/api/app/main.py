@@ -65,9 +65,9 @@ async def on_startup():
     if vault_client.health_check():
         logger.info("hashicorp_vault_connected")
         vault_client.write_secrets({
-            "JWT_SECRET": settings.jwt_secret,
+            "JWT_SECRET": settings.secret_key,
             "GEMINI_API_KEY": settings.gemini_api_key,
-            "SUPABASE_SERVICE_KEY": settings.supabase_service_key,
+            "SUPABASE_SERVICE_KEY": settings.supabase_service_key or "",
         })
     else:
         logger.info("hashicorp_vault_offline_using_env_fallback")

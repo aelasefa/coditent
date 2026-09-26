@@ -21,6 +21,8 @@ services:
       GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: coditent-vault-token-secret
+    volumes:
+      - ./apps/api:/app
     ports:
       - "8001:8001"
     command: >
