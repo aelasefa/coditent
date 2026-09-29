@@ -133,23 +133,14 @@ function PipelineContent() {
           center
           title="Every candidate, in clear view."
           subtitle={`${apps.length} applicants in one workspace · review each profile and move the process forward.`}
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{filtered.length} shown</span>}
-          actions={
-            <div role="group" aria-label="View mode" className="flex rounded-lg border border-border p-0.5">
-              {(["list", "board"] as View[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  aria-pressed={view === v}
-                  className={view === v ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground" : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"}
-                >
-                  {v === "list" ? "List" : "Board"}
-                </button>
-              ))}
-            </div>
-          }
         />
+
+        <div className="company-results-toolbar">
+          <span className="text-xs font-medium text-muted-foreground">{filtered.length} shown</span>
+          <div role="group" aria-label="View mode" className="company-view-toggle">
+            {(["list", "board"] as View[]).map((v) => <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v} className={view === v ? "company-view-toggle-active" : "company-view-toggle-button"}>{v === "list" ? "List" : "Board"}</button>)}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">

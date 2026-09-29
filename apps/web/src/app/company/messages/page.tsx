@@ -52,8 +52,9 @@ function InboxContent() {
           center
           title="Every conversation, in clear view."
           subtitle="Keep candidate conversations focused, responsive and easy to follow."
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{chats.length} threads</span>}
         />
+
+        <div className="company-results-toolbar"><span className="text-xs font-medium text-muted-foreground">{chats.length} {chats.length === 1 ? "thread" : "threads"}</span></div>
 
         {chatsQ.isLoading ? (
           <div className="space-y-2" role="status" aria-label="Loading conversations">

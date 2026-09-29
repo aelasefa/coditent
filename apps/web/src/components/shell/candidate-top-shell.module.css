@@ -55,6 +55,13 @@
 }
 .navLink:hover { background: var(--surface-secondary); color: var(--primary); }
 .navLinkActive { background: #eaf2e9; color: var(--primary); }
+.moreNav { position: relative; }
+.moreNav > button { gap: 0.28rem; border: 0; background: transparent; cursor: pointer; }
+.moreNav > button svg { width: 0.95rem; height: 0.95rem; }
+.morePanel { position: absolute; top: calc(100% + 0.45rem); left: 50%; display: grid; width: 180px; padding: 0.4rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: 0 14px 32px rgb(25 77 56 / 14%); transform: translateX(-50%); }
+.morePanel a { display: flex; align-items: center; gap: 0.6rem; min-height: 36px; padding: 0.55rem 0.6rem; border-radius: 6px; color: var(--foreground-secondary); font-size: 0.8rem; font-weight: 650; }
+.morePanel a:hover, .morePanel a[aria-current="page"] { background: var(--surface-secondary); color: var(--primary); }
+.morePanel svg { width: 0.95rem; height: 0.95rem; }
 
 .account { position: relative; justify-self: end; }
 .accountButton {
@@ -120,3 +127,56 @@
 @media (prefers-reduced-motion: reduce) {
   .navLink, .navLinkActive, .accountButton { transition: none; }
 }
+
+/* Company workspace follows the floating Home navigation while retaining the candidate shell behavior. */
+.companyHeader {
+  width: min(100% - 2.5rem, 1160px);
+  height: 90px;
+  margin-inline: auto;
+  padding-top: 18px;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+.companyHeaderInner {
+  position: relative;
+  isolation: isolate;
+  height: 72px;
+  padding-inline: 24px;
+}
+.companyHeaderInner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid rgb(255 255 255 / 85%);
+  border-radius: 999px;
+  background: rgb(255 254 250 / 92%);
+  box-shadow: 0 8px 30px rgb(25 55 38 / 8%), 0 1px 4px rgb(25 55 38 / 5%), inset 0 -1px 0 rgb(58 89 65 / 9%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.companyDesktopNav { gap: clamp(0.05rem, 0.45vw, 0.35rem); }
+.companyHeader .navLink, .companyHeader .navLinkActive { min-height: 44px; padding: 0.5rem 0.65rem; border-radius: 999px; font-size: 0.81rem; }
+.companyHeader .navLinkActive { background: #eaf2e9; }
+.companyHeader .accountButton { min-height: 44px; border-radius: 999px; }
+.companyHeader .morePanel, .companyHeader .accountPanel { border-radius: 16px; }
+
+@media (max-width: 1023px) {
+  .companyHeader { width: calc(100% - 24px); height: 76px; padding-top: 12px; }
+  .companyHeaderInner { height: 64px; padding-inline: 14px 10px; }
+  .companyHeader .mobileToggle { width: 44px; height: 44px; border: 1px solid rgb(25 77 56 / 12%); border-radius: 50%; background: rgb(255 254 250 / 40%); }
+  .companyHeader .mobilePanel { top: calc(100% + 8px); right: 0; left: 0; border: 1px solid rgb(255 255 255 / 85%); border-radius: 24px; background: rgb(255 254 250 / 96%); box-shadow: 0 18px 48px rgb(25 55 38 / 14%); }
+  .companyHeader .mobilePanelInner { padding: 12px; }
+  .companyHeader .mobileLink, .companyHeader .mobileLinkActive { min-height: 48px; border-radius: 12px; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .companyHeaderInner::before, .companyHeader .mobilePanel { background: #fffefa; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+
+/* Keep the essential company links on one centered line, like the Home navigation. */
+.companyHeaderInner { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.companyDesktopNav { justify-content: center; flex-wrap: nowrap; white-space: nowrap; }
+.companyDesktopNav .navLink, .companyDesktopNav .navLinkActive { flex: 0 0 auto; text-align: center; }

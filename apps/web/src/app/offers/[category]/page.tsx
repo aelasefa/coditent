@@ -85,8 +85,9 @@ function OffersContent() {
           <p className="offers-hero-eyebrow">Open opportunities</p>
           <h1 className="ct-page-title">{category.label} opportunities</h1>
           <p className="offers-hero-copy">Explore roles from companies looking for your next contribution.</p>
-          <span className="offers-hero-count" role="status">{loading ? "Loading roles" : `${visible.length} open role${visible.length === 1 ? "" : "s"}`}</span>
         </section>
+
+        <div className="offers-results-bar"><span className="offers-hero-count" role="status">{loading ? "Loading roles" : `${visible.length} open role${visible.length === 1 ? "" : "s"}`}</span></div>
 
         <div className="offers-search-panel">
           <label htmlFor="public-search" className="sr-only">Search opportunities</label>

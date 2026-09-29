@@ -118,16 +118,12 @@ export default function TeamPage() {
           center
           title="Every teammate, in clear view."
           subtitle={`Give your hiring team a shared home and clear access to the work.`}
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{members.length} total</span>}
-          actions={
-            canInvite ? (
-              <Link href="/company/invitations" className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover">
-                <FiUserPlus aria-hidden className="h-4 w-4" />
-                <span>Invite member</span>
-              </Link>
-            ) : undefined
-          }
         />
+
+        <div className="company-hero-actions-bar">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{members.length} total</span>
+          {canInvite ? <Link href="/company/invitations" className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"><FiUserPlus aria-hidden className="h-4 w-4" /> Invite member</Link> : null}
+        </div>
 
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">

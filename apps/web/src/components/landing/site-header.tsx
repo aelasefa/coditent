@@ -73,7 +73,7 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-sm">
         Skip to content
       </a>
-      <div className={home ? styles.homeNav : "mx-auto grid h-[4.5rem] w-[min(100%-3rem,1280px)] grid-cols-[1fr_auto_1fr] items-center gap-4"}>
+      <div className={home ? styles.homeNav : "mx-auto flex h-[4.5rem] w-[min(100%-2rem,1280px)] items-center justify-between gap-3 lg:grid lg:w-[min(100%-3rem,1280px)] lg:grid-cols-[1fr_auto_1fr]"}>
         <Link href="/" aria-label="Coditent home" className={home ? styles.homeBrand : undefined}>
           <Logo size="md" />
         </Link>

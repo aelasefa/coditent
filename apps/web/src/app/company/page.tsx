@@ -93,7 +93,7 @@ export default function CompanyDashboard() {
     <AppShell>
       <div className="space-y-8">
         <div className="company-dashboard-welcome">
-          <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill className="company-dashboard-artwork" sizes="(max-width: 768px) 100vw, 1200px" />
+          <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill priority quality={55} decoding="async" className="company-dashboard-artwork" sizes="(max-width: 639px) 100vw, (max-width: 1023px) 768px, 1200px" />
           <p className="company-hero-eyebrow">Your hiring workspace</p>
           <PageHeader
             variant="plain"

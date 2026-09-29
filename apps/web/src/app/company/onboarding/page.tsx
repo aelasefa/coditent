@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
-import { PageHeader } from "@/components/shell/page-container";
+import { PageHeader } from "@/components/company/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,7 +64,7 @@ export default function CompanyOnboardingPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-2xl space-y-6">
-        <PageHeader tone="dark" title={`Welcome, ${company?.name || "owner"}`} description="Complete company information to finish onboarding." />
+        <PageHeader tone="dark" center title={`Welcome, ${company?.name || "owner"}`} subtitle="Complete company information to finish onboarding." />
         {companyQ.isLoading ? (
           <Skeleton className="h-64" />
         ) : companyQ.isError ? (
