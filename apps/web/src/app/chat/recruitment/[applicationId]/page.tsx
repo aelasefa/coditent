@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getApiBaseUrl,
   getMe,
   getRecruitmentChat,
+  markRecruitmentMessagesRead,
   sendRecruitmentMessage,
 } from "@/lib/api";
 import type { ChatMessage, RecruitmentChatContext } from "@/lib/types";
@@ -20,6 +21,7 @@ import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 export default function RecruitmentChatPage({ params }: { params: { applicationId: string } }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const markingReadRef = useRef(false);
   const { applicationId } = params;
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
@@ -31,10 +33,18 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
     qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
   }, [applicationId, qc]);
 
+  const handleMessagesRead = useCallback((messageIds: string[], readAt: string) => {
+    const ids = new Set(messageIds);
+    qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+      ...previous,
+      messages: previous.messages.map((message) => ids.has(message.id) ? { ...message, read_at: readAt } : message),
+    } : previous);
+  }, [applicationId, qc]);
+
   const recruitmentSocket = useRecruitmentChatSocket({
     applicationId,
-    currentUserId: me?.id,
     onMessage: handleRealtimeMessage,
+    onMessagesRead: handleMessagesRead,
   });
 
   const chatQuery = useQuery({
@@ -46,9 +56,32 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
   const ctx = chatQuery.data;
   const backHref = me?.role === "CANDIDATE" ? "/chat" : "/company/candidates";
 
+  const unreadIncomingKey = ctx?.messages
+    .filter((message) => message.receiver_id === me?.id && !message.read_at)
+    .map((message) => message.id)
+    .join(",") ?? "";
+
   useEffect(() => {
-    if (!ctx?.chat_enabled) recruitmentSocket.stopTyping();
-  }, [ctx?.chat_enabled, recruitmentSocket.stopTyping]);
+    const markVisibleMessagesRead = async () => {
+      if (!ctx?.chat_enabled || !unreadIncomingKey || document.visibilityState !== "visible" || !document.hasFocus() || markingReadRef.current) return;
+      markingReadRef.current = true;
+      try {
+        if (recruitmentSocket.markMessagesRead()) return;
+        const receipt = await markRecruitmentMessagesRead(applicationId);
+        if (receipt.read_at) handleMessagesRead(receipt.message_ids, receipt.read_at);
+      } finally {
+        markingReadRef.current = false;
+      }
+    };
+    void markVisibleMessagesRead();
+    const onVisibilityChange = () => void markVisibleMessagesRead();
+    window.addEventListener("focus", onVisibilityChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", onVisibilityChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [applicationId, ctx?.chat_enabled, handleMessagesRead, recruitmentSocket.markMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
     mutationFn: async (text: string) => {
@@ -114,15 +147,11 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
             <MessageList
               messages={ctx.messages}
               myId={me?.id}
-              peerName={peerName}
-              peerIsTyping={recruitmentSocket.peerIsTyping}
             />
             <Composer
               peerName={peerName}
               pending={sendMut.isPending}
               onSend={(text) => sendMut.mutate(text)}
-              onTyping={recruitmentSocket.notifyTyping}
-              onTypingStop={recruitmentSocket.stopTyping}
             />
           </>
         )}
