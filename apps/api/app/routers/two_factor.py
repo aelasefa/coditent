@@ -219,6 +219,11 @@ async def two_factor_verify_challenge(
         await db.commit()
         logger.info("2fa_backup_code_consumed", user_id=str(user.id))
 
+    from app.services.device_security import check_and_notify_new_device
+    ua_header = request.headers.get("user-agent", "")
+    ip_addr = request.client.host if request.client else ""
+    await check_and_notify_new_device(user, ua_header, ip_addr)
+
     final_token = create_access_token(
         {
             "sub": str(user.id),

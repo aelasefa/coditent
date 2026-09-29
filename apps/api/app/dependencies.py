@@ -47,6 +47,23 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
+    # Check if user revoked all active sessions
+    token_iat = payload.get("iat")
+    if token_iat is not None:
+        try:
+            from app.cache import get_async_redis
+            redis_client = get_async_redis()
+            revoked_before = await redis_client.get(f"user:{user_id}:revoked_before")
+            if revoked_before and int(token_iat) < int(revoked_before):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session revoked. Please log in again.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
     return user
 
 

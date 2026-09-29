@@ -8,10 +8,13 @@ from app.config import settings
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create a JWT access token with configurable expiration."""
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
+    now_utc = datetime.now(timezone.utc)
+    expire = now_utc + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode["exp"] = expire
+    if "iat" not in to_encode:
+        to_encode["iat"] = int(now_utc.timestamp())
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 

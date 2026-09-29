@@ -777,6 +777,11 @@ async def login(
     if user.is_2fa_enabled:
         logger.info("login_trusted_device", user_id=str(user.id))
 
+    from app.services.device_security import check_and_notify_new_device
+    ua_header = request.headers.get("user-agent", "")
+    ip_addr = request.client.host if request.client else ""
+    await check_and_notify_new_device(user, ua_header, ip_addr)
+
     token = create_access_token(
         {
             "sub": str(user.id),
@@ -786,6 +791,21 @@ async def login(
     )
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/logout-all-devices")
+@limiter.limit("5/minute")
+async def logout_all_devices(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Revoke all active JWT access tokens across all devices for the current user."""
+    from app.cache import get_async_redis
+    redis_client = get_async_redis()
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    await redis_client.set(f"user:{current_user.id}:revoked_before", now_ts, ex=30 * 86400)
+    logger.info("logout_all_devices_success", user_id=str(current_user.id))
+    return {"detail": "Logged out of all devices successfully."}
 
 
 
