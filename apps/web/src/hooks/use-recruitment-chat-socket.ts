@@ -104,9 +104,20 @@ export function useRecruitmentChatSocket({
     let closed = false;
     let socket: WebSocket | null = null;
 
+    const socketUrl = getRecruitmentWsUrl(applicationId);
+    const safeSocketEndpoint = (() => {
+      try {
+        const parsed = new URL(socketUrl);
+        return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+      } catch {
+        return "recruitment chat endpoint";
+      }
+    })();
+
     try {
-      socket = new WebSocket(getRecruitmentWsUrl(applicationId));
-    } catch {
+      socket = new WebSocket(socketUrl);
+    } catch (error) {
+      console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
       return;
     }
     socketRef.current = socket;
@@ -146,7 +157,8 @@ export function useRecruitmentChatSocket({
         peerTypingExpiryRef.current = null;
       }
     };
-    socket.onerror = () => {
+    socket.onerror = (error) => {
+      console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
       try {
         socket?.close();
       } catch {

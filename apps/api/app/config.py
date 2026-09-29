@@ -1,4 +1,5 @@
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,9 +11,14 @@ class Settings(BaseSettings):
     # Example pooled:  postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true
     # Dashboard copy is postgresql:// — auto-upgraded to postgresql+asyncpg:// by database.py
     database_url: str
+    db_pool_size: int = Field(default=4, ge=1, le=20)
+    db_max_overflow: int = Field(default=1, ge=0, le=20)
+    db_pool_timeout_seconds: int = Field(default=15, ge=1, le=120)
+    db_pool_recycle_seconds: int = Field(default=300, ge=30, le=3600)
     supabase_url: str | None = None
     supabase_service_key: str | None = None
     frontend_url: str = "http://localhost:3000"
+    cors_origins: str = ""
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str = "http://localhost:8001/auth/sso/google/callback"
@@ -58,6 +64,29 @@ class Settings(BaseSettings):
                     f"DATABASE_URL contains local marker '{marker}'. Local DB removed — use Supabase."
                 )
         return self
+
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        """Return unique, explicit HTTP(S) origins; wildcards are rejected."""
+        candidates = [
+            self.frontend_url,
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            *self.cors_origins.split(","),
+        ]
+        origins: list[str] = []
+        for candidate in candidates:
+            origin = candidate.strip().rstrip("/")
+            if not origin or origin == "*":
+                continue
+            parsed = urlsplit(origin)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path:
+                raise ValueError(f"Invalid CORS origin: {origin}")
+            if origin not in origins:
+                origins.append(origin)
+        return origins
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

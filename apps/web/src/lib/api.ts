@@ -21,15 +21,15 @@ import type {
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const envUrl = process.env.NEXT_PUBLIC_API_URL;
+    const envUrl = process.env.NEXT_PUBLIC_API_URL || "/api-proxy";
     // When the browser is loaded over HTTPS (e.g. Vercel) and backend is insecure HTTP,
     // proxy through /api-proxy to prevent browser Mixed Content blocking.
     if (window.location.protocol === "https:" && envUrl && envUrl.startsWith("http://")) {
       return "/api-proxy";
     }
-    return envUrl ?? "/api-proxy";
+    return envUrl;
   }
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://34.205.255.37";
+  return process.env.BACKEND_PROXY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://34.205.255.37";
 }
 
 export const api = axios.create({
@@ -655,8 +655,8 @@ export async function listRecruitmentChats(): Promise<import("@/lib/types").Recr
 export function getRecruitmentWsUrl(applicationId: string): string {
   const base = getApiBaseUrl();
   const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
-  const wsBase = base.startsWith("/api-proxy")
-    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api-proxy`
-    : base.replace(/^http/, "ws");
+  const wsBase = base.startsWith("/")
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
+    : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
   return `${wsBase}/chat/recruitment/${applicationId}/ws?token=${encodeURIComponent(token ?? "")}`;
 }

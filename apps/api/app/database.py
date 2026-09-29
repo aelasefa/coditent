@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+import re
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -10,7 +11,8 @@ def _normalize_database_url(url: str) -> str:
     """Normalize DATABASE_URL for Supabase.
 
     - Ensures asyncpg driver prefix (postgresql+asyncpg://)
-    - Supabase requires SSL; asyncpg handles it via query params or connect_args.
+    - Uses Supavisor transaction mode for shared pooler URLs so persistent API
+      and worker processes do not reserve one backend connection per client.
     - Rejects local DB fallback to enforce Supabase-only architecture.
     """
     if not url:
@@ -30,6 +32,12 @@ def _normalize_database_url(url: str) -> str:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    url = re.sub(
+        r"(@[^/:]+\.pooler\.supabase\.com):5432(/)",
+        r"\1:6543\2",
+        url,
+        count=1,
+    )
     return url
 
 
@@ -42,6 +50,10 @@ engine = create_async_engine(
     _normalized_url,
     future=True,
     connect_args={"statement_cache_size": 0, "prepared_statement_cache_size": 0},
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout_seconds,
+    pool_recycle=settings.db_pool_recycle_seconds,
     pool_pre_ping=True,
 )
 AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)

@@ -450,8 +450,9 @@ async def send_recruitment_message(
 # Realtime: minimal WebSocket layer for recruitment chats. There was no
 # pre-existing realtime implementation (chat used 3s polling), so this adds
 # one room per application reusing the same authorization helper. Polling
-# remains as fallback. NOTE: in-memory fan-out covers a single API replica
-# (current docker-compose topology); scale-out would need Redis pub/sub.
+# remains as fallback. TODO(realtime-scale): this in-memory room manager is
+# deliberately single-process. Replace it with shared pub/sub (for example,
+# Redis) before running multiple API workers, containers, or replicas.
 # ---------------------------------------------------------------------------
 
 _recruitment_rooms: dict[str, set[WebSocket]] = {}
