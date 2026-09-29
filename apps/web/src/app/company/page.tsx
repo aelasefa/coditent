@@ -88,19 +88,21 @@ export default function CompanyDashboard() {
   return (
     <AppShell>
       <div className="space-y-8">
-        <PageHeader
-          title={`${greeting()}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
-          subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
-          actions={
-            <Link
-              href="/company/jobs"
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
-            >
-              <FiPlus aria-hidden className="h-4 w-4" />
-              <span>Create job</span>
-            </Link>
-          }
-        />
+        <div className="company-dashboard-welcome">
+          <PageHeader
+            title={`${greeting()}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
+            subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
+            actions={
+              <Link
+                href="/company/jobs"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
+              >
+                <FiPlus aria-hidden className="h-4 w-4" />
+                <span>Create job</span>
+              </Link>
+            }
+          />
+        </div>
 
         <section aria-label="Needs attention">
           <h2 className="ct-section-title">

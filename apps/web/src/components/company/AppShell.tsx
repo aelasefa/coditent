@@ -71,6 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SharedShell
+      themeClass="company-theme"
       navSections={companyNavSections}
       logoHref="/company"
       user={{

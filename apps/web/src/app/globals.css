@@ -144,6 +144,71 @@ body:has(.candidate-theme) {
   color-scheme: light;
 }
 
+/* Company workspace — a scoped counterpart to the candidate identity. */
+body:has(.company-theme) {
+  --background: #f7f6f0;
+  --surface: #fffefa;
+  --surface-secondary: #eef1e9;
+  --surface-hover: #e4ebe0;
+  --foreground: #1b2b23;
+  --foreground-secondary: #405147;
+  --muted: #64746b;
+  --muted-foreground: #64746b;
+  --border: #cfdbcf;
+  --border-subtle: #e0e7dc;
+  --border-strong: #a9bcac;
+  --primary: #194d38;
+  --primary-hover: #123e2d;
+  --primary-active: #0d3023;
+  --primary-foreground: #fffefa;
+  --accent: #a25c38;
+  --accent-foreground: #fffefa;
+  --success: #28734d;
+  --success-background: #e1f1e5;
+  --warning: #9b651b;
+  --warning-background: #f8eed8;
+  --danger: #b34538;
+  --danger-background: #f9e5df;
+  --info: #356456;
+  --info-background: #e1eee7;
+  --focus-ring: #a25c38;
+  --overlay: rgb(17 38 28 / 52%);
+  --shadow-color: rgb(25 77 56 / 9%);
+  color-scheme: light;
+}
+
+html.dark body:has(.company-theme) {
+  --background: #14241d;
+  --surface: #1a2d24;
+  --surface-secondary: #20362b;
+  --surface-hover: #294235;
+  --foreground: #f4f1e8;
+  --foreground-secondary: #d7e0d5;
+  --muted: #afbeb2;
+  --muted-foreground: #afbeb2;
+  --border: #395545;
+  --border-subtle: #2d4739;
+  --border-strong: #53705c;
+  --primary: #91b99a;
+  --primary-hover: #b4d0b8;
+  --primary-active: #d2e4d2;
+  --primary-foreground: #14241d;
+  --accent: #e1a07a;
+  --accent-foreground: #1c291f;
+  --success: #94c9a1;
+  --success-background: rgb(78 132 88 / 24%);
+  --warning: #e2bb75;
+  --warning-background: rgb(161 113 41 / 24%);
+  --danger: #efaa9e;
+  --danger-background: rgb(163 66 53 / 26%);
+  --info: #acd0bb;
+  --info-background: rgb(81 130 105 / 26%);
+  --focus-ring: #e1a07a;
+  --overlay: rgb(4 12 8 / 70%);
+  --shadow-color: rgb(0 0 0 / 30%);
+  color-scheme: dark;
+}
+
 .candidate-theme {
   --candidate-header-height: 4.5rem;
   min-height: 100vh;
@@ -155,6 +220,79 @@ body:has(.candidate-theme) {
   font-size: clamp(2.25rem, 3.3vw, 3.4rem);
   font-weight: 400;
   letter-spacing: -0.045em;
+}
+
+.company-theme {
+  --company-header-height: 4rem;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.company-theme h1.ct-page-title,
+.company-theme .ct-section-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  color: var(--foreground);
+}
+
+.company-theme h1.ct-page-title {
+  font-size: clamp(2.15rem, 3.1vw, 3.15rem);
+  letter-spacing: -0.045em;
+  line-height: 1.04;
+}
+
+.company-theme .ct-section-title {
+  font-size: clamp(1.35rem, 1.8vw, 1.7rem);
+  letter-spacing: -0.027em;
+}
+
+.company-theme aside,
+.company-theme header,
+.company-theme nav[aria-label="Primary mobile"] {
+  border-color: var(--border-subtle);
+}
+
+.company-theme :where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.company-theme .company-dashboard-welcome {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  margin: -0.5rem -0.5rem 0;
+  padding: 1.5rem 1.5rem 0.25rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px var(--shadow-color), 0 10px 28px rgb(25 77 56 / 4%);
+}
+
+.company-theme .company-dashboard-welcome::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 25rem;
+  height: 25rem;
+  right: -8rem;
+  top: -12rem;
+  opacity: 0.62;
+  background:
+    repeating-radial-gradient(ellipse at center, transparent 0 13px, rgb(25 77 56 / 10%) 14px 15px, transparent 16px 25px),
+    radial-gradient(circle, rgb(162 92 56 / 12%), transparent 66%);
+  transform: rotate(-18deg);
+}
+
+html.dark .company-theme .company-dashboard-welcome::after { opacity: 0.38; }
+
+@media (min-width: 640px) {
+  .company-theme .company-dashboard-welcome { padding: 2rem 2rem 0.5rem; }
+}
+
+@media (max-width: 639px) {
+  .company-theme .company-dashboard-welcome { margin: -0.5rem 0 0; padding: 1.25rem 1.25rem 0.15rem; }
+  .company-theme .company-dashboard-welcome::after { right: -12rem; }
 }
 
 .candidate-theme .ct-section-title {
