@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/company/AppShell";
 import { PageHeader } from "@/components/company/PageHeader";
 import { StatCard } from "@/components/company/StatCard";
@@ -33,6 +35,8 @@ function SectionError({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function CompanyDashboard() {
+  const [timeGreeting, setTimeGreeting] = useState("Welcome");
+  useEffect(() => { setTimeGreeting(greeting()); }, []);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: company } = useQuery({
     queryKey: ["company", me?.company_id],
@@ -89,8 +93,9 @@ export default function CompanyDashboard() {
     <AppShell>
       <div className="space-y-8">
         <div className="company-dashboard-welcome">
+          <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill className="company-dashboard-artwork" sizes="(max-width: 768px) 100vw, 1200px" />
           <PageHeader
-            title={`${greeting()}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
+            title={`${timeGreeting}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
             subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
             actions={
               <Link

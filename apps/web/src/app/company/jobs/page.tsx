@@ -216,6 +216,7 @@ export default function CompanyJobsPage() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
+          tone="dark"
           title="Jobs"
           subtitle={`${offers?.length ?? 0} roles · ${activeCount(offers)} active. Publish and manage openings.`}
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{offers?.length ?? 0} total</span>}

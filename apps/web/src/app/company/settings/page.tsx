@@ -103,7 +103,7 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6">
-        <PageHeader title="Settings" subtitle="Company profile, access policy, plan and appearance." />
+        <PageHeader tone="dark" title="Settings" subtitle="Company profile, access policy, plan and appearance." />
 
         <Tabs
           items={[

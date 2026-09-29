@@ -114,6 +114,7 @@ export default function TeamPage() {
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6">
         <PageHeader
+          tone="dark"
           title="Team"
           subtitle={`${members.length} member${members.length === 1 ? "" : "s"} in this company. Roles follow platform permission policy.`}
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{members.length} total</span>}

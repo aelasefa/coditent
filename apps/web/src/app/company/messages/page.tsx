@@ -48,6 +48,7 @@ function InboxContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
+          tone="dark"
           title="Messages"
           subtitle="Recruitment conversations for applications you are responsible for."
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{chats.length} threads</span>}

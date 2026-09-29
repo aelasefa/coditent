@@ -9,11 +9,13 @@ interface PageHeaderProps {
   badge?: React.ReactNode;
   actions?: React.ReactNode;
   breadcrumbs?: Array<{ label: string; href?: string }>;
+  tone?: "soft" | "dark";
 }
 
 // Compat wrapper around shell PageHeader. Preserves API, uses tokens.
-export function PageHeader({ title, subtitle, badge, actions, breadcrumbs }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, badge, actions, breadcrumbs, tone = "soft" }: PageHeaderProps) {
   return (
+    <section className={`company-page-hero ${tone === "dark" ? "company-page-hero-dark" : ""}`}>
     <ShellHeader
       title={title}
       description={subtitle}
@@ -44,5 +46,6 @@ export function PageHeader({ title, subtitle, badge, actions, breadcrumbs }: Pag
         ) : undefined
       }
     />
+    </section>
   );
 }

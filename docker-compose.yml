@@ -78,6 +78,7 @@ services:
         condition: service_started
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8001
+      BACKEND_PROXY_URL: http://api:8001
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}

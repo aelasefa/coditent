@@ -129,6 +129,7 @@ function PipelineContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
+          tone="dark"
           title="Candidates"
           subtitle={`${apps.length} applicants across hiring stages. Select a card for detail and stage actions.`}
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{filtered.length} shown</span>}
