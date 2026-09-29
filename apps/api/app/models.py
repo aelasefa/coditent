@@ -291,6 +291,7 @@ class ChatMessage(Base):
     application_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     sender: Mapped[User] = relationship("User", foreign_keys=[sender_id])
     receiver: Mapped[User] = relationship("User", foreign_keys=[receiver_id])

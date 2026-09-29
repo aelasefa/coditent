@@ -647,6 +647,15 @@ export async function sendRecruitmentMessage(applicationId: string, content: str
   return data;
 }
 
+export async function markRecruitmentMessagesRead(
+  applicationId: string,
+): Promise<{ message_ids: string[]; read_at: string | null }> {
+  const { data } = await api.post<{ message_ids: string[]; read_at: string | null }>(
+    `/chat/recruitment/${applicationId}/read`,
+  );
+  return data;
+}
+
 export async function listRecruitmentChats(): Promise<import("@/lib/types").RecruitmentChatListItem[]> {
   const { data } = await api.get<{ recruitment_chats: import("@/lib/types").RecruitmentChatListItem[] }>("/chat/recruitment");
   return data.recruitment_chats;

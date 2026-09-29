@@ -323,8 +323,14 @@ class ChatMessageOut(APIModel):
     receiver_id: uuid.UUID
     content: str
     created_at: datetime
+    read_at: datetime | None = None
     sender: UserOut | None = None
     application_id: uuid.UUID | None = None
+
+
+class RecruitmentMessagesReadOut(APIModel):
+    message_ids: list[uuid.UUID]
+    read_at: datetime | None = None
 
 
 class RecruitmentMessageCreate(APIModel):

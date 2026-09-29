@@ -1,8 +1,9 @@
 from typing import Annotated
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_audit
@@ -14,6 +15,7 @@ from app.schemas import (
     ChatMessageOut,
     RecruitmentChatContext,
     RecruitmentMessageCreate,
+    RecruitmentMessagesReadOut,
     RecruitmentPeer,
     UserOut,
 )
@@ -183,6 +185,7 @@ def _message_out(msg: ChatMessage, sender: User | None) -> ChatMessageOut:
         receiver_id=msg.receiver_id,
         content=msg.content,
         created_at=msg.created_at,
+        read_at=msg.read_at,
         sender=UserOut.model_validate(sender) if sender else None,
         application_id=msg.application_id,
     )
@@ -488,6 +491,60 @@ async def _broadcast_recruitment_message(application_id: str, message: ChatMessa
     )
 
 
+async def _mark_recruitment_messages_read(
+    db: AsyncSession,
+    application_id: UUID,
+    reader_id: UUID,
+) -> RecruitmentMessagesReadOut:
+    """Atomically mark only the authenticated participant's incoming messages read."""
+    read_at = datetime.utcnow()
+    result = await db.execute(
+        update(ChatMessage)
+        .where(
+            ChatMessage.application_id == application_id,
+            ChatMessage.receiver_id == reader_id,
+            ChatMessage.sender_id != reader_id,
+            ChatMessage.read_at.is_(None),
+        )
+        .values(read_at=read_at)
+        .returning(ChatMessage.id)
+    )
+    message_ids = list(result.scalars().all())
+    if not message_ids:
+        return RecruitmentMessagesReadOut(message_ids=[], read_at=None)
+    await db.commit()
+    receipt = RecruitmentMessagesReadOut(message_ids=message_ids, read_at=read_at)
+    await _broadcast_recruitment_event(
+        str(application_id),
+        {
+            "type": "messages_read",
+            "message_ids": [str(message_id) for message_id in message_ids],
+            "reader_id": str(reader_id),
+            "read_at": read_at.isoformat(),
+        },
+    )
+    return receipt
+
+
+@router.post(
+    "/recruitment/{application_id}/read",
+    response_model=RecruitmentMessagesReadOut,
+)
+async def mark_recruitment_messages_read(
+    application_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RecruitmentMessagesReadOut:
+    app, offer, _, _ = await _check_recruitment_viewer(db, current_user, application_id)
+    decision = can_access_recruitment_chat(current_user, app, offer)
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Recruitment chat is not available for this application",
+        )
+    return await _mark_recruitment_messages_read(db, app.id, current_user.id)
+
+
 @router.websocket("/recruitment/{application_id}/ws")
 async def recruitment_chat_ws(
     websocket: WebSocket,
@@ -521,7 +578,6 @@ async def recruitment_chat_ws(
             return
         decision = can_access_recruitment_chat(user, app, offer)
         room = str(app.id)
-        typing_active = False
         _recruitment_rooms.setdefault(room, set()).add(websocket)
         try:
             peer = (
@@ -544,7 +600,7 @@ async def recruitment_chat_ws(
                     continue
 
                 event_type = str(incoming.get("type") or "message_send")
-                if event_type not in {"message_send", "typing_start", "typing_stop"}:
+                if event_type not in {"message_send", "messages_read"}:
                     await websocket.send_json({"type": "error", "detail": "Unsupported realtime event"})
                     continue
 
@@ -562,37 +618,18 @@ async def recruitment_chat_ws(
                     continue
                 live = can_access_recruitment_chat(user, app_fresh, offer_fresh)
                 if not live.allowed or live.peer_id is None:
-                    if typing_active:
-                        await _broadcast_recruitment_event(
-                            room,
-                            {"type": "typing_stop", "sender_id": str(user.id)},
-                            exclude=websocket,
-                        )
-                        typing_active = False
                     await websocket.send_json(
                         {"type": "error", "detail": "Recruitment chat is not available for this application"}
                     )
                     continue
 
-                if event_type in {"typing_start", "typing_stop"}:
-                    typing_active = event_type == "typing_start"
-                    await _broadcast_recruitment_event(
-                        room,
-                        {"type": event_type, "sender_id": str(user.id)},
-                        exclude=websocket,
-                    )
+                if event_type == "messages_read":
+                    await _mark_recruitment_messages_read(db, app_fresh.id, user.id)
                     continue
 
                 content = str(incoming.get("content", "")).strip()
                 if not content:
                     continue
-                if typing_active:
-                    await _broadcast_recruitment_event(
-                        room,
-                        {"type": "typing_stop", "sender_id": str(user.id)},
-                        exclude=websocket,
-                    )
-                    typing_active = False
                 peer_user = (
                     await db.execute(select(User).where(User.id == live.peer_id))
                 ).scalar_one_or_none()
@@ -617,12 +654,6 @@ async def recruitment_chat_ws(
                     exclude=websocket,
                 )
         finally:
-            if typing_active:
-                await _broadcast_recruitment_event(
-                    room,
-                    {"type": "typing_stop", "sender_id": str(user.id)},
-                    exclude=websocket,
-                )
             room_connections = _recruitment_rooms.get(room)
             if room_connections is not None:
                 room_connections.discard(websocket)

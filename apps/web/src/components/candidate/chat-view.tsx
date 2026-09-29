@@ -23,20 +23,16 @@ function timeLabel(iso: string): string {
 export function MessageList({
   messages,
   myId,
-  peerName = "Someone",
-  peerIsTyping = false,
 }: {
   messages: ChatMessage[];
   myId?: string;
-  peerName?: string;
-  peerIsTyping?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, peerIsTyping]);
+  }, [messages.length]);
 
-  if (messages.length === 0 && !peerIsTyping) {
+  if (messages.length === 0) {
     return <div role="log" aria-label="Messages" className="flex min-h-[240px] flex-1 flex-col items-center justify-center p-6 text-center">
       <p className="text-sm font-semibold text-foreground">No messages yet</p>
       <p className="mt-1 max-w-xs text-[13px] leading-relaxed text-muted-foreground">Start the conversation with a message.</p>
@@ -45,9 +41,16 @@ export function MessageList({
 
   let lastDay = "";
   let lastSender = "";
+  let latestOutgoingIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (myId && messages[index].sender_id === myId) {
+      latestOutgoingIndex = index;
+      break;
+    }
+  }
   return (
     <div role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions text" className="space-y-1 overflow-y-auto p-4">
-      {messages.map((m) => {
+      {messages.map((m, index) => {
         const day = dayLabel(m.created_at);
         const showDay = day && day !== lastDay;
         const mine = myId ? m.sender_id === myId : false;
@@ -60,33 +63,28 @@ export function MessageList({
               <p suppressHydrationWarning className="py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{day}</p>
             ) : null}
             <div className={cn("flex", mine ? "justify-end" : "justify-start", grouped ? "mt-0.5" : "mt-2")}>
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                  mine ? "bg-primary text-primary-foreground" : "bg-surface-secondary text-foreground"
-                )}
-              >
-                <p>{m.content}</p>
-                <p suppressHydrationWarning className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                  {timeLabel(m.created_at)}
-                </p>
+              <div className="flex max-w-[80%] flex-col items-end">
+                <div
+                  className={cn(
+                    "w-fit rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+                    mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground"
+                  )}
+                >
+                  <p>{m.content}</p>
+                  <p suppressHydrationWarning className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                    {timeLabel(m.created_at)}
+                  </p>
+                </div>
+                {mine && index === latestOutgoingIndex ? (
+                  <p className="mt-1 pr-1 text-[10px] font-medium leading-none text-muted-foreground" aria-label={m.read_at ? "Message seen" : "Message sent"}>
+                    {m.read_at ? "Seen" : "✓ Sent"}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
         );
       })}
-      {peerIsTyping ? (
-        <div className={styles.typingRow}>
-          <div className={styles.typingBubble}>
-            <span className="sr-only">{peerName} is typing</span>
-            <span aria-hidden="true" className={styles.typingDots}>
-              <span />
-              <span />
-              <span />
-            </span>
-          </div>
-        </div>
-      ) : null}
       <div ref={bottomRef} />
     </div>
   );
@@ -98,16 +96,12 @@ export function Composer({
   disabled,
   disabledReason,
   onSend,
-  onTyping,
-  onTypingStop,
 }: {
   peerName: string;
   pending: boolean;
   disabled?: boolean;
   disabledReason?: string;
   onSend: (text: string) => void;
-  onTyping?: (value: string) => void;
-  onTypingStop?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +119,6 @@ export function Composer({
     if (!text || pending || disabled) return;
     setError(null);
     try {
-      onTypingStop?.();
       onSend(text);
       setValue("");
     } catch {
@@ -151,12 +144,7 @@ export function Composer({
           ref={composerRef}
           id="chat-composer"
           value={value}
-          onChange={(e) => {
-            const nextValue = e.target.value;
-            setValue(nextValue);
-            onTyping?.(nextValue);
-          }}
-          onBlur={() => onTypingStop?.()}
+          onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
