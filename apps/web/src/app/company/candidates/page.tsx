@@ -130,8 +130,9 @@ function PipelineContent() {
       <div className="space-y-6">
         <PageHeader
           tone="dark"
-          title="Candidates"
-          subtitle={`${apps.length} applicants across hiring stages. Select a card for detail and stage actions.`}
+          center
+          title="Every candidate, in clear view."
+          subtitle={`${apps.length} applicants in one workspace · review each profile and move the process forward.`}
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{filtered.length} shown</span>}
           actions={
             <div role="group" aria-label="View mode" className="flex rounded-lg border border-border p-0.5">

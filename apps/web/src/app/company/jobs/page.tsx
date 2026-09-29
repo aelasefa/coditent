@@ -39,7 +39,15 @@ const EMPTY_FORM = {
   type: "JOB" as "JOB" | "INTERNSHIP",
   description: "",
   requirements: "",
+  salaryRange: "",
+  equity: "",
 };
+
+function compensationDetails(description: string): { salary?: string; equity?: string } {
+  const salary = description.match(/^Compensation:\s*(.+)$/m)?.[1];
+  const equity = description.match(/^Equity:\s*(.+)$/m)?.[1];
+  return { salary, equity };
+}
 
 export default function CompanyJobsPage() {
   const qc = useQueryClient();
@@ -118,7 +126,8 @@ export default function CompanyJobsPage() {
       if (!form.region.trim() || !form.field.trim()) throw new Error("Region and field are required");
       if (!form.description.trim() || form.description.trim().length < 10) throw new Error("Description must be at least 10 characters");
       if (!form.requirements.trim() || form.requirements.trim().length < 10) throw new Error("Requirements must be at least 10 characters");
-      return createOffer(form);
+      const compensation = [form.salaryRange.trim() && `Compensation: ${form.salaryRange.trim()}`, form.equity.trim() && `Equity: ${form.equity.trim()}`].filter(Boolean).join("\n");
+      return createOffer({ ...form, description: `${form.description.trim()}${compensation ? `\n\n${compensation}` : ""}` });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-offers"] });
@@ -160,7 +169,7 @@ export default function CompanyJobsPage() {
   const openEdit = (o: Offer) => {
     setEditTarget(o);
     setResponsibleHrId(o.responsible_hr_id ?? "");
-    setEditForm({ title: o.title, company: o.company, region: o.region, field: o.field, type: o.type, description: o.description, requirements: o.requirements });
+    setEditForm({ title: o.title, company: o.company, region: o.region, field: o.field, type: o.type, description: o.description, requirements: o.requirements, salaryRange: "", equity: "" });
   };
 
   const filtered = useMemo(() => {
@@ -196,6 +205,13 @@ export default function CompanyJobsPage() {
           </Select>
         </div>
       </section>
+      <section aria-label="Compensation">
+        <h3 className="text-sm font-semibold text-foreground">Compensation <span className="font-normal text-muted-foreground">(optional)</span></h3>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <Input label="Salary range" value={value.salaryRange} onChange={(e) => set({ ...value, salaryRange: e.target.value })} placeholder="$200k – $350k / yr" />
+          <Input label="Equity" value={value.equity} onChange={(e) => set({ ...value, equity: e.target.value })} placeholder="Equity + Fund Economics" />
+        </div>
+      </section>
       <section aria-label="Description">
         <h3 className="text-sm font-semibold text-foreground">Description</h3>
         <div className="mt-2">
@@ -217,17 +233,15 @@ export default function CompanyJobsPage() {
       <div className="space-y-6">
         <PageHeader
           tone="dark"
-          title="Jobs"
-          subtitle={`${offers?.length ?? 0} roles · ${activeCount(offers)} active. Publish and manage openings.`}
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{offers?.length ?? 0} total</span>}
-          actions={
-            canCreate ? (
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <FiPlus aria-hidden className="h-3.5 w-3.5" /> Create job
-              </Button>
-            ) : null
-          }
+          center
+          title="Every role, in clear view."
+          subtitle={`${offers?.length ?? 0} roles in one workspace · ${activeCount(offers)} active and ready for candidates.`}
         />
+
+        <div className="company-hero-actions-bar">
+          <span className="rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-muted-foreground">{offers?.length ?? 0} total</span>
+          {canCreate ? <Button size="sm" onClick={() => setCreateOpen(true)}><FiPlus aria-hidden className="h-3.5 w-3.5" /> Create a job</Button> : null}
+        </div>
 
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -283,6 +297,9 @@ export default function CompanyJobsPage() {
                       <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                         {o.company} · {o.region} · {o.field} · {o.type === "JOB" ? "Job" : "Internship"}
                       </p>
+                      {(compensationDetails(o.description).salary || compensationDetails(o.description).equity) && (
+                        <p className="mt-1 text-xs font-medium text-primary">{[compensationDetails(o.description).salary, compensationDetails(o.description).equity].filter(Boolean).join(" · ")}</p>
+                      )}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {appsByOffer.get(o.id) ?? 0} applicants
                         {assQ.data ? ` · ${assessments.length} assessments in workspace` : ""}

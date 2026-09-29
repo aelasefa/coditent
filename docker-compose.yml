@@ -12,6 +12,7 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       FRONTEND_URL: http://localhost:3001
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
@@ -19,6 +20,10 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "1"
+      DB_POOL_TIMEOUT_SECONDS: "15"
+      DB_POOL_RECYCLE_SECONDS: "300"
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: coditent-vault-token-secret
     volumes:
@@ -55,7 +60,11 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379/0
-    command: celery -A app.tasks worker --loglevel=info
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
+      DB_POOL_TIMEOUT_SECONDS: "15"
+      DB_POOL_RECYCLE_SECONDS: "300"
+    command: celery -A app.tasks worker --loglevel=info --concurrency=2
 
   redis:
     image: redis:7-alpine
@@ -69,7 +78,8 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_API_URL: /api-proxy
+        BACKEND_PROXY_URL: http://api:8001
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
     container_name: coditent-web
@@ -77,13 +87,13 @@ services:
       api:
         condition: service_started
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8001
+      NEXT_PUBLIC_API_URL: /api-proxy
       BACKEND_PROXY_URL: http://api:8001
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-    ports:
-      - "3001:3000"
+    expose:
+      - "3000"
 
   proxy:
     build:
@@ -92,7 +102,7 @@ services:
     container_name: coditent-proxy
     restart: always
     ports:
-      - "8080:80"
+      - "3001:80"
       - "8443:443"
 
     depends_on:
@@ -100,6 +110,11 @@ services:
         condition: service_started
       api:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   vault:
     image: hashicorp/vault:1.15.0

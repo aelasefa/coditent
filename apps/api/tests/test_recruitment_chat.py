@@ -247,6 +247,86 @@ async def test_candidate_sends_to_responsible_hr(client, flow):
     assert msg["receiver_id"] == str(flow["hr"].id)
     assert msg["sender_id"] == str(flow["cand"].id)
     assert msg["application_id"] == str(flow["application"].id)
+    assert msg["read_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_read_receipt_is_persisted_when_recipient_views(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    sent = await client.post(
+        f"/chat/recruitment/{flow['application'].id}",
+        json={"content": "Please confirm the interview time"},
+        headers=auth(flow["cand"]),
+    )
+    message_id = sent.json()["id"]
+
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["hr"]),
+    )
+    assert read.status_code == 200, read.text
+    assert message_id in read.json()["message_ids"]
+    assert read.json()["read_at"] is not None
+
+    refreshed = await client.get(
+        f"/chat/recruitment/{flow['application'].id}",
+        headers=auth(flow["cand"]),
+    )
+    persisted = next(message for message in refreshed.json()["messages"] if message["id"] == message_id)
+    assert persisted["read_at"] == read.json()["read_at"]
+
+
+@pytest.mark.asyncio
+async def test_sender_cannot_mark_own_message_read(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    sent = await client.post(
+        f"/chat/recruitment/{flow['application'].id}",
+        json={"content": "This remains unread by the recruiter"},
+        headers=auth(flow["cand"]),
+    )
+    message_id = sent.json()["id"]
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["cand"]),
+    )
+    assert read.status_code == 200
+    assert message_id not in read.json()["message_ids"]
+
+
+@pytest.mark.asyncio
+async def test_candidate_marks_recruiter_reply_seen_and_state_survives_refetch(client, flow):
+    await _set_status(flow["application"].id, "interview")
+    sent = await client.post(
+        f"/chat/recruitment/{flow['application'].id}",
+        json={"content": "Your interview starts tomorrow at ten"},
+        headers=auth(flow["hr"]),
+    )
+    message_id = sent.json()["id"]
+    assert sent.json()["read_at"] is None
+
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["cand"]),
+    )
+    assert read.status_code == 200, read.text
+    assert message_id in read.json()["message_ids"]
+
+    refreshed = await client.get(
+        f"/chat/recruitment/{flow['application'].id}",
+        headers=auth(flow["hr"]),
+    )
+    persisted = next(message for message in refreshed.json()["messages"] if message["id"] == message_id)
+    assert persisted["read_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_user_cannot_mark_recruitment_messages_read(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["cand2"]),
+    )
+    assert read.status_code in (403, 404)
 
 
 @pytest.mark.asyncio

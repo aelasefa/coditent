@@ -73,18 +73,18 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-sm">
         Skip to content
       </a>
-      <div className={home ? styles.homeNav : "mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6"}>
+      <div className={home ? styles.homeNav : "mx-auto grid h-[4.5rem] w-[min(100%-3rem,1280px)] grid-cols-[1fr_auto_1fr] items-center gap-4"}>
         <Link href="/" aria-label="Coditent home" className={home ? styles.homeBrand : undefined}>
           <Logo size="md" />
         </Link>
-        <nav aria-label="Primary" className={home ? styles.homeNavLinks : "hidden items-center gap-1 lg:flex"}>
+        <nav aria-label="Primary" className={home ? styles.homeNavLinks : "hidden items-center gap-0.5 lg:flex"}>
           {LINKS.map((l) => (
-            <Link key={l.label} href={l.href} className={home ? undefined : "rounded-lg px-3.5 py-2 text-sm font-medium text-foreground-secondary hover:bg-surface-secondary hover:text-foreground"}>
+            <Link key={l.label} href={l.href} className={home ? undefined : "rounded-lg px-3 py-2 text-[13px] font-semibold text-foreground-secondary hover:bg-surface-secondary hover:text-primary"}>
               {l.label}
             </Link>
           ))}
         </nav>
-        <div className={home ? styles.homeActions : "hidden items-center gap-2 lg:flex"}>
+        <div className={home ? styles.homeActions : "hidden items-center justify-self-end gap-2 lg:flex"}>
           <Link href="/login" className={home ? styles.homeLogin : "rounded-lg px-3.5 py-2 text-sm font-medium text-foreground-secondary hover:text-foreground"}>
             Log in
           </Link>

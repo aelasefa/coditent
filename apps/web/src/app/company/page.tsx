@@ -94,18 +94,11 @@ export default function CompanyDashboard() {
       <div className="space-y-8">
         <div className="company-dashboard-welcome">
           <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill className="company-dashboard-artwork" sizes="(max-width: 768px) 100vw, 1200px" />
+          <p className="company-hero-eyebrow">Your hiring workspace</p>
           <PageHeader
-            title={`${timeGreeting}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
-            subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
-            actions={
-              <Link
-                href="/company/jobs"
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
-              >
-                <FiPlus aria-hidden className="h-4 w-4" />
-                <span>Create job</span>
-              </Link>
-            }
+            variant="plain"
+            title="Build a stronger team, one clear decision at a time."
+            subtitle="Review every role, candidate and conversation from one calm workspace."
           />
         </div>
 
