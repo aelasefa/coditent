@@ -80,3 +80,11 @@ export const companyNavSections: NavSection[] = [
 ];
 
 // Company Messages: /company/messages inbox built Phase 5 on listRecruitmentChats (responsible-HR scoped).
+
+export const companyNavItems: NavItem[] = [
+  { label: "Dashboard", href: "/company", icon: FiHome, match: "exact" },
+  { label: "Jobs", href: "/company/jobs", icon: FiBriefcase, match: "prefix" },
+  { label: "Candidates", href: "/company/candidates", icon: FiUsers, match: "prefix" },
+  { label: "Messages", href: "/company/messages", icon: FiMessageSquare, match: "prefix" },
+  { label: "Team", href: "/company/team", icon: FiUser, match: "prefix" },
+];

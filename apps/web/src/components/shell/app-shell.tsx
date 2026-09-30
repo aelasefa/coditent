@@ -26,6 +26,8 @@ interface AppShellProps {
   topbarAction?: React.ReactNode;
   userMenuItems?: Array<{ label: string; href: string }>;
   onLogout: () => void;
+  /** Scoped workspace identity. Keeps tenant visual systems isolated. */
+  themeClass?: string;
   children: React.ReactNode;
 }
 
@@ -131,13 +133,14 @@ export function AppShell({
   topbarAction,
   userMenuItems = [],
   onLogout,
+  themeClass,
   children,
 }: AppShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className={cn("flex min-h-screen flex-col bg-background text-foreground", themeClass)}>
       <div className="flex min-h-screen flex-1">
         <aside className="fixed inset-y-0 z-30 hidden w-60 flex-col border-r border-border-subtle bg-surface md:flex lg:w-64">
           <div className="border-b border-border-subtle px-5 py-4">

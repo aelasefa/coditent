@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { FiArrowRight, FiBriefcase, FiCheckSquare, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
 import { api, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
 import { PageContainer } from "@/components/shell/page-container";
@@ -23,6 +24,8 @@ function greeting(): string {
 }
 
 export default function DashboardPage() {
+  const [timeGreeting, setTimeGreeting] = useState("Welcome");
+  useEffect(() => { setTimeGreeting(greeting()); }, []);
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: getProfile, staleTime: 60_000 });
   const recsQuery = useQuery({ queryKey: ["recommendations"], queryFn: getRecommendations });
@@ -104,7 +107,7 @@ export default function DashboardPage() {
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>Your career space</p>
           <h1 id="dashboard-heading" className={styles.heroTitle}>
-            {firstName ? `${greeting()}, ${firstName}.` : "Your next chapter starts here."}
+            {firstName ? `${timeGreeting}, ${firstName}.` : "Your next chapter starts here."}
           </h1>
           <p className={styles.heroDescription}>Pick up where you left off, explore opportunities, and keep every application in view.</p>
           <Link href="/dashboard/recommendations" className={styles.heroLink}>

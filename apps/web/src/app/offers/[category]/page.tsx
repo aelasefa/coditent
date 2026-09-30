@@ -75,21 +75,21 @@ function OffersContent() {
   const returnPath = `/offers/${category.slug}`;
 
   return (
-    <div className="bg-background text-foreground">
+    <div className="candidate-theme bg-background text-foreground">
       <SiteHeader />
-      <main className="mx-auto w-full max-w-7xl px-4 pb-20 pt-8 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-8 sm:px-6">
         <button type="button" onClick={() => router.back()} className="text-sm font-medium text-muted-foreground hover:text-foreground">
           ← Back
         </button>
-        <div className="mt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Open opportunities</p>
-          <h1 className="ct-page-title mt-1">{category.label} opportunities</h1>
-          <p className="mt-1 text-sm text-muted-foreground" role="status">
-            {loading ? "Loading roles" : `${visible.length} open role${visible.length === 1 ? "" : "s"}`}
-          </p>
-        </div>
+        <section className="offers-hero">
+          <p className="offers-hero-eyebrow">Open opportunities</p>
+          <h1 className="ct-page-title">{category.label} opportunities</h1>
+          <p className="offers-hero-copy">Explore roles from companies looking for your next contribution.</p>
+        </section>
 
-        <div className="mt-5 max-w-md">
+        <div className="offers-results-bar"><span className="offers-hero-count" role="status">{loading ? "Loading roles" : `${visible.length} open role${visible.length === 1 ? "" : "s"}`}</span></div>
+
+        <div className="offers-search-panel">
           <label htmlFor="public-search" className="sr-only">Search opportunities</label>
           <input
             id="public-search"
@@ -121,17 +121,17 @@ function OffersContent() {
             />
           </div>
         ) : (
-          <ul className="mt-5 space-y-2.5" aria-label="Opportunities">
+          <ul className="offers-list" aria-label="Opportunities">
             {visible.map((o) => {
               const expanded = expandedId === o.id;
               const salary = salaryLabel(o);
               return (
-                <li key={o.id} className="overflow-hidden rounded-xl border border-border-subtle bg-surface">
+                <li key={o.id} className="overflow-hidden border-b border-border-subtle bg-surface last:border-b-0">
                   <button
                     type="button"
                     onClick={() => setExpandedId(expanded ? null : o.id)}
                     aria-expanded={expanded}
-                    className="flex w-full items-center gap-3 p-4 text-left hover:bg-surface-secondary/40"
+                    className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-surface-secondary/40"
                   >
                     <Avatar name={o.company} size="md" />
                     <span className="min-w-0 flex-1">
@@ -144,7 +144,7 @@ function OffersContent() {
                     <span aria-hidden className="text-muted-foreground">{expanded ? "▾" : "▸"}</span>
                   </button>
                   {expanded && (
-                    <div className="border-t border-border-subtle px-4 py-4 sm:px-5">
+                    <div className="border-t border-border-subtle px-5 py-5">
                       <h2 className="text-sm font-semibold">About the role</h2>
                       <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground-secondary">{o.description || "No description provided."}</p>
                       {o.requirements && (

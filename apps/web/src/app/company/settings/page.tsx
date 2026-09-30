@@ -103,7 +103,7 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6">
-        <PageHeader title="Settings" subtitle="Company profile, access policy, plan and appearance." />
+        <PageHeader tone="dark" center title="Your workspace, in clear view." subtitle="Manage company details, access and preferences from one place." />
 
         <Tabs
           items={[
@@ -123,13 +123,17 @@ export default function SettingsPage() {
                     <div className="space-y-4">
                       <CompanyLogoSection company={company ?? null} canEdit={canEditCompany} />
                       <form
-                      className="space-y-4 rounded-xl border border-border-subtle bg-surface p-5"
+                      className="company-settings-form space-y-5 rounded-xl border border-border-subtle bg-surface p-5 sm:p-6"
                       onSubmit={(e) => {
                         e.preventDefault();
                         if (canEditCompany) updateMut.mutate();
                       }}
                     >
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Company details</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Keep the information candidates and your hiring team rely on up to date.</p>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
                         <Input label="Company name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
                         <Input label="Industry" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
                         <Input label="Region" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
@@ -148,7 +152,7 @@ export default function SettingsPage() {
                       </div>
                       <Textarea label="Description" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} />
                       {canEditCompany ? (
-                        <div className="flex justify-end">
+                        <div className="company-settings-save flex items-center justify-end border-t border-border-subtle pt-4">
                           <Button type="submit" loading={updateMut.isPending}>Save changes</Button>
                         </div>
                       ) : (

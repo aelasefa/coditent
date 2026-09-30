@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/company/AppShell";
 import { PageHeader } from "@/components/company/PageHeader";
 import { StatCard } from "@/components/company/StatCard";
@@ -33,6 +35,8 @@ function SectionError({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function CompanyDashboard() {
+  const [timeGreeting, setTimeGreeting] = useState("Welcome");
+  useEffect(() => { setTimeGreeting(greeting()); }, []);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: company } = useQuery({
     queryKey: ["company", me?.company_id],
@@ -88,19 +92,15 @@ export default function CompanyDashboard() {
   return (
     <AppShell>
       <div className="space-y-8">
-        <PageHeader
-          title={`${greeting()}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
-          subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
-          actions={
-            <Link
-              href="/company/jobs"
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
-            >
-              <FiPlus aria-hidden className="h-4 w-4" />
-              <span>Create job</span>
-            </Link>
-          }
-        />
+        <div className="company-dashboard-welcome">
+          <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill priority quality={55} decoding="async" className="company-dashboard-artwork" sizes="(max-width: 639px) 100vw, (max-width: 1023px) 768px, 1200px" />
+          <p className="company-hero-eyebrow">Your hiring workspace</p>
+          <PageHeader
+            variant="plain"
+            title="Build a stronger team, one clear decision at a time."
+            subtitle="Review every role, candidate and conversation from one calm workspace."
+          />
+        </div>
 
         <section aria-label="Needs attention">
           <h2 className="ct-section-title">
