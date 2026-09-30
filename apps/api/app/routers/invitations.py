@@ -1,7 +1,11 @@
+import base64
 import hashlib
+import html as html_module
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -26,48 +30,116 @@ def _is_valid_email(email: str) -> bool:
 
 # Keep role set consistent with frontend + permissions (OWNER not assignable via invite)
 EMPLOYEE_INVITE_ROLES = {"ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"}
+EMPLOYEE_INVITE_ART_CONTENT_ID = "coditent-employee-invite-art"
+EMPLOYEE_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "employee-invite-email-art.png"
+
+
+@lru_cache(maxsize=1)
+def employee_invite_art_attachment() -> dict[str, str]:
+    """Return the employee-invite hero as an inline CID attachment."""
+    content = base64.b64encode(EMPLOYEE_INVITE_ART_PATH.read_bytes()).decode("ascii")
+    return {
+        "filename": "coditent-team-invitation.jpg",
+        "content": content,
+        "content_type": "image/jpeg",
+        "content_id": EMPLOYEE_INVITE_ART_CONTENT_ID,
+    }
+
 
 def _build_employee_invite_email(company_name: str, role: str, token: str, expires_at: datetime) -> tuple[str, str]:
     """Return (subject, html) for employee invite — CODITENT branded."""
     frontend = settings.frontend_url.rstrip("/")
     # Canonical route is /invite/employee?token= — also support /accept-invitation?token= via redirect if needed
     invite_url = f"{frontend}/invite/employee?token={token}"
-    subject = f"You've been invited to join {company_name} on CODITENT as {role}"
-    html = f"""
-    <div style="font-family:Inter,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181B;">
-      <div style="border:1px solid #E4E4E7;border-radius:16px;overflow:hidden;">
-        <div style="background:#18181B;color:#fff;padding:20px 24px;">
-          <div style="font-weight:800;letter-spacing:-0.02em;font-size:18px;">CODITENT</div>
-          <div style="font-size:12px;opacity:0.7;letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;">Talent Workflow Platform</div>
-        </div>
-        <div style="padding:24px;">
-          <h2 style="margin:0 0 8px;font-size:18px;">You've been invited to join <strong>{company_name}</strong> as <strong>{role}</strong></h2>
-          <p style="margin:0 0 12px;color:#52525B;font-size:14px;line-height:1.6;">
-            {company_name} invited you to collaborate on CODITENT — manage recruitment, candidates, assessments, and practical evaluations in one workspace.
-          </p>
-          <div style="background:#FAFAF9;border:1px solid #F4F4F5;border-radius:12px;padding:12px 14px;margin:12px 0;">
-            <div style="font-size:12px;color:#71717A;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">Invitation details</div>
-            <div style="margin-top:6px;font-size:13px;"><strong>Company:</strong> {company_name}</div>
-            <div style="font-size:13px;"><strong>Role:</strong> {role}</div>
-            <div style="font-size:13px;"><strong>Expires:</strong> {expires_at.strftime('%b %d, %Y %H:%M UTC')}</div>
-          </div>
-          <a href="{invite_url}" style="display:inline-block;background:#18181B;color:#fff;text-decoration:none;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;margin:8px 0;">Accept invitation →</a>
-          <p style="font-size:12px;color:#71717A;margin:8px 0 0;">Or paste this link: <a href="{invite_url}" style="color:#18181B;word-break:break-all;">{invite_url}</a></p>
-          <p style="font-size:12px;color:#71717A;margin:16px 0 0;">This invitation expires in 72 hours and is single-use. If you were not expecting this, you can safely ignore this email.</p>
-          <p style="font-size:12px;color:#A1A1AA;margin:8px 0 0;">Raw token is not logged. Invitation ID is not exposed as credential.</p>
-        </div>
-      </div>
-      <p style="font-size:11px;color:#A1A1AA;text-align:center;margin-top:12px;">CODITENT · Talent Workflow Platform for Morocco</p>
-    </div>
-    """
+    invite_url_safe = html_module.escape(invite_url, quote=True)
+    company_safe = html_module.escape(company_name)
+    role_safe = html_module.escape(role)
+    subject_company = " ".join(company_name.splitlines()).strip()
+    subject = f"You're invited to join {subject_company} on CODITENT"
+    exp = expires_at.strftime('%b %d, %Y %H:%M UTC')
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>{html_module.escape(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f8f8f3;color:#192b23;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+    {company_safe} invited you to join its CODITENT workspace as {role_safe}.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#f8f8f3;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background-color:#fffefa;border:1px solid #cfdbcf;border-radius:18px;overflow:hidden;">
+          <tr>
+            <td style="padding:22px 28px 18px;border-bottom:1px solid #e3e9df;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:20px;font-weight:800;line-height:1;color:#192b23;letter-spacing:-0.4px;">Coditent</td>
+                  <td align="right" style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;line-height:1.4;color:#617369;letter-spacing:1.4px;text-transform:uppercase;">Team invitation</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0;background-color:#edf1e9;line-height:0;">
+              <img src="cid:{EMPLOYEE_INVITE_ART_CONTENT_ID}" width="600" alt="A new colleague being welcomed into a collaborative team" style="display:block;width:100%;max-width:600px;height:auto;border:0;line-height:100%;outline:none;text-decoration:none;">
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 28px 30px;">
+              <p style="margin:0 0 9px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;font-weight:700;line-height:1.4;color:#5b765e;letter-spacing:1.8px;text-transform:uppercase;">Join {company_safe}</p>
+              <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:32px;font-weight:400;line-height:1.12;color:#192b23;letter-spacing:-1px;">Your next chapter starts with the team.</h1>
+              <p style="margin:14px 0 22px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.65;color:#53665a;"><strong style="color:#192b23;">{company_safe}</strong> invited you to collaborate on CODITENT. Accept the invitation to work with candidates, assessments, recruitment stages, and practical evaluations in one shared workspace.</p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#edf1e9;border:1px solid #cfdbcf;border-radius:12px;">
+                <tr>
+                  <td style="padding:17px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+                    <p style="margin:0 0 9px;font-size:10px;font-weight:700;line-height:1.4;color:#617369;letter-spacing:1.5px;text-transform:uppercase;">Invitation details</p>
+                    <p style="margin:0;font-size:14px;line-height:1.65;color:#192b23;"><strong>Company:</strong> {company_safe}</p>
+                    <p style="margin:0;font-size:14px;line-height:1.65;color:#192b23;"><strong>Your role:</strong> {role_safe}</p>
+                    <p style="margin:0;font-size:14px;line-height:1.65;color:#192b23;"><strong>Expires:</strong> {exp}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:15px 0 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:13px;line-height:1.6;color:#53665a;">Your invited role is assigned automatically when you accept.</p>
+
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;">
+                <tr>
+                  <td bgcolor="#194d38" style="border-radius:999px;">
+                    <a href="{invite_url_safe}" style="display:inline-block;padding:13px 21px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:700;line-height:1;color:#ffffff;text-decoration:none;border-radius:999px;">Join the workspace →</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:18px 0 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.6;color:#617369;">If the button does not work, copy and paste this link into your browser:<br><a href="{invite_url_safe}" style="color:#194d38;text-decoration:underline;word-break:break-all;">{invite_url_safe}</a></p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:22px;border-top:1px solid #e3e9df;">
+                <tr>
+                  <td style="padding-top:18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.6;color:#617369;">This invitation is single-use and expires on {exp}. If you were not expecting it, you can safely ignore this email.</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:14px 0 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.5;color:#617369;text-align:center;">CODITENT · Talent Workflow Platform for Morocco</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
     return subject, html
+
 
 def _send_employee_invite_email_safe(email: str, company_name: str, role: str, token: str, expires_at: datetime) -> None:
     """Best-effort email — never fail invitation creation if email fails; log instead."""
     try:
         from app.services.email import send_email
         subject, html = _build_employee_invite_email(company_name, role, token, expires_at)
-        send_email(email, subject, html)
+        send_email(email, subject, html, attachments=[employee_invite_art_attachment()])
     except Exception as exc:
         # Do not expose token; log at warning level via observability if available
         try:
@@ -76,44 +148,112 @@ def _send_employee_invite_email_safe(email: str, company_name: str, role: str, t
         except Exception:
             pass
 
+
 # ---------- Platform Admin -> Company ----------
 COMPANY_INVITE_EXPIRY_DAYS = 7
+COMPANY_INVITE_ART_CONTENT_ID = "coditent-company-invite-art"
+COMPANY_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "company-invite-email-art.png"
+
+
+@lru_cache(maxsize=1)
+def company_invite_art_attachment() -> dict[str, str]:
+    """Return the company-invite hero as an inline CID attachment."""
+    content = base64.b64encode(COMPANY_INVITE_ART_PATH.read_bytes()).decode("ascii")
+    return {
+        "filename": "coditent-company-invitation.jpg",
+        "content": content,
+        "content_type": "image/jpeg",
+        "content_id": COMPANY_INVITE_ART_CONTENT_ID,
+    }
 
 
 def _company_invite_email(company_name: str, token: str, expires_at: datetime) -> tuple[str, str]:
     """Return (subject, html) for company invite — CODITENT branded."""
     frontend = settings.frontend_url.rstrip("/")
     invite_url = f"{frontend}/company/invite/accept?token={token}"
-    subject = "You're invited to join CODITENT"
+    invite_url_safe = html_module.escape(invite_url, quote=True)
+    company_safe = html_module.escape(company_name)
+    subject = "Create your company workspace on CODITENT"
     exp = expires_at.strftime('%b %d, %Y')
-    html = f"""
-    <div style="font-family:Inter,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181B;">
-      <div style="border:1px solid #E4E4E7;border-radius:16px;overflow:hidden;">
-        <div style="background:#18181B;color:#fff;padding:20px 24px;">
-          <div style="font-weight:800;letter-spacing:-0.02em;font-size:18px;">CODITENT</div>
-          <div style="font-size:12px;opacity:0.7;letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;">Talent Workflow Platform</div>
-        </div>
-        <div style="padding:24px;">
-          <h2 style="margin:0 0 8px;font-size:18px;">You&apos;ve been invited to join CODITENT</h2>
-          <p style="margin:0 0 12px;color:#52525B;font-size:14px;line-height:1.6;">
-            A CODITENT administrator invited <strong>{company_name}</strong> to create a company workspace.
-            Create the first company account — you will become the company OWNER.
-          </p>
-          <a href="{invite_url}" style="display:inline-block;background:#18181B;color:#fff;text-decoration:none;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;margin:8px 0;">Create company account</a>
-          <p style="font-size:12px;color:#71717A;margin:8px 0 0;">Or paste this link: <a href="{invite_url}" style="color:#18181B;word-break:break-all;">{invite_url}</a></p>
-          <p style="font-size:12px;color:#71717A;margin:16px 0 0;">This invitation expires on {exp} and is single-use. If you were not expecting this, you can safely ignore this email.</p>
-        </div>
-      </div>
-      <p style="font-size:11px;color:#A1A1AA;text-align:center;margin-top:12px;">CODITENT · Talent Workflow Platform</p>
-    </div>
-    """
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>{subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f8f8f3;color:#192b23;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+    {company_safe}, your CODITENT company workspace invitation is ready.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#f8f8f3;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background-color:#fffefa;border:1px solid #cfdbcf;border-radius:18px;overflow:hidden;">
+          <tr>
+            <td style="padding:22px 28px 18px;border-bottom:1px solid #e3e9df;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:20px;font-weight:800;line-height:1;color:#192b23;letter-spacing:-0.4px;">Coditent</td>
+                  <td align="right" style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;line-height:1.4;color:#617369;letter-spacing:1.4px;text-transform:uppercase;">Company invitation</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0;background-color:#edf1e9;line-height:0;">
+              <img src="cid:{COMPANY_INVITE_ART_CONTENT_ID}" width="600" alt="A welcoming arch opening into a collaborative company workspace" style="display:block;width:100%;max-width:600px;height:auto;border:0;line-height:100%;outline:none;text-decoration:none;">
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 28px 30px;">
+              <p style="margin:0 0 9px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;font-weight:700;line-height:1.4;color:#5b765e;letter-spacing:1.8px;text-transform:uppercase;">Your workspace is ready</p>
+              <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:32px;font-weight:400;line-height:1.12;color:#192b23;letter-spacing:-1px;">Build your hiring workspace with CODITENT.</h1>
+              <p style="margin:14px 0 22px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.65;color:#53665a;">A CODITENT administrator invited <strong style="color:#192b23;">{company_safe}</strong> to create a company workspace. The first account created through this invitation becomes the company owner.</p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#edf1e9;border:1px solid #cfdbcf;border-radius:12px;">
+                <tr>
+                  <td style="padding:17px 18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+                    <p style="margin:0 0 9px;font-size:10px;font-weight:700;line-height:1.4;color:#617369;letter-spacing:1.5px;text-transform:uppercase;">Invitation details</p>
+                    <p style="margin:0;font-size:14px;line-height:1.65;color:#192b23;"><strong>Workspace:</strong> {company_safe}</p>
+                    <p style="margin:0;font-size:14px;line-height:1.65;color:#192b23;"><strong>Access:</strong> Company owner</p>
+                    <p style="margin:0;font-size:14px;line-height:1.65;color:#192b23;"><strong>Expires:</strong> {exp}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:22px;">
+                <tr>
+                  <td bgcolor="#194d38" style="border-radius:999px;">
+                    <a href="{invite_url_safe}" style="display:inline-block;padding:13px 21px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:700;line-height:1;color:#ffffff;text-decoration:none;border-radius:999px;">Create company workspace →</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:18px 0 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.6;color:#617369;">If the button does not work, copy and paste this link into your browser:<br><a href="{invite_url_safe}" style="color:#194d38;text-decoration:underline;word-break:break-all;">{invite_url_safe}</a></p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:22px;border-top:1px solid #e3e9df;">
+                <tr>
+                  <td style="padding-top:18px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.6;color:#617369;">This invitation is single-use and expires on {exp}. If you were not expecting it, you can safely ignore this email.</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:14px 0 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;line-height:1.5;color:#617369;text-align:center;">CODITENT · Talent Workflow Platform for Morocco</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
     return subject, html
 
 
 def _send_company_invite_email(email: str, company_name: str, token: str, expires_at: datetime) -> None:
     from app.services.email import send_email
     subject, html = _company_invite_email(company_name, token, expires_at)
-    send_email(email, subject, html)
+    send_email(email, subject, html, attachments=[company_invite_art_attachment()])
 
 
 @router.post("/company/invite", response_model=dict)
