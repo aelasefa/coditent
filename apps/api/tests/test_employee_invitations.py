@@ -1,6 +1,7 @@
 """Comprehensive invitation flow tests — production-ready
 Run: DATABASE_URL=... JWT_SECRET=... GEMINI_API_KEY=... python -m pytest apps/api/tests/test_employee_invitations.py -v
 """
+import base64
 import hashlib
 import secrets
 import uuid
@@ -13,8 +14,57 @@ from sqlalchemy import select, text
 
 from app.database import AsyncSessionLocal, engine
 from app.models import User
+from app.routers import invitations
 
 BASE = "http://localhost:8001"
+
+
+def test_employee_invite_email_uses_new_theme_and_escapes_dynamic_values():
+    subject, html = invitations._build_employee_invite_email(
+        "Atlas <script>alert(1)</script>",
+        "HIRING_MANAGER",
+        "safe-token",
+        datetime(2026, 10, 3, 14, 30),
+    )
+
+    assert "You're invited to join Atlas" in subject
+    assert 'src="cid:coditent-employee-invite-art"' in html
+    assert "#194d38" in html
+    assert "Your next chapter starts with the team." in html
+    assert "Your invited role is assigned automatically" in html
+    assert "HIRING_MANAGER" in html
+    assert "Oct 03, 2026 14:30 UTC" in html
+    assert "Atlas &lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "Atlas <script>" not in html
+    assert "/invite/employee?token=safe-token" in html
+
+
+def test_employee_invite_art_is_embedded_as_cid_attachment():
+    attachment = invitations.employee_invite_art_attachment()
+
+    assert attachment["content_id"] == "coditent-employee-invite-art"
+    assert attachment["content_type"] == "image/jpeg"
+    assert attachment["filename"] == "coditent-team-invitation.jpg"
+    decoded = base64.b64decode(attachment["content"])
+    assert decoded.startswith(b"\xff\xd8\xff")
+    assert len(decoded) < 150_000
+
+
+def test_employee_invite_sender_includes_inline_art():
+    with patch("app.services.email.send_email") as send_email:
+        invitations._send_employee_invite_email_safe(
+            "new.hr@example.com",
+            "Atlas Labs",
+            "HR",
+            "safe-token",
+            datetime(2026, 10, 3, 14, 30),
+        )
+
+    send_email.assert_called_once()
+    args, kwargs = send_email.call_args
+    assert args[0] == "new.hr@example.com"
+    assert kwargs["attachments"][0]["content_id"] == "coditent-employee-invite-art"
+
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
