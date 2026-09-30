@@ -31,7 +31,7 @@ def _is_valid_email(email: str) -> bool:
 # Keep role set consistent with frontend + permissions (OWNER not assignable via invite)
 EMPLOYEE_INVITE_ROLES = {"ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"}
 EMPLOYEE_INVITE_ART_CONTENT_ID = "coditent-employee-invite-art"
-EMPLOYEE_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "employee-invite-email-art.jpg"
+EMPLOYEE_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "employee-invite-email-art.png"
 
 
 @lru_cache(maxsize=1)
@@ -152,7 +152,7 @@ def _send_employee_invite_email_safe(email: str, company_name: str, role: str, t
 # ---------- Platform Admin -> Company ----------
 COMPANY_INVITE_EXPIRY_DAYS = 7
 COMPANY_INVITE_ART_CONTENT_ID = "coditent-company-invite-art"
-COMPANY_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "company-invite-email-art.jpg"
+COMPANY_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "company-invite-email-art.png"
 
 
 @lru_cache(maxsize=1)
