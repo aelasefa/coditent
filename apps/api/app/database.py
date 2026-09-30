@@ -1,5 +1,4 @@
 from collections.abc import AsyncGenerator
-import re
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -11,8 +10,8 @@ def _normalize_database_url(url: str) -> str:
     """Normalize DATABASE_URL for Supabase.
 
     - Ensures asyncpg driver prefix (postgresql+asyncpg://)
-    - Uses Supavisor transaction mode for shared pooler URLs so persistent API
-      and worker processes do not reserve one backend connection per client.
+    - Preserves the explicitly configured Supavisor port. Port 5432 is session
+      mode and 6543 is transaction mode; deployments must be able to choose.
     - Rejects local DB fallback to enforce Supabase-only architecture.
     """
     if not url:
@@ -32,12 +31,6 @@ def _normalize_database_url(url: str) -> str:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-    url = re.sub(
-        r"(@[^/:]+\.pooler\.supabase\.com):5432(/)",
-        r"\1:6543\2",
-        url,
-        count=1,
-    )
     return url
 
 

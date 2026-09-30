@@ -1,6 +1,9 @@
 """Company invitation flow — platform invites company, owner accepts. Run: pytest tests/test_company_invitations.py -v"""
+import base64
 import hashlib
 import uuid
+from datetime import datetime
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -8,6 +11,7 @@ from sqlalchemy import select, text
 
 from app.database import AsyncSessionLocal, engine
 from app.models import User
+from app.routers import invitations
 from app.utils.jwt import create_access_token
 
 BASE = "http://localhost:8001"
@@ -19,6 +23,50 @@ def _hash(token: str) -> str:
 
 def tok_for(user) -> str:
     return create_access_token({"sub": str(user.id)})
+
+
+def test_company_invite_email_uses_new_theme_and_escapes_company_name():
+    subject, html = invitations._company_invite_email(
+        "Atlas <script>alert(1)</script>",
+        "safe-token",
+        datetime(2026, 10, 7),
+    )
+
+    assert subject == "Create your company workspace on CODITENT"
+    assert 'src="cid:coditent-company-invite-art"' in html
+    assert "#194d38" in html
+    assert "Build your hiring workspace with CODITENT." in html
+    assert "Company owner" in html
+    assert "Oct 07, 2026" in html
+    assert "Atlas &lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "Atlas <script>" not in html
+    assert "/company/invite/accept?token=safe-token" in html
+
+
+def test_company_invite_art_is_embedded_as_cid_attachment():
+    attachment = invitations.company_invite_art_attachment()
+
+    assert attachment["content_id"] == "coditent-company-invite-art"
+    assert attachment["content_type"] == "image/jpeg"
+    assert attachment["filename"] == "coditent-company-invitation.jpg"
+    decoded = base64.b64decode(attachment["content"])
+    assert decoded.startswith(b"\xff\xd8\xff")
+    assert len(decoded) < 150_000
+
+
+def test_company_invite_sender_includes_inline_art():
+    with patch("app.services.email.send_email") as send_email:
+        invitations._send_company_invite_email(
+            "owner@example.com",
+            "Atlas Labs",
+            "safe-token",
+            datetime(2026, 10, 7),
+        )
+
+    send_email.assert_called_once()
+    args, kwargs = send_email.call_args
+    assert args[0] == "owner@example.com"
+    assert kwargs["attachments"][0]["content_id"] == "coditent-company-invite-art"
 
 
 async def _admin():
