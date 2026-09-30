@@ -107,6 +107,7 @@ function PipelineContent() {
     return list;
   }, [apps, statusFilter, jobFilter, search, offersById]);
 
+  const activeJob = jobFilter === "all" ? null : (offersQ.data ?? []).find((offer) => offer.id === jobFilter) ?? null;
   const selected = apps.find((a) => a.id === selectedId) ?? null;
   const selectedAssessment = selected
     ? assessments.find((x) => x.candidate_id === selected.candidate_id || x.application_id === selected.id) ?? null
@@ -131,18 +132,22 @@ function PipelineContent() {
         <PageHeader
           tone="dark"
           center
-          title="Every candidate, in clear view."
-          subtitle={`${apps.length} applicants in one workspace · review each profile and move the process forward.`}
+          eyebrow={activeJob ? "Job pipeline" : "Hiring pipeline"}
+          title={activeJob ? `Candidates for ${activeJob.title}.` : "Every candidate, in clear view."}
+          subtitle={activeJob ? `${filtered.length} applicants for this role · review each profile and move the process forward.` : `${apps.length} applicants in one workspace · review each profile and move the process forward.`}
         />
 
-        <div className="company-results-toolbar">
-          <span className="text-xs font-medium text-muted-foreground">{filtered.length} shown</span>
+        <div className="company-results-toolbar company-candidate-results-toolbar">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex shrink-0 items-center rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-primary">{filtered.length} shown</span>
+            {activeJob ? <span className="truncate text-xs font-medium text-muted-foreground">{activeJob.title}</span> : null}
+          </div>
           <div role="group" aria-label="View mode" className="company-view-toggle">
             {(["list", "board"] as View[]).map((v) => <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v} className={view === v ? "company-view-toggle-active" : "company-view-toggle-button"}>{v === "list" ? "List" : "Board"}</button>)}
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 lg:flex-row lg:items-center">
+        <div className="company-candidate-filterbar flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <label htmlFor="pipeline-search" className="sr-only">Search candidates</label>
             <FiSearch aria-hidden className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -202,9 +207,9 @@ function PipelineContent() {
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="Pipeline board, read-only">
             {boardGroups.map((g) => (
               <section key={g.stage} aria-label={`${g.stage} column`} className="rounded-xl border border-border-subtle bg-surface-secondary/40 p-2.5">
-                <h3 className="flex items-center justify-between px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                <h3 className={`flex items-center justify-between px-1 text-xs font-bold uppercase tracking-wide ${g.stage === "Rejected" ? "text-danger" : "text-muted-foreground"}`}>
                   {g.stage}
-                  <span className="rounded-full bg-surface px-1.5 text-[11px]">{g.items.length}</span>
+                  <span className={g.stage === "Rejected" ? "rounded-full bg-danger-background px-1.5 text-[11px] text-danger" : "rounded-full bg-surface px-1.5 text-[11px]"}>{g.items.length}</span>
                 </h3>
                 <div className="mt-2 space-y-2">
                   {g.items.map((app) => (
@@ -228,6 +233,7 @@ function PipelineContent() {
         )}
 
         <Drawer
+          panelClassName="company-candidate-panel"
           isOpen={!!selected}
           onClose={() => setSelectedId(null)}
           title={selected ? candidateName(selected) : "Candidate"}

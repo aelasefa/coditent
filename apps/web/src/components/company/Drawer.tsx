@@ -11,6 +11,7 @@ interface DrawerProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: "sm" | "md" | "lg" | "xl";
+  panelClassName?: string;
 }
 
 const sizeMap = {
@@ -28,6 +29,7 @@ export function Drawer({
   children,
   footer,
   width = "md",
+  panelClassName,
 }: DrawerProps) {
   // Compat wrapper around canonical Sheet. Preserves API.
   return (
@@ -39,6 +41,7 @@ export function Drawer({
       footer={footer}
       side="right"
       size={sizeMap[width]}
+      panelClassName={panelClassName}
     >
       {children}
     </Sheet>

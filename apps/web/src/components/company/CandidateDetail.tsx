@@ -86,12 +86,13 @@ export function CandidateDetail({
   const cvFilename = app.cv?.filename ?? null;
 
   return (
-    <div>
-      <div className="flex items-start gap-3">
+    <div className="company-candidate-detail">
+      <section className="company-candidate-profile-header">
+        <div className="flex items-start gap-3">
         <Avatar name={candidateName(app)} size="lg" src={c?.avatar_url} />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-lg font-bold text-foreground">{candidateName(app)}</h3>
-          <p className="truncate text-[13px] text-muted-foreground">
+          <h3 className="break-words text-lg font-bold text-foreground">{candidateName(app)}</h3>
+          <p className="break-words text-[13px] text-muted-foreground">
             {jobTitle}
             {c?.email ? ` · ${c.email}` : ""}
           </p>
@@ -100,10 +101,11 @@ export function CandidateDetail({
             <AiScore app={app} />
           </div>
         </div>
-      </div>
+        </div>
+      </section>
 
       {canMoveStage && (
-        <div className="mt-4 flex flex-wrap gap-2" aria-label="Stage actions">
+        <section className="company-candidate-stage-actions" aria-label="Stage actions">
           {["under_review", "shortlisted", "interview", "accepted"].map((st) => (
             <Button
               key={st}
@@ -113,7 +115,7 @@ export function CandidateDetail({
               loading={stagePending}
               onClick={() => onStage(st)}
             >
-              {st.replace(/_/g, " ")}
+              {({ under_review: "Under review", shortlisted: "Shortlisted", interview: "Interview", accepted: "Hired" } as Record<string, string>)[st]}
             </Button>
           ))}
           {rejectConfirm ? (
@@ -128,36 +130,57 @@ export function CandidateDetail({
             </span>
           ) : (
             app.status !== "rejected" && (
-              <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(true)}>
+              <Button size="sm" variant="danger" onClick={() => setRejectConfirm(true)}>
                 Reject
               </Button>
             )
           )}
-        </div>
+        </section>
       )}
 
-      <div className="mt-4">
+      <div className="company-candidate-tabs">
         <Tabs
           items={[
             {
               id: "overview",
               label: "Overview",
               content: (
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                  {[
-                    ["Stage", app.status.replace(/_/g, " ")],
-                    ["Applied", dateTime(app.created_at)],
-                    ["Last update", dateTime(app.updated_at)],
-                    ["Email", c?.email ?? "Not shared"],
-                    ["Job", jobTitle],
-                    ["Chat", chatUnlocked ? "Available" : "Locked until next stage"],
-                  ].map(([k, v]) => (
-                    <div key={k} className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                      <dt className="text-xs text-muted-foreground">{k}</dt>
-                      <dd className="mt-0.5 font-medium text-foreground">{v}</dd>
+                <div className="company-candidate-overview company-candidate-overview-panel">
+                  <section className="company-candidate-stage-card" aria-label="Hiring stage">
+                    <div>
+                      <p className="company-detail-label">Hiring stage</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">Current application status</p>
                     </div>
-                  ))}
-                </dl>
+                    <StatusBadge status={app.status} size="md" />
+                  </section>
+
+                  <dl className="company-candidate-detail-grid">
+                    <div>
+                      <dt className="company-detail-label">Applied</dt>
+                      <dd>{dateTime(app.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt className="company-detail-label">Last update</dt>
+                      <dd>{dateTime(app.updated_at)}</dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="company-detail-label">Email</dt>
+                      <dd>{c?.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : "Not shared"}</dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="company-detail-label">Job</dt>
+                      <dd>{jobTitle}</dd>
+                    </div>
+                  </dl>
+
+                  <section className={chatUnlocked ? "company-candidate-chat-status company-candidate-chat-status-open" : "company-candidate-chat-status"} aria-label="Recruitment chat">
+                    <div>
+                      <p className="company-detail-label">Recruitment chat</p>
+                      <p>{chatUnlocked ? "Chat is available for this candidate." : "Chat unlocks when the candidate reaches the next stage."}</p>
+                    </div>
+                    <span>{chatUnlocked ? "Available" : "Locked"}</span>
+                  </section>
+                </div>
               ),
             },
             {
