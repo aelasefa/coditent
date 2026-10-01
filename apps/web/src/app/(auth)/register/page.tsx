@@ -13,28 +13,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
 import { register } from "@/lib/api";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRequirements } from "@/lib/password-policy";
 import authStyles from "../login/login-page.module.css";
 import styles from "./register-page.module.css";
 
 const registerSchema = z.object({
   email: z.string().email("Enter a valid email"),
   password: z.string()
-    .min(12, "Password must be at least 12 characters")
-    .max(128, "Password must not exceed 128 characters")
+    .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+    .max(PASSWORD_MAX_LENGTH, `Password must not exceed ${PASSWORD_MAX_LENGTH} characters`)
     .regex(/[a-z]/, "Password must include a lowercase letter")
     .regex(/[A-Z]/, "Password must include an uppercase letter")
     .regex(/[0-9]/, "Password must include a number")
     .regex(/[^A-Za-z0-9\s]/, "Password must include a symbol"),
   full_name: z.string().min(2, "Name is required").max(100, "Name must not exceed 100 characters"),
 });
-
-const passwordRequirements = [
-  { label: "At least 12 characters", test: (value: string) => value.length >= 12 },
-  { label: "One lowercase letter", test: (value: string) => /[a-z]/.test(value) },
-  { label: "One uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
-  { label: "One number", test: (value: string) => /[0-9]/.test(value) },
-  { label: "One symbol", test: (value: string) => /[^A-Za-z0-9\s]/.test(value) },
-] as const;
 
 type RegisterValues = z.infer<typeof registerSchema>;
 

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import html as html_module
@@ -19,6 +20,8 @@ from app.core.permissions import VALID_COMPANY_ROLES, can
 from app.database import get_db
 from app.dependencies import get_current_user, require_company_admin, require_platform_admin
 from app.models import Company, User, UserRole
+from app.schemas import CompanyInviteAcceptRequest, EmployeeInviteAcceptRequest
+from app.services.passwords import hash_password
 
 router = APIRouter()
 
@@ -297,7 +300,7 @@ async def invite_company(
     email_sent = True
     email_error: str | None = None
     try:
-        _send_company_invite_email(email, company_name, token, expires_at)
+        await asyncio.to_thread(_send_company_invite_email, email, company_name, token, expires_at)
     except Exception as exc:
         email_sent = False
         email_error = "The email provider could not deliver this invitation. Copy the invitation link and share it securely."
@@ -378,7 +381,13 @@ async def resend_company_invitation(
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
     email_sent = True
     try:
-        _send_company_invite_email(row["email"], row["company_name"], token, expires_at)
+        await asyncio.to_thread(
+            _send_company_invite_email,
+            row["email"],
+            row["company_name"],
+            token,
+            expires_at,
+        )
     except Exception as exc:
         email_sent = False
         try:
@@ -417,16 +426,10 @@ async def validate_company_invitation(
 
 @router.post("/company/accept", response_model=dict)
 async def accept_company_invite(
-    data: dict,
+    data: CompanyInviteAcceptRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    token = data.get("token", "")
-    password = data.get("password", "")
-    full_name = data.get("full_name", "")
-    if not token or not password or not full_name:
-        raise HTTPException(status_code=400, detail="token, password, full_name required")
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    token = data.token
     token_hash = _hash(token)
     # Atomic: lock row for update to prevent concurrent accept
     res = await db.execute(text("SELECT * FROM company_invitations WHERE token_hash=:h FOR UPDATE"), {"h": token_hash})
@@ -440,12 +443,10 @@ async def accept_company_invite(
     existing = await db.execute(select(User).where(User.email == row["email"]))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already in use")
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     company = Company(name=row["company_name"], description="Invited company", status="active")
     db.add(company)
     await db.flush()
-    user = User(email=row["email"], password_hash=pwd_context.hash(password), role=UserRole.COMPANY_USER, is_approved=True, full_name=full_name, company_id=company.id, company_role="OWNER")
+    user = User(email=row["email"], password_hash=hash_password(data.password), role=UserRole.COMPANY_USER, is_approved=True, full_name=data.full_name, company_id=company.id, company_role="OWNER")
     company.owner_id = user.id
     db.add(user)
     await db.execute(text("UPDATE company_invitations SET status='accepted', accepted_at=:now, company_id=:cid WHERE id=:id"), {"now": datetime.utcnow(), "cid": str(company.id), "id": row["id"]})
@@ -502,7 +503,14 @@ async def invite_employee(
     )
     await db.commit()
     await log_audit(db, action="EMPLOYEE_INVITED", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", details=f"{email}:{role}")
-    _send_employee_invite_email_safe(email, company_name, role, token, expires_at)
+    await asyncio.to_thread(
+        _send_employee_invite_email_safe,
+        email,
+        company_name,
+        role,
+        token,
+        expires_at,
+    )
     return {"detail": "invited"}
 
 @router.get("/employee/invitations", response_model=dict)
@@ -595,25 +603,24 @@ async def resend_employee_invitation(
     comp = await db.execute(select(Company).where(Company.id == row["company_id"]))
     company = comp.scalar_one_or_none()
     company_name = company.name if company else "Your company"
-    _send_employee_invite_email_safe(row["email"], company_name, row["role"], new_token, expires_at)
+    await asyncio.to_thread(
+        _send_employee_invite_email_safe,
+        row["email"],
+        company_name,
+        row["role"],
+        new_token,
+        expires_at,
+    )
     await log_audit(db, action="EMPLOYEE_INVITATION_RESENT", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", resource_id=UUID(new_id), details=f"{row['email']}:{row['role']}")
     return {"detail": "resent", "invitation_id": new_id}
 
 @router.post("/employee/accept", response_model=dict)
 async def accept_employee_invite(
-    data: dict,
+    data: EmployeeInviteAcceptRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """New-user flow: creates account. For existing users, use /employee/accept-existing."""
-    token = data.get("token", "")
-    password = data.get("password", "")
-    full_name = data.get("full_name", "")
-    if not token or not password or not full_name:
-        raise HTTPException(status_code=400, detail="token, password, full_name required")
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    if len(full_name.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Full name required")
+    token = data.token
     token_hash = _hash(token)
     # Lock invitation row to prevent concurrent accept
     res = await db.execute(text("SELECT * FROM employee_invitations WHERE token_hash=:h FOR UPDATE"), {"h": token_hash})
@@ -627,9 +634,7 @@ async def accept_employee_invite(
     existing = await db.execute(select(User).where(User.email == row["email"]))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already in use — use existing account flow")
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    user = User(email=row["email"], password_hash=pwd_context.hash(password), role=UserRole.COMPANY_USER, is_approved=True, full_name=full_name.strip(), company_id=UUID(str(row["company_id"])), company_role=row["role"])
+    user = User(email=row["email"], password_hash=hash_password(data.password), role=UserRole.COMPANY_USER, is_approved=True, full_name=data.full_name, company_id=UUID(str(row["company_id"])), company_role=row["role"])
     db.add(user)
     await db.execute(text("UPDATE employee_invitations SET status='accepted', accepted_at=:now WHERE id=:id"), {"now": datetime.utcnow(), "id": row["id"]})
     await db.commit()

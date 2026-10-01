@@ -13,15 +13,14 @@ import uuid
 
 import httpx
 import pytest
-from passlib.context import CryptContext
 from sqlalchemy import text
 
 from app.database import AsyncSessionLocal, engine
 from app.services import email_verification as ev
+from app.services.passwords import hash_password, verify_password
 
 BASE = "http://localhost:8001"
 KNOWN_OTP = "123456"
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _known_hash() -> str:
@@ -45,7 +44,7 @@ async def _insert_pending(email: str, expired: bool = False, attempts: int = 0) 
             {
                 "id": registration_id,
                 "email": email,
-                "pw": pwd_context.hash("LiveTest123!"),
+                "pw": hash_password("LiveTest123!"),
                 "otp": _known_hash(),
                 "att": attempts,
                 "exp": exp,
@@ -223,8 +222,9 @@ async def test_reregister_rotates_the_complete_attempt_bundle():
         assert row is not None
         assert str(row["id"]) == second_id
         assert row["full_name"] == "Second Attempt"
-        assert pwd_context.verify(second_password, row["password_hash"])
-        assert not pwd_context.verify(first_password, row["password_hash"])
+        assert row["password_hash"].startswith("$argon2id$")
+        assert verify_password(second_password, row["password_hash"])
+        assert not verify_password(first_password, row["password_hash"])
         assert ev.verify_otp("222222", row["otp_hash"])
         assert not ev.verify_otp("111111", row["otp_hash"])
     finally:
@@ -272,8 +272,8 @@ async def test_concurrent_registration_attempts_never_mix_identity_bundle():
         assert row is not None
         assert str(row["id"]) == registration_id
         assert row["full_name"] == winner["full_name"]
-        assert pwd_context.verify(winner["password"], row["password_hash"])
-        assert not pwd_context.verify(loser["password"], row["password_hash"])
+        assert verify_password(winner["password"], row["password_hash"])
+        assert not verify_password(loser["password"], row["password_hash"])
     finally:
         await engine.dispose()
         async with AsyncSessionLocal() as db:

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import secrets
 from datetime import datetime, timezone
@@ -7,7 +8,6 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
-from passlib.context import CryptContext
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,17 +60,17 @@ from app.services.oauth_service import (
     resolve_redirect_uri,
     verify_oauth_state,
 )
+from app.services.passwords import hash_password, verify_password, verify_password_and_rehash
 from app.utils.jwt import create_access_token, verify_token
 from app.services.two_factor import verify_and_consume_backup_code, verify_totp_code
 
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = get_logger("auth")
 
 
 def _verify_sensitive_action(user: User, password: str, two_factor_code: str | None) -> None:
-    if not pwd_context.verify(password, user.password_hash):
+    if not verify_password(password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid account password.")
     if not user.is_2fa_enabled:
         return
@@ -146,7 +146,7 @@ async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthI
 async def _create_sso_candidate(db: AsyncSession, identity: OAuthIdentity) -> User:
     user = User(
         email=identity.email,
-        password_hash=pwd_context.hash(secrets.token_urlsafe(32)),
+        password_hash=hash_password(secrets.token_urlsafe(32)),
         role=UserRole.CANDIDATE,
         is_approved=True,
         full_name=identity.full_name,
@@ -412,7 +412,7 @@ async def register(
     otp = generate_otp()
     expires_at = otp_expiry()
     registration_id = uuid4()
-    password_hash = pwd_context.hash(data.password)
+    password_hash = hash_password(data.password)
     full_name = data.full_name.strip()
     if pending is None:
         try:
@@ -464,7 +464,7 @@ async def register(
         await db.flush()
 
     try:
-        send_otp_email(email, full_name, otp, expires_at)
+        await asyncio.to_thread(send_otp_email, email, full_name, otp, expires_at)
     except RuntimeError:
         # Roll back the challenge rotation. A previously delivered code stays
         # usable; a brand-new undelivered challenge is never persisted.
@@ -652,7 +652,7 @@ async def resend_verification(
     await db.flush()
 
     try:
-        send_otp_email(email, pending["full_name"], otp, expires_at)
+        await asyncio.to_thread(send_otp_email, email, pending["full_name"], otp, expires_at)
     except RuntimeError:
         # Roll back to the previous code so the user is not locked out.
         await db.rollback()
@@ -682,7 +682,14 @@ async def login(
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if user is None or not pwd_context.verify(data.password, user.password_hash):
+    password_verified = False
+    replacement_hash: str | None = None
+    if user is not None:
+        password_verified, replacement_hash = verify_password_and_rehash(
+            data.password,
+            user.password_hash,
+        )
+    if user is None or not password_verified:
         logger.warning("login_failed", email=email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
@@ -692,6 +699,11 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recruiter account is pending admin approval",
         )
+
+    if replacement_hash is not None:
+        user.password_hash = replacement_hash
+        await db.commit()
+        logger.info("password_hash_upgraded", user_id=str(user.id), algorithm="argon2id")
 
     trusted_device = data.trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
     trusted_device_valid = False
@@ -772,7 +784,7 @@ async def request_email_change(
     current_user.pending_email_expires_at = otp_expiry()
     current_user.pending_email_attempts = 0
     try:
-        send_email_change_code(new_email, current_user.full_name, otp)
+        await asyncio.to_thread(send_email_change_code, new_email, current_user.full_name, otp)
     except Exception:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not send the verification code.")
@@ -829,9 +841,9 @@ async def change_account_password(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     _verify_sensitive_action(current_user, data.current_password, data.two_factor_code)
-    if pwd_context.verify(data.new_password, current_user.password_hash):
+    if verify_password(data.new_password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different from the current password.")
-    current_user.password_hash = pwd_context.hash(data.new_password)
+    current_user.password_hash = hash_password(data.new_password)
     await db.commit()
     return {"detail": "Password changed successfully."}
 

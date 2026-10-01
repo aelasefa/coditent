@@ -135,7 +135,7 @@ async def test_invite_validate_accept_owner_flow():
         assert r.status_code == 200
         r = await c.post(
             "/invites/company/accept",
-            json={"token": "invalid-token-xyz", "password": "Pass12345!", "full_name": "No One"},
+            json={"token": "invalid-token-xyz", "password": "StrongPass123!", "full_name": "No One"},
         )
         assert r.status_code == 400
 

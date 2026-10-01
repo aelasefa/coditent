@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from passlib.context import CryptContext
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -27,11 +26,11 @@ from app.services.two_factor import (
     verify_and_consume_backup_code,
     verify_totp_code,
 )
+from app.services.passwords import verify_password
 from app.utils.jwt import create_access_token, verify_token
 
 router = APIRouter()
 logger = get_logger("two_factor")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 
@@ -142,7 +141,7 @@ async def two_factor_disable(
             detail="Two-factor authentication is not enabled.",
         )
 
-    if not pwd_context.verify(data.password, current_user.password_hash):
+    if not verify_password(data.password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid account password.",

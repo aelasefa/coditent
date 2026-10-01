@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from app.services.passwords import NewPassword
 from app.utils.sanitizer import sanitize_input_text
 
 
@@ -24,29 +25,11 @@ class UserOut(APIModel):
 
 class RegisterRequest(APIModel):
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: NewPassword
     full_name: str = Field(min_length=2, max_length=100)
     # Compatibility-only: the server always assigns CANDIDATE. Company users
     # are created exclusively through company or employee invitations.
     role: Literal["CANDIDATE"] | None = None
-
-    @field_validator("password")
-    @classmethod
-    def validate_candidate_password(cls, password: str) -> str:
-        requirements = (
-            (any(char.islower() for char in password), "one lowercase letter"),
-            (any(char.isupper() for char in password), "one uppercase letter"),
-            (any(char.isdigit() for char in password), "one number"),
-            (
-                any(not char.isalnum() and not char.isspace() for char in password),
-                "one symbol",
-            ),
-        )
-        missing = [label for is_met, label in requirements if not is_met]
-        if missing:
-            raise ValueError(f"Password must include {', '.join(missing)}")
-        return password
-
 
 class RegistrationStarted(APIModel):
     detail: str
@@ -169,7 +152,26 @@ class EmailChangeConfirm(APIModel):
 
 
 class PasswordChangeRequest(SensitiveAccountRequest):
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: NewPassword
+
+
+class InvitationAccountAcceptRequest(APIModel):
+    token: str = Field(min_length=1, max_length=512)
+    password: NewPassword
+    full_name: str = Field(min_length=2, max_length=100)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def normalize_full_name(cls, full_name: str) -> str:
+        return full_name.strip() if isinstance(full_name, str) else full_name
+
+
+class CompanyInviteAcceptRequest(InvitationAccountAcceptRequest):
+    pass
+
+
+class EmployeeInviteAcceptRequest(InvitationAccountAcceptRequest):
+    pass
 
 
 class UserMeOut(APIModel):
