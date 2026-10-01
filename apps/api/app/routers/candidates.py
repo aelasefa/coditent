@@ -58,6 +58,30 @@ ONBOARDING_FIELD_BY_STEP = {
     6: "career_stage",
 }
 
+MATCH_PROFILE_FIELDS = {
+    "headline",
+    "bio",
+    "field_of_study",
+    "university",
+    "study_level",
+    "city",
+    "skills",
+    "years_of_experience",
+}
+
+
+async def _clear_recommendation_cache(user_id) -> None:
+    """Best-effort removal of legacy bulk results for this candidate only."""
+    try:
+        from app.cache import get_async_redis
+
+        client = get_async_redis()
+        keys = await client.keys(f"recommendations:{user_id}:*")
+        if keys:
+            await client.delete(*keys)
+    except Exception:
+        logger.warning("recommendation_cache_invalidation_failed", candidate_id=str(user_id))
+
 
 async def _get_profile(db: AsyncSession, user_id) -> CandidateProfile:
     result = await db.execute(
@@ -184,11 +208,21 @@ async def update_profile(
 ) -> ProfileOut:
     profile = await _get_profile(db, current_user.id)
     updates = data.model_dump(exclude_unset=True)
+    match_profile_changed = any(
+        key in MATCH_PROFILE_FIELDS and getattr(profile, key) != value
+        for key, value in updates.items()
+    )
     for key, value in updates.items():
         setattr(profile, key, value)
 
+    if match_profile_changed:
+        from app.services.match_scoring import invalidate_candidate_matches
+
+        await invalidate_candidate_matches(db, current_user.id)
     await db.commit()
     await db.refresh(profile)
+    if match_profile_changed:
+        await _clear_recommendation_cache(current_user.id)
     return ProfileOut.model_validate(profile)
 
 

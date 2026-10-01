@@ -246,10 +246,6 @@ async def get_recommendations(
             ]
         )
         await db.commit()
-        for offer in missing_offers:
-            logger.info(f"[MATCH] requested candidate={current_user.id} offer={offer.id}")
-            _queue_single_match(current_user.id, offer.id)
-
         result = await db.execute(
             select(SavedRecommendation)
             .options(joinedload(SavedRecommendation.offer))
@@ -259,15 +255,6 @@ async def get_recommendations(
             .offset(offset)
         )
         recommendations = result.scalars().all()
-    else:
-        # Recover rows stuck in processing/pending from an earlier crash:
-        # requeue a bounded batch so Discover self-heals without manual retry.
-        stale = [r for r in recommendations if getattr(r, "status", None) in ("pending", "failed")]
-        for row in stale[:10]:
-            if row.offer is not None:
-                logger.info(f"[MATCH] requested candidate={current_user.id} offer={row.offer_id}")
-                _queue_single_match(current_user.id, row.offer_id)
-
     await _attach_offer_logos(db, list(recommendations))
     recommendations_with_logos = recommendations
     return {

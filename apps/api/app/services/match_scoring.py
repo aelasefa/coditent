@@ -7,8 +7,9 @@ Lifecycle: pending -> processing -> completed | failed.
 - POST /recommendations/score/{offer_id} moves a pending/failed row to
   processing and queues this scorer (Celery when available, inline fallback).
 - score_single_match() runs Gemini for exactly one candidate/offer pair and
-  persists completed (score + reasoning) or failed (safe reason, no fake
-  score). Applying to a job never touches this table.
+  persists completed (score + reasoning). If the AI provider is unavailable,
+  a deterministic profile/offer comparison is persisted instead so temporary
+  provider quota failures do not make recommendations unusable.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CandidateProfile, Offer, SavedRecommendation
@@ -28,6 +29,24 @@ TERMINAL_OK = "completed"
 TERMINAL_FAIL = "failed"
 
 
+async def invalidate_candidate_matches(
+    db: AsyncSession,
+    candidate_id: uuid.UUID,
+) -> None:
+    """Make this candidate's stored scores eligible for recalculation."""
+    await db.execute(
+        update(SavedRecommendation)
+        .where(SavedRecommendation.candidate_id == candidate_id)
+        .values(
+            ai_score=0,
+            ai_reasoning="Match analysis pending after profile update.",
+            status="pending",
+            error=None,
+            updated_at=datetime.utcnow(),
+        )
+    )
+
+
 def _safe_reason(exc: Exception) -> str:
     name = type(exc).__name__
     msg = str(exc)[:200].strip()
@@ -36,6 +55,52 @@ def _safe_reason(exc: Exception) -> str:
         if secret_hint in msg.lower():
             return f"{name}: AI provider error"
     return f"{name}: {msg}" if msg else f"{name}: AI scoring failed"
+
+
+def _normalized_terms(value: object) -> set[str]:
+    """Return useful lowercase profile terms without external/API work."""
+    if not value:
+        return set()
+    text = str(value).lower().replace(";", ",")
+    return {part.strip() for part in text.split(",") if len(part.strip()) >= 2}
+
+
+def _local_fallback_score(profile: CandidateProfile, offer: Offer) -> dict[str, Any]:
+    """Produce a transparent, deterministic estimate when Gemini is unavailable."""
+    searchable = " ".join(
+        str(value or "").lower()
+        for value in (offer.title, offer.field, offer.description, offer.requirements)
+    )
+    score = 0
+    signals: list[str] = []
+
+    field = str(profile.field_of_study or "").strip().lower()
+    if field and (field in searchable or any(word in searchable for word in field.split())):
+        score += 35
+        signals.append("your study field")
+
+    location = str(profile.city or "").strip().lower()
+    offer_location = str(offer.region or "").strip().lower()
+    if location and offer_location and (location in offer_location or offer_location in location):
+        score += 20
+        signals.append("your location")
+
+    matched_skills = sorted(skill for skill in _normalized_terms(profile.skills) if skill in searchable)
+    if matched_skills:
+        score += min(45, len(matched_skills) * 15)
+        signals.append("matching skills: " + ", ".join(matched_skills[:3]))
+
+    score = min(100, score)
+    if signals:
+        detail = "Matches found for " + "; ".join(signals) + "."
+    else:
+        detail = "No clear profile-to-requirement matches were found."
+    return {
+        "score": score,
+        "reasoning": (
+            f"{detail} This is a local estimate because AI analysis is temporarily unavailable."
+        ),
+    }
 
 
 async def get_or_create_pending(
@@ -84,7 +149,7 @@ async def score_single_match(
     candidate_id: uuid.UUID,
     offer_id: uuid.UUID,
 ) -> dict[str, Any]:
-    """Run scoring for one pair through the full lifecycle. Never fakes a score."""
+    """Run scoring for one pair, with a deterministic provider-outage fallback."""
     logger.info(f"[MATCH] requested candidate={candidate_id} offer={offer_id}")
     row_result = await db.execute(
         select(SavedRecommendation).where(
@@ -138,31 +203,22 @@ async def score_single_match(
     await db.commit()
     logger.info(f"[MATCH] processing candidate={candidate_id} offer={offer_id}")
 
+    provider_error: Exception | None = None
     try:
         from app.services.ai import score_single_offer
 
         outcome = await score_single_offer(profile, offer)
-    except Exception as exc:  # never let AI exceptions bubble as pending
-        await db.refresh(row)
-        row.status = TERMINAL_FAIL
-        row.error = _safe_reason(exc)
-        row.updated_at = datetime.utcnow()
-        await db.commit()
-        logger.error(
-            f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason={row.error}"
-        )
-        raise ValueError(row.error) from exc
+    except Exception as exc:
+        provider_error = exc
+        outcome = None
 
     await db.refresh(row)
     if outcome is None:
-        row.status = TERMINAL_FAIL
-        row.error = "AI scoring failed"
-        row.updated_at = datetime.utcnow()
-        await db.commit()
-        logger.error(
-            f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=ai_scoring_failed"
+        outcome = _local_fallback_score(profile, offer)
+        safe_reason = _safe_reason(provider_error) if provider_error else "AI scoring unavailable"
+        logger.warning(
+            f"[MATCH] fallback candidate={candidate_id} offer={offer_id} reason={safe_reason}"
         )
-        raise ValueError("AI scoring failed")
 
     row.ai_score = int(outcome["score"])
     row.ai_reasoning = str(outcome["reasoning"])
