@@ -24,7 +24,7 @@ logger = get_logger("email_verification")
 OTP_LENGTH = 6
 OTP_MODULUS = 10**OTP_LENGTH
 VERIFICATION_ART_CONTENT_ID = "coditent-verification-art"
-VERIFICATION_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "verification-email-art.png"
+VERIFICATION_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "verification-email-art.jpg"
 
 
 def generate_otp() -> str:
