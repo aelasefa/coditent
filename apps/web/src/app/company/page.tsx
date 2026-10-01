@@ -93,8 +93,9 @@ export default function CompanyDashboard() {
     <AppShell>
       <div className="space-y-8">
         <div className="company-dashboard-welcome">
+          <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill className="company-dashboard-artwork" sizes="(max-width: 768px) 100vw, 1200px" />
           <PageHeader
-            title={`${greeting()}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
+            title={`${timeGreeting}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
             subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
             actions={
               <Link
