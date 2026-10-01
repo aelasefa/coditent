@@ -29,6 +29,7 @@ from app.schemas import (
     OAuthHandoffExchangeResponse,
     PasswordChangeRequest,
     RegisterRequest,
+    RegistrationStarted,
     ResendVerificationRequest,
     TokenResponse,
     TwoFactorChallengeResponse,
@@ -360,13 +361,17 @@ async def exchange_oauth_handoff(
     return response
 
 
-@router.post("/register", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/register",
+    response_model=RegistrationStarted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit("10/minute")
 async def register(
     data: RegisterRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> RegistrationStarted:
     """Start password registration: validate, create/refresh a pending OTP
     record, email the code. No user account and no token exist until
     POST /auth/verify-email succeeds."""
@@ -396,6 +401,9 @@ async def register(
 
     otp = generate_otp()
     expires_at = otp_expiry()
+    registration_id = uuid4()
+    password_hash = pwd_context.hash(data.password)
+    full_name = data.full_name.strip()
     if pending is None:
         try:
             await db.execute(
@@ -404,10 +412,10 @@ async def register(
                     " VALUES (:id, :email, :name, :pw, :otp, :exp, 0, :now, :now)"
                 ),
                 {
-                    "id": str(uuid4()),
+                    "id": str(registration_id),
                     "email": email,
-                    "name": data.full_name.strip(),
-                    "pw": pwd_context.hash(data.password),
+                    "name": full_name,
+                    "pw": password_hash,
                     "otp": hash_otp(otp),
                     "exp": expires_at,
                     "now": now,
@@ -422,17 +430,31 @@ async def register(
                 detail="A verification is already in progress for this email",
             )
     else:
+        # This is a complete attempt replacement, not an OTP-only rotation.
+        # The new public attempt id, password hash, name, and OTP move together
+        # under the email row lock. A code or id from the former attempt can no
+        # longer complete registration or inherit the other attempt's fields.
         await db.execute(
             text(
-                "UPDATE pending_registrations SET otp_hash=:otp, otp_expires_at=:exp,"
-                " otp_attempts=0, last_otp_sent_at=:now WHERE email=:email"
+                "UPDATE pending_registrations SET id=:id, full_name=:name,"
+                " password_hash=:pw, otp_hash=:otp, otp_expires_at=:exp,"
+                " otp_attempts=0, last_otp_sent_at=:now, created_at=:now"
+                " WHERE email=:email"
             ),
-            {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
+            {
+                "id": str(registration_id),
+                "name": full_name,
+                "pw": password_hash,
+                "otp": hash_otp(otp),
+                "exp": expires_at,
+                "now": now,
+                "email": email,
+            },
         )
         await db.flush()
 
     try:
-        send_otp_email(email, data.full_name.strip(), otp, expires_at)
+        send_otp_email(email, full_name, otp, expires_at)
     except RuntimeError:
         # Roll back the challenge rotation. A previously delivered code stays
         # usable; a brand-new undelivered challenge is never persisted.
@@ -446,7 +468,12 @@ async def register(
     await db.commit()
 
     logger.info("register_otp_sent", email=email)
-    return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
+    return RegistrationStarted(
+        detail="Verification code sent",
+        email=email,
+        registration_id=registration_id,
+        expires_in_seconds=settings.otp_expire_minutes * 60,
+    )
 
 
 @router.post("/verify-email", response_model=TokenResponse)
@@ -460,18 +487,26 @@ async def verify_email(
     from app.models import CandidateProfile
 
     email = data.email.strip().lower()
+    registration_id = data.registration_id
     code = data.otp.strip()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     res = await db.execute(
-        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+        text(
+            "SELECT * FROM pending_registrations"
+            " WHERE id=:id AND email=:email FOR UPDATE"
+        ),
+        {"id": str(registration_id), "email": email},
     )
     pending = res.mappings().first()
     if pending is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
 
     if is_expired(pending["otp_expires_at"], now):
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.execute(
+            text("DELETE FROM pending_registrations WHERE id=:id"),
+            {"id": str(registration_id)},
+        )
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -479,7 +514,10 @@ async def verify_email(
         )
 
     if attempts_exceeded(pending["otp_attempts"]):
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.execute(
+            text("DELETE FROM pending_registrations WHERE id=:id"),
+            {"id": str(registration_id)},
+        )
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -492,13 +530,16 @@ async def verify_email(
             # Destroy the challenge as soon as its final allowed attempt is
             # spent. A correct guess after this point can never revive it.
             await db.execute(
-                text("DELETE FROM pending_registrations WHERE email=:email"),
-                {"email": email},
+                text("DELETE FROM pending_registrations WHERE id=:id"),
+                {"id": str(registration_id)},
             )
         else:
             await db.execute(
-                text("UPDATE pending_registrations SET otp_attempts=:attempts WHERE email=:email"),
-                {"attempts": next_attempt, "email": email},
+                text(
+                    "UPDATE pending_registrations SET otp_attempts=:attempts"
+                    " WHERE id=:id"
+                ),
+                {"attempts": next_attempt, "id": str(registration_id)},
             )
         await db.commit()
         detail = "Too many attempts. Please register again." if attempts_exceeded(next_attempt) else "Invalid verification code"
@@ -539,26 +580,38 @@ async def verify_email(
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
-@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/resend-verification",
+    response_model=RegistrationStarted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit("5/minute")
 async def resend_verification(
     data: ResendVerificationRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> RegistrationStarted:
     """Issue a fresh OTP, invalidating the previous one. Cooldown enforced."""
     email = data.email.strip().lower()
+    registration_id = data.registration_id
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     res = await db.execute(
-        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+        text(
+            "SELECT * FROM pending_registrations"
+            " WHERE id=:id AND email=:email FOR UPDATE"
+        ),
+        {"id": str(registration_id), "email": email},
     )
     pending = res.mappings().first()
     if pending is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending verification for this email")
 
     if is_expired(pending["otp_expires_at"], now):
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.execute(
+            text("DELETE FROM pending_registrations WHERE id=:id"),
+            {"id": str(registration_id)},
+        )
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -577,9 +630,14 @@ async def resend_verification(
     await db.execute(
         text(
             "UPDATE pending_registrations SET otp_hash=:otp, otp_expires_at=:exp,"
-            " otp_attempts=0, last_otp_sent_at=:now WHERE email=:email"
+            " otp_attempts=0, last_otp_sent_at=:now WHERE id=:id"
         ),
-        {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
+        {
+            "otp": hash_otp(otp),
+            "exp": expires_at,
+            "now": now,
+            "id": str(registration_id),
+        },
     )
     await db.flush()
 
@@ -595,7 +653,12 @@ async def resend_verification(
     await db.commit()
 
     logger.info("register_otp_resent", email=email)
-    return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
+    return RegistrationStarted(
+        detail="Verification code sent",
+        email=email,
+        registration_id=registration_id,
+        expires_in_seconds=settings.otp_expire_minutes * 60,
+    )
 
 
 @router.post("/login", response_model=TokenResponse | TwoFactorChallengeResponse)

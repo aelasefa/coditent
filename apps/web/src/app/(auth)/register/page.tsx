@@ -53,7 +53,10 @@ function RegisterInner() {
     onSuccess: (data) => {
       // No account or token exists yet: verify the emailed code first.
       setErrorMessage(null);
-      router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+      router.push(
+        `/verify-email?email=${encodeURIComponent(data.email)}` +
+        `&registration_id=${encodeURIComponent(data.registration_id)}`
+      );
     },
     onError: (error) => {
       if (axios.isAxiosError(error)) {

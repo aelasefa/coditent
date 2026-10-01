@@ -100,6 +100,7 @@ api.interceptors.response.use(
 export interface RegistrationStarted {
   detail: string;
   email: string;
+  registration_id: string;
   expires_in_seconds: number;
 }
 
@@ -114,14 +115,21 @@ export async function register(payload: {
 
 export async function verifyEmail(payload: {
   email: string;
+  registration_id: string;
   otp: string;
 }): Promise<TokenResponse> {
   const { data } = await api.post<TokenResponse>("/auth/verify-email", payload);
   return data;
 }
 
-export async function resendVerification(email: string): Promise<RegistrationStarted & { retry_after_seconds?: number }> {
-  const { data } = await api.post("/auth/resend-verification", { email });
+export async function resendVerification(
+  email: string,
+  registrationId: string
+): Promise<RegistrationStarted & { retry_after_seconds?: number }> {
+  const { data } = await api.post("/auth/resend-verification", {
+    email,
+    registration_id: registrationId,
+  });
   return data;
 }
 

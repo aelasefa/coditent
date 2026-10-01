@@ -7,6 +7,7 @@ because real SMTP delivery is environment-dependent. Anything asserting on
 email delivery itself is covered by the rollback unit paths below.
 """
 import hashlib
+import asyncio
 import time
 import uuid
 
@@ -27,12 +28,13 @@ def _known_hash() -> str:
     return hashlib.sha256(KNOWN_OTP.encode()).hexdigest()
 
 
-async def _insert_pending(email: str, expired: bool = False, attempts: int = 0) -> None:
+async def _insert_pending(email: str, expired: bool = False, attempts: int = 0) -> str:
     from datetime import datetime, timedelta
 
     await engine.dispose()
     now = datetime.utcnow()
     exp = now - timedelta(hours=1) if expired else now + timedelta(minutes=5)
+    registration_id = str(uuid.uuid4())
     async with AsyncSessionLocal() as db:
         await db.execute(
             text(
@@ -41,7 +43,7 @@ async def _insert_pending(email: str, expired: bool = False, attempts: int = 0) 
                 " VALUES (:id, :email, 'Test User', :pw, :otp, :exp, :att, :now, :now)"
             ),
             {
-                "id": str(uuid.uuid4()),
+                "id": registration_id,
                 "email": email,
                 "pw": pwd_context.hash("LiveTest123!"),
                 "otp": _known_hash(),
@@ -51,6 +53,7 @@ async def _insert_pending(email: str, expired: bool = False, attempts: int = 0) 
             },
         )
         await db.commit()
+    return registration_id
 
 
 async def _pending_row(email: str):
@@ -144,6 +147,145 @@ def test_email_plain_text_alternative_removes_html():
 
 
 @pytest.mark.asyncio
+async def test_reregister_rotates_the_complete_attempt_bundle():
+    """A later attempt cannot combine its OTP with an earlier password/name."""
+    from datetime import datetime, timedelta
+    from unittest.mock import patch
+
+    from app.main import app
+    from app.routers import auth as auth_router
+
+    email = _email("bundle")
+    first_password = "FirstBundlePass123!"
+    second_password = "SecondBundlePass456!"
+    transport = httpx.ASGITransport(app=app, client=("s02-bundle", 41001))
+
+    try:
+        with (
+            patch.object(auth_router, "send_otp_email"),
+            patch.object(auth_router, "generate_otp", side_effect=["111111", "222222"]),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                first = await client.post(
+                    "/auth/register",
+                    json={
+                        "email": email,
+                        "password": first_password,
+                        "full_name": "First Attempt",
+                    },
+                )
+                assert first.status_code == 202, first.text
+                first_id = first.json()["registration_id"]
+
+                await engine.dispose()
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        text(
+                            "UPDATE pending_registrations SET last_otp_sent_at=:past"
+                            " WHERE id=:id"
+                        ),
+                        {
+                            "id": first_id,
+                            "past": datetime.utcnow() - timedelta(minutes=5),
+                        },
+                    )
+                    await db.commit()
+
+                second = await client.post(
+                    "/auth/register",
+                    json={
+                        "email": email,
+                        "password": second_password,
+                        "full_name": "Second Attempt",
+                    },
+                )
+                assert second.status_code == 202, second.text
+                second_id = second.json()["registration_id"]
+                assert second_id != first_id
+
+                stale = await client.post(
+                    "/auth/verify-email",
+                    json={
+                        "email": email,
+                        "registration_id": first_id,
+                        "otp": "111111",
+                    },
+                )
+                assert stale.status_code == 400
+
+                stale_resend = await client.post(
+                    "/auth/resend-verification",
+                    json={"email": email, "registration_id": first_id},
+                )
+                assert stale_resend.status_code == 400
+
+        row = await _pending_row(email)
+        assert row is not None
+        assert str(row["id"]) == second_id
+        assert row["full_name"] == "Second Attempt"
+        assert pwd_context.verify(second_password, row["password_hash"])
+        assert not pwd_context.verify(first_password, row["password_hash"])
+        assert ev.verify_otp("222222", row["otp_hash"])
+        assert not ev.verify_otp("111111", row["otp_hash"])
+    finally:
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("DELETE FROM pending_registrations WHERE email=:email"),
+                {"email": email},
+            )
+            await db.execute(text("DELETE FROM users WHERE email=:email"), {"email": email})
+            await db.commit()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_registration_attempts_never_mix_identity_bundle():
+    """Concurrent first attempts yield one intact winner, never mixed fields."""
+    from unittest.mock import patch
+
+    from app.main import app
+    from app.routers import auth as auth_router
+
+    email = _email("concurrent-bundle")
+    attempts = [
+        {"email": email, "password": "ConcurrentAlpha123!", "full_name": "Alpha Attempt"},
+        {"email": email, "password": "ConcurrentBeta456!", "full_name": "Beta Attempt"},
+    ]
+    transport = httpx.ASGITransport(app=app, client=("s02-concurrent", 41002))
+
+    try:
+        with patch.object(auth_router, "send_otp_email"):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                results = await asyncio.gather(
+                    client.post("/auth/register", json=attempts[0]),
+                    client.post("/auth/register", json=attempts[1]),
+                )
+
+        assert sorted(result.status_code for result in results) == [202, 409]
+        winner_index = next(index for index, result in enumerate(results) if result.status_code == 202)
+        winner = attempts[winner_index]
+        loser = attempts[1 - winner_index]
+        registration_id = results[winner_index].json()["registration_id"]
+
+        row = await _pending_row(email)
+        assert row is not None
+        assert str(row["id"]) == registration_id
+        assert row["full_name"] == winner["full_name"]
+        assert pwd_context.verify(winner["password"], row["password_hash"])
+        assert not pwd_context.verify(loser["password"], row["password_hash"])
+    finally:
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("DELETE FROM pending_registrations WHERE email=:email"),
+                {"email": email},
+            )
+            await db.commit()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_register_does_not_activate_without_verification():
     email = _email("noop")
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
@@ -175,9 +317,12 @@ async def test_login_impossible_before_verification():
 @pytest.mark.asyncio
 async def test_wrong_otp_rejected_and_counts_attempt():
     email = _email("wrong")
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
     async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": "000000"})
+        r = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": "000000"},
+        )
         assert r.status_code == 400
         assert "token" not in r.json()
     row = await _pending_row(email)
@@ -188,15 +333,21 @@ async def test_wrong_otp_rejected_and_counts_attempt():
 @pytest.mark.asyncio
 async def test_attempts_limit_blocks_and_clears():
     email = _email("locked")
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
         final_wrong = None
         for _ in range(5):
-            r = await c.post("/auth/verify-email", json={"email": email, "otp": "000000"})
+            r = await c.post(
+                "/auth/verify-email",
+                json={"email": email, "registration_id": registration_id, "otp": "000000"},
+            )
             assert r.status_code == 400
             final_wrong = r
         assert final_wrong is not None and "attempt" in final_wrong.text.lower()
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        r = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
+        )
         assert r.status_code == 400
         assert "invalid or expired" in r.text.lower()
     assert await _pending_row(email) is None
@@ -208,9 +359,12 @@ async def test_attempts_limit_blocks_and_clears():
 @pytest.mark.asyncio
 async def test_expired_otp_rejected_and_cleaned():
     email = _email("expired")
-    await _insert_pending(email, expired=True)
+    registration_id = await _insert_pending(email, expired=True)
     async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        r = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
+        )
         assert r.status_code == 400
         assert "expir" in r.text.lower()
     assert await _pending_row(email) is None
@@ -220,13 +374,14 @@ async def test_expired_otp_rejected_and_cleaned():
 @pytest.mark.asyncio
 async def test_correct_otp_creates_account_and_rejects_reuse():
     email = _email("happy")
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
     async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        payload = {"email": email, "registration_id": registration_id, "otp": KNOWN_OTP}
+        r = await c.post("/auth/verify-email", json=payload)
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["token"] and body["user"]["email"] == email and body["user"]["role"] == "CANDIDATE"
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        r = await c.post("/auth/verify-email", json=payload)
         assert r.status_code == 400
     assert await _pending_row(email) is None
     user = await _user_row(email)
@@ -238,7 +393,7 @@ async def test_rotating_code_invalidates_previous_code():
     """A resend stores only the new hash; the former code can no longer win."""
     email = _email("rotated")
     new_code = "654321"
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
     await engine.dispose()
     async with AsyncSessionLocal() as db:
         await db.execute(
@@ -251,18 +406,27 @@ async def test_rotating_code_invalidates_previous_code():
         await db.commit()
 
     async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
-        old = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        old = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
+        )
         assert old.status_code == 400
-        fresh = await c.post("/auth/verify-email", json={"email": email, "otp": new_code})
+        fresh = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": new_code},
+        )
         assert fresh.status_code == 200, fresh.text
 
 
 @pytest.mark.asyncio
 async def test_resend_cooldown_then_rollback_keeps_old_code():
     email = _email("resend")
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
     async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
-        r = await c.post("/auth/resend-verification", json={"email": email})
+        r = await c.post(
+            "/auth/resend-verification",
+            json={"email": email, "registration_id": registration_id},
+        )
         assert r.status_code == 429
         assert "retry_after_seconds" in r.text
     # SMTP is down here, so a real resend 502s — and the previous code must survive.
@@ -276,18 +440,27 @@ async def test_resend_cooldown_then_rollback_keeps_old_code():
         )
         await db.commit()
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
-        r = await c.post("/auth/resend-verification", json={"email": email})
+        r = await c.post(
+            "/auth/resend-verification",
+            json={"email": email, "registration_id": registration_id},
+        )
         assert r.status_code == 502
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        r = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
+        )
         assert r.status_code == 200, r.text
 
 
 @pytest.mark.asyncio
 async def test_verified_email_cannot_register_again():
     email = _email("taken")
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
     async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
-        r = await c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP})
+        r = await c.post(
+            "/auth/verify-email",
+            json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
+        )
         assert r.status_code == 200
         r = await c.post(
             "/auth/register",
@@ -318,11 +491,12 @@ async def test_concurrent_verify_creates_single_user():
     import asyncio
 
     email = _email("race")
-    await _insert_pending(email)
+    registration_id = await _insert_pending(email)
+    payload = {"email": email, "registration_id": registration_id, "otp": KNOWN_OTP}
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
         results = await asyncio.gather(
-            c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP}),
-            c.post("/auth/verify-email", json={"email": email, "otp": KNOWN_OTP}),
+            c.post("/auth/verify-email", json=payload),
+            c.post("/auth/verify-email", json=payload),
         )
     codes = sorted(r.status_code for r in results)
     assert codes == [200, 400], [r.status_code for r in results]

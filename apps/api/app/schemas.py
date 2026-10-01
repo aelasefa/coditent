@@ -48,13 +48,22 @@ class RegisterRequest(APIModel):
         return password
 
 
+class RegistrationStarted(APIModel):
+    detail: str
+    email: EmailStr
+    registration_id: uuid.UUID
+    expires_in_seconds: int
+
+
 class VerifyEmailRequest(APIModel):
     email: EmailStr
+    registration_id: uuid.UUID
     otp: str = Field(min_length=4, max_length=12)
 
 
 class ResendVerificationRequest(APIModel):
     email: EmailStr
+    registration_id: uuid.UUID
 
 
 class LoginRequest(APIModel):
