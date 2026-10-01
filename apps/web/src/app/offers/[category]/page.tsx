@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { getOffers } from "@/lib/api";
+import { getOffers, offerLogoSrc } from "@/lib/api";
 import { categories, type CategorySlug } from "@/lib/categories";
 import type { Offer } from "@/lib/types";
 import { SiteHeader } from "@/components/landing/site-header";
@@ -40,6 +40,11 @@ function OffersContent() {
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    document.title = `${category.label} Opportunities | Coditent`;
+  }, [category.label]);
 
   useEffect(() => {
     let mounted = true;
@@ -76,12 +81,33 @@ function OffersContent() {
 
   return (
     <div className="candidate-theme bg-background text-foreground">
-      <SiteHeader />
-      <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-8 sm:px-6">
-        <button type="button" onClick={() => router.back()} className="text-sm font-medium text-muted-foreground hover:text-foreground">
+      <SiteHeader variant="floating" />
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl px-4 pb-20 pt-8 sm:px-6">
+        <button type="button" onClick={() => router.back()} className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus-ring">
           ← Back
         </button>
         <section className="offers-hero">
+          <svg className="offers-hero-pattern" viewBox="0 0 720 320" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+            <g className="offers-hero-routes">
+              <path d="M18 302C92 256 137 232 202 210C288 181 310 114 402 92C500 68 564 72 714 16" />
+              <path d="M38 330C114 282 138 254 238 248C334 241 346 176 432 154C523 130 568 106 720 104" />
+              <path d="M196 330C232 278 288 273 342 246C408 214 438 210 502 205C586 198 641 173 729 143" />
+              <path d="M404 336C450 296 474 266 535 257C604 247 644 224 733 212" />
+              <path d="M202 210C184 176 194 139 244 108" />
+              <path d="M432 154C404 119 397 84 421 44" />
+              <path d="M502 205C491 173 510 143 560 119" />
+            </g>
+            <g className="offers-hero-milestones">
+              <path d="M198 202l8 8-8 8-8-8z" />
+              <path d="M234 240l8 8-8 8-8-8z" />
+              <path d="M338 238l8 8-8 8-8-8z" />
+              <path d="M428 146l8 8-8 8-8-8z" />
+              <path d="M498 197l8 8-8 8-8-8z" />
+              <path d="M531 249l8 8-8 8-8-8z" />
+              <path d="M556 111l8 8-8 8-8-8z" />
+              <path d="M637 166l8 8-8 8-8-8z" />
+            </g>
+          </svg>
           <p className="offers-hero-eyebrow">Open opportunities</p>
           <h1 className="ct-page-title">{category.label} opportunities</h1>
           <p className="offers-hero-copy">Explore roles from companies looking for your next contribution.</p>
@@ -91,14 +117,30 @@ function OffersContent() {
 
         <div className="offers-search-panel">
           <label htmlFor="public-search" className="sr-only">Search opportunities</label>
-          <input
-            id="public-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search title, company, field, region"
-            className="h-11 w-full rounded-xl border border-border bg-surface px-4 text-[15px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
+          <div className="offers-search-field">
+            <input
+              ref={searchInputRef}
+              id="public-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search title, company, field, region"
+              className="h-11 w-full rounded-xl border border-border bg-surface px-4 pr-12 text-[15px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  searchInputRef.current?.focus();
+                }}
+                aria-label="Clear opportunity search"
+                className="offers-search-clear"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {loading ? (
@@ -133,7 +175,7 @@ function OffersContent() {
                     aria-expanded={expanded}
                     className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-surface-secondary/40"
                   >
-                    <Avatar name={o.company} size="md" />
+                    <Avatar name={o.company} size="md" src={offerLogoSrc(o)} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] font-semibold">{o.title}</span>
                       <span className="block truncate text-[13px] text-muted-foreground">
@@ -192,4 +234,3 @@ export default function CategoryOffersPage() {
     </Suspense>
   );
 }
-
