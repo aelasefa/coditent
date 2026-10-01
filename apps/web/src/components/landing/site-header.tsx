@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
 import { Sheet } from "@/components/ui/sheet";
+import { getMe } from "@/lib/api";
+import { isLoggedIn } from "@/lib/auth";
+import { getAuthenticatedDestination } from "@/lib/auth-redirect";
 import styles from "./landing-page.module.css";
 
 const LINKS = [
@@ -16,10 +21,34 @@ const LINKS = [
 export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "home" | "floating" }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [hasStoredSession, setHasStoredSession] = useState<boolean | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuId = useId();
   const floating = variant === "home" || variant === "floating";
+  const meQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: getMe,
+    enabled: hasStoredSession === true,
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const currentUser = hasStoredSession && !meQuery.isError ? meQuery.data : undefined;
+  const authPending = hasStoredSession === null || (hasStoredSession && meQuery.isLoading);
+  const accountHref = currentUser ? getAuthenticatedDestination(currentUser) : "/login";
+
+  useEffect(() => {
+    const syncSession = () => setHasStoredSession(isLoggedIn());
+    syncSession();
+    window.addEventListener("storage", syncSession);
+    return () => window.removeEventListener("storage", syncSession);
+  }, []);
+
+  useEffect(() => {
+    // A 401 response clears the saved token in the API interceptor.
+    if (meQuery.isError && !isLoggedIn()) setHasStoredSession(false);
+  }, [meQuery.isError]);
 
   useEffect(() => {
     if (!floating) return;
@@ -85,17 +114,45 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
           ))}
         </nav>
         <div className={floating ? styles.homeActions : "hidden items-center justify-self-end gap-2 lg:flex"}>
-          <Link href="/login" className={floating ? styles.homeLogin : "rounded-lg px-3.5 py-2 text-sm font-medium text-foreground-secondary hover:text-foreground"}>
-            Log in
-          </Link>
-          <Link href="/register" className={floating ? styles.homeCta : "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"}>
-            Get Started
-          </Link>
+          {currentUser ? (
+            <Link
+              href={accountHref}
+              className={styles.homeProfileLink}
+              aria-label={`Open ${currentUser.full_name}'s account`}
+              title={`Open ${currentUser.full_name}'s account`}
+            >
+              <Avatar src={currentUser.avatar_url} name={currentUser.full_name} size="md" className={styles.homeProfileAvatar} />
+            </Link>
+          ) : authPending ? (
+            <span className={styles.homeAuthPlaceholder} aria-hidden="true" />
+          ) : (
+            <>
+              <Link href="/login" className={floating ? styles.homeLogin : "rounded-lg px-3.5 py-2 text-sm font-medium text-foreground-secondary hover:text-foreground"}>
+                Log in
+              </Link>
+              <Link href="/register" className={floating ? styles.homeCta : "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"}>
+                Get Started
+              </Link>
+            </>
+          )}
         </div>
         <div className={floating ? styles.homeMobile : "flex items-center gap-1 lg:hidden"}>
-          <Link href={floating ? "/register" : "/login"} className={floating ? styles.homeCta : "rounded-lg px-3 py-2 text-sm font-medium text-foreground-secondary"}>
-            {floating ? "Get Started" : "Log in"}
-          </Link>
+          {currentUser ? (
+            <Link
+              href={accountHref}
+              className={styles.homeProfileLink}
+              aria-label={`Open ${currentUser.full_name}'s account`}
+              title={`Open ${currentUser.full_name}'s account`}
+            >
+              <Avatar src={currentUser.avatar_url} name={currentUser.full_name} size="sm" className={styles.homeProfileAvatar} />
+            </Link>
+          ) : authPending ? (
+            <span className={styles.homeMobileAuthPlaceholder} aria-hidden="true" />
+          ) : (
+            <Link href={floating ? "/register" : "/login"} className={floating ? styles.homeCta : "rounded-lg px-3 py-2 text-sm font-medium text-foreground-secondary"}>
+              {floating ? "Get Started" : "Log in"}
+            </Link>
+          )}
           <button
             type="button"
             ref={menuButtonRef}
@@ -119,9 +176,24 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
                 {link.label}
               </Link>
             ))}
-            <Link href="/login" onClick={() => setOpen(false)} className={styles.homeMobileLogin}>
-              Log in <span aria-hidden="true">↗</span>
-            </Link>
+            {currentUser ? (
+              <Link href={accountHref} onClick={() => setOpen(false)} className={`${styles.homeMobileLogin} ${styles.homeMobileAccount}`}>
+                <span className={styles.homeMobileAccountIdentity}>
+                  <Avatar src={currentUser.avatar_url} name={currentUser.full_name} size="sm" />
+                  <span>
+                    <strong>{currentUser.full_name}</strong>
+                    <small>Open your account</small>
+                  </span>
+                </span>
+                <span aria-hidden="true">↗</span>
+              </Link>
+            ) : authPending ? (
+              <span className={`${styles.homeMobileLogin} ${styles.homeMobileAccountPlaceholder}`} aria-hidden="true" />
+            ) : (
+              <Link href="/login" onClick={() => setOpen(false)} className={styles.homeMobileLogin}>
+                Log in <span aria-hidden="true">↗</span>
+              </Link>
+            )}
           </nav>
         </div>
       ) : (
@@ -132,9 +204,18 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
                 {l.label}
               </Link>
             ))}
-            <Link href="/register" onClick={() => setOpen(false)} className="mt-2 rounded-lg bg-primary px-3 py-3 text-center text-[15px] font-semibold text-primary-foreground">
-              Get Started
-            </Link>
+            {currentUser ? (
+              <Link href={accountHref} onClick={() => setOpen(false)} className="mt-2 flex items-center gap-3 rounded-lg bg-surface-secondary px-3 py-2.5 text-[15px] font-semibold text-foreground">
+                <Avatar src={currentUser.avatar_url} name={currentUser.full_name} size="sm" />
+                <span>{currentUser.full_name}</span>
+              </Link>
+            ) : authPending ? (
+              <span className="mt-2 h-12 rounded-lg bg-surface-secondary" aria-hidden="true" />
+            ) : (
+              <Link href="/register" onClick={() => setOpen(false)} className="mt-2 rounded-lg bg-primary px-3 py-3 text-center text-[15px] font-semibold text-primary-foreground">
+                Get Started
+              </Link>
+            )}
           </nav>
         </Sheet>
       )}

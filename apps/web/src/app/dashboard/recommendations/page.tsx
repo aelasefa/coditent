@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { api, generateRecommendations, getProfile, getRecommendationJob, getRecommendations, scoreRecommendation } from "@/lib/api";
@@ -180,81 +181,102 @@ function RecommendationsContent() {
 
   return (
     <PageContainer variant="wide">
-      <div className={styles.discoverIntro}>
-        <div><h1 className="ct-page-title">Discover opportunities</h1><p>Search open roles, then analyze matches for your field and region.</p></div>
-        <p>Match analysis appears on each role when it is ready.</p>
-      </div>
+      <div className={styles.discoverWorkspace}>
+        <div className={styles.discoverArtwork} aria-hidden="true">
+          <Image
+            src="/images/candidate/discover-career-garden.png"
+            alt=""
+            fill
+            quality={95}
+            sizes="(max-width: 767px) 100vw, (max-width: 1200px) 72vw, 920px"
+          />
+        </div>
+        <div className={styles.discoverIntro}>
+          <div className={styles.discoverHeadingGroup}>
+            <h1 className={styles.discoverTitle}>
+              Discover <span>opportunities</span>
+            </h1>
+            <p className={styles.discoverDescription}>Search open roles, then analyze matches for your field and region.</p>
+          </div>
+          <p className={styles.discoverNote}>Match analysis appears on each role when it is ready.</p>
+        </div>
 
-      <div className={styles.filterPanel}><FilterBar
+        <div className={styles.filterPanel}>
+          <FilterBar
             filters={filters}
             onChange={(next) => { setFilters(next); setSelectedId(null); }}
             onGenerate={handleGenerate}
             generating={generateMutation.isPending || pollingJob}
-          /></div>
-      <div className={styles.resultsHeading}><h2>Open roles</h2><p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}</p></div>
-      <div className={styles.resultsLayout}>
-        <div className={styles.resultsList}>
-          {jobFailed ? (
-            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
-              <p className="text-sm font-semibold text-danger">Match scoring did not complete.</p>
-              <button type="button" onClick={handleGenerate} className="mt-2 text-sm font-semibold text-danger underline">
-                Retry scoring
-              </button>
-            </div>
-          ) : null}
-          {error ? (
-            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
-              <p className="text-sm font-semibold text-danger">Could not load opportunities.</p>
-              <button type="button" onClick={() => recsQuery.refetch()} className="mt-2 text-sm font-semibold text-danger underline">
-                Retry
-              </button>
-            </div>
-          ) : null}
-          {!error ? (
-            <div className={styles.jobList} role="list" aria-label="Opportunities">
-              {loading
-                ? [1, 2, 3].map((i) => <JobCardSkeleton key={i} />)
-                : filtered.map((r) => (
-                    <div key={r.id} role="listitem">
-                      <JobCard
-                        rec={r}
-                        selected={selected?.offer.id === r.offer.id}
-                        applied={appliedOfferIds.has(r.offer.id)}
-                        onSelect={() => setSelectedId(r.offer.id)}
-                      />
-                    </div>
-                  ))}
-              {!loading && filtered.length === 0 && recs.length > 0 ? (
-                <EmptyState
-                  title="No opportunities match these filters"
-                  description="Adjust search or clear filters to see more matches."
-                  primaryAction={{ label: "Clear filters", onClick: () => setFilters({ query: "", field: "", region: "", type: "ALL", sort: "match" }) }}
-                />
-              ) : null}
-              {!loading && recs.length === 0 ? (
-                <EmptyState
-                  title="No recommendations yet"
-                  description="Enter a field and region, then analyze matches to see roles here."
-                  primaryAction={{ label: "Analyze matches", onClick: handleGenerate }}
-                />
-              ) : null}
-            </div>
-          ) : null}
+          />
         </div>
+        <div className={styles.resultsHeading}>
+          <h2>Open roles</h2>
+          <p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}</p>
+        </div>
+        <div className={styles.resultsLayout}>
+          <div className={styles.resultsList}>
+            {jobFailed ? (
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
+                <p className="text-sm font-semibold text-danger">Match scoring did not complete.</p>
+                <button type="button" onClick={handleGenerate} className="mt-2 text-sm font-semibold text-danger underline">
+                  Retry scoring
+                </button>
+              </div>
+            ) : null}
+            {error ? (
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
+                <p className="text-sm font-semibold text-danger">Could not load opportunities.</p>
+                <button type="button" onClick={() => recsQuery.refetch()} className="mt-2 text-sm font-semibold text-danger underline">
+                  Retry
+                </button>
+              </div>
+            ) : null}
+            {!error ? (
+              <div className={styles.jobList} role="list" aria-label="Opportunities">
+                {loading
+                  ? [1, 2, 3].map((i) => <JobCardSkeleton key={i} />)
+                  : filtered.map((r) => (
+                      <div key={r.id} role="listitem">
+                        <JobCard
+                          rec={r}
+                          selected={selected?.offer.id === r.offer.id}
+                          applied={appliedOfferIds.has(r.offer.id)}
+                          onSelect={() => setSelectedId(r.offer.id)}
+                        />
+                      </div>
+                    ))}
+                {!loading && filtered.length === 0 && recs.length > 0 ? (
+                  <EmptyState
+                    title="No opportunities match these filters"
+                    description="Adjust search or clear filters to see more matches."
+                    primaryAction={{ label: "Clear filters", onClick: () => setFilters({ query: "", field: "", region: "", type: "ALL", sort: "match" }) }}
+                  />
+                ) : null}
+                {!loading && recs.length === 0 ? (
+                  <EmptyState
+                    title="No recommendations yet"
+                    description="Enter a field and region, then analyze matches to see roles here."
+                    primaryAction={{ label: "Analyze matches", onClick: handleGenerate }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
-        <div className="hidden lg:block">
-          <div className={`${styles.jobDetail} sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto border border-border-subtle bg-surface p-6`}>
-            {loading ? (
-              <JobDetailsSkeleton />
-            ) : selected ? (
-              <JobDetails
-                rec={selected}
-                applied={selectedApplied}
-                onApplied={(id) => setApplied((s) => new Set([...s, id]))}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">Select an opportunity to see details.</p>
-            )}
+          <div className="hidden lg:block">
+            <div className={`${styles.jobDetail} sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto border border-border-subtle bg-surface p-6`}>
+              {loading ? (
+                <JobDetailsSkeleton />
+              ) : selected ? (
+                <JobDetails
+                  rec={selected}
+                  applied={selectedApplied}
+                  onApplied={(id) => setApplied((s) => new Set([...s, id]))}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">Select an opportunity to see details.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -491,8 +491,14 @@
 .homeNavLinks { display: flex; align-items: center; gap: clamp(0.25rem, 1vw, 0.8rem); }
 .homeNavLinks a, .homeLogin { display: inline-flex; align-items: center; min-height: 44px; padding: 0.5rem 0.65rem; border-radius: 999px; color: #244735; font-size: 0.81rem; font-weight: 600; white-space: nowrap; transition: color 220ms ease, background-color 220ms ease; }
 .homeNavLinks a:hover, .homeLogin:hover { background: rgb(25 77 56 / 7%); color: #123e2d; }
-.homeActions { display: flex; flex-shrink: 0; align-items: center; gap: 0.5rem; transition: transform 280ms var(--nav-ease); }
+.homeActions { display: flex; min-width: 164px; flex-shrink: 0; align-items: center; justify-content: flex-end; gap: 0.5rem; transition: transform 280ms var(--nav-ease); }
 .homeHeaderScrolled .homeActions { transform: translateX(-20px); }
+.homeProfileLink { display: inline-flex; width: 48px; height: 48px; flex-shrink: 0; align-items: center; justify-content: center; border: 1px solid rgb(25 77 56 / 14%); border-radius: 999px; background: rgb(255 254 250 / 54%); box-shadow: 0 3px 12px rgb(25 55 38 / 8%); transition: border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease, transform 220ms var(--nav-ease); }
+.homeProfileLink:hover { border-color: rgb(25 77 56 / 28%); background: #edf1e9; box-shadow: 0 5px 16px rgb(25 55 38 / 12%); transform: translateY(-2px); }
+.homeProfileLink:active { transform: translateY(0); }
+.homeProfileLink:focus-visible { outline: 3px solid rgb(25 77 56 / 24%); outline-offset: 2px; }
+.homeProfileAvatar { box-shadow: 0 0 0 2px #fffefa, 0 0 0 3px rgb(25 77 56 / 16%); }
+.homeAuthPlaceholder { display: block; width: 164px; height: 44px; flex-shrink: 0; }
 .homeCta { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0.6rem 1.15rem; border-radius: 999px; background: #194d38; color: white; font-size: 0.8rem; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 5px rgb(25 77 56 / 12%); transition: background-color 220ms ease, transform 220ms var(--nav-ease); }
 .homeCta:hover { background: #123e2d; transform: translateY(-2px); }
 .homeCta:active { transform: translateY(0); }
@@ -517,6 +523,13 @@
 .homeMobileNav a { display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-radius: 12px; padding: 0.8rem 1rem; color: #244b34; font-size: 0.95rem; font-weight: 600; }
 .homeMobileNav a:hover { background: #edf1e9; }
 .homeMobileLogin { margin-top: 0.5rem; background: #edf1e9; }
+.homeMobileAccount { gap: 1rem; }
+.homeMobileAccountIdentity { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+.homeMobileAccountIdentity > span { display: grid; min-width: 0; gap: 0.1rem; }
+.homeMobileAccountIdentity strong { overflow: hidden; color: #173d2c; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
+.homeMobileAccountIdentity small { color: #617266; font-size: 0.72rem; font-weight: 500; }
+.homeMobileAccountPlaceholder { display: block; min-height: 56px; }
+.homeMobileAuthPlaceholder { display: block; width: 44px; height: 44px; flex-shrink: 0; }
 
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   .homeNav::before, .homeMobilePanel { -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%); }
