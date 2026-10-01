@@ -26,8 +26,8 @@ class VaultClient:
             with httpx.Client(timeout=3.0) as client:
                 resp = client.get(f"{self.vault_addr}/v1/sys/health")
                 return resp.status_code in (200, 429, 472, 473)
-        except Exception as e:
-            logger.debug(f"Vault health check failed: {e}")
+        except Exception as exc:
+            logger.debug("Vault health check failed", extra={"exception_type": type(exc).__name__})
             return False
 
     def write_secrets(self, secrets_dict: Dict[str, Any]) -> bool:
@@ -42,10 +42,10 @@ class VaultClient:
                 if resp.status_code in (200, 204):
                     logger.info("Successfully wrote secrets to HashiCorp Vault")
                     return True
-                logger.warning(f"Vault write returned status {resp.status_code}: {resp.text}")
+                logger.warning("Vault write failed", extra={"status_code": resp.status_code})
                 return False
-        except Exception as e:
-            logger.error(f"Error writing secrets to Vault: {e}")
+        except Exception as exc:
+            logger.error("Error writing secrets to Vault", extra={"exception_type": type(exc).__name__})
             return False
 
     def read_secrets(self) -> Optional[Dict[str, Any]]:
@@ -60,8 +60,8 @@ class VaultClient:
                     data = resp.json().get("data", {}).get("data", {})
                     return data
                 return None
-        except Exception as e:
-            logger.error(f"Error reading secrets from Vault: {e}")
+        except Exception as exc:
+            logger.error("Error reading secrets from Vault", extra={"exception_type": type(exc).__name__})
             return None
 
     def get_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:

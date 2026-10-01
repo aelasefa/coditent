@@ -48,13 +48,9 @@ async def invalidate_candidate_matches(
 
 
 def _safe_reason(exc: Exception) -> str:
-    name = type(exc).__name__
-    msg = str(exc)[:200].strip()
-    # Never persist secrets/PII blobs — keep a short, safe reason.
-    for secret_hint in ("key", "token", "bearer", "password", "secret"):
-        if secret_hint in msg.lower():
-            return f"{name}: AI provider error"
-    return f"{name}: {msg}" if msg else f"{name}: AI scoring failed"
+    # Provider exception messages can echo prompts, credentials, and request
+    # bodies. The exception class is enough for internal failure grouping.
+    return f"{type(exc).__name__}: AI provider error"
 
 
 def _normalized_terms(value: object) -> set[str]:

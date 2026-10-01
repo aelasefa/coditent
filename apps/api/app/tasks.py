@@ -74,12 +74,12 @@ def generate_recommendations_task(job_id: str, candidate_id: str, criteria: dict
                     "status": "failed",
                     "candidate_id": candidate_id,
                     "criteria": criteria,
-                    "error": str(exc),
+                    "error_code": "RECOMMENDATION_GENERATION_FAILED",
                 }
             ),
             ex=3600,
         )
-        logger.error("ai_job_failed", job_id=job_id, error=str(exc))
+        logger.error("ai_job_failed", job_id=job_id, exception_type=type(exc).__name__)
 
 
 async def _run_job(candidate_id: uuid.UUID, criteria: dict) -> list[dict]:
@@ -108,7 +108,7 @@ def score_match_task(candidate_id: str, offer_id: str) -> None:
                         "match_job_failed",
                         candidate_id=candidate_id,
                         offer_id=offer_id,
-                        error=str(exc)[:300],
+                        exception_type=type(exc).__name__,
                     )
 
         loop.run_until_complete(_run())
@@ -143,7 +143,11 @@ def screen_application_task(application_id: str) -> None:
                 try:
                     await screen_application(db, uuid.UUID(application_id))
                 except Exception as exc:
-                    logger.error("screening_job_failed", application_id=application_id, error=str(exc)[:300])
+                    logger.error(
+                        "screening_job_failed",
+                        application_id=application_id,
+                        exception_type=type(exc).__name__,
+                    )
                     app.ai_status = "failed"
                     app.ai_score = None
                     app.ai_report = None

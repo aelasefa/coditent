@@ -296,13 +296,23 @@ async def sso_callback(
         result = await db.execute(select(User).where(User.email == identity.email))
         user = result.scalar_one_or_none()
     except HTTPException as exc:
-        logger.warning("sso_error", provider=provider, error=str(exc.detail))
+        logger.warning(
+            "sso_error",
+            provider=provider,
+            status_code=exc.status_code,
+            reason="provider_request_rejected",
+        )
         return _build_sso_error_response(
             request, str(exc.detail), exc.status_code, oauth_provider.name,
             locals().get("popup_origin"), locals().get("attempt_id"),
         )
-    except Exception:
-        logger.exception("sso_error", provider=provider, error="sso_internal_error")
+    except Exception as exc:
+        logger.error(
+            "sso_error",
+            provider=provider,
+            reason="sso_internal_error",
+            exception_type=type(exc).__name__,
+        )
         return _build_sso_error_response(
             request, "sso_internal_error", status.HTTP_500_INTERNAL_SERVER_ERROR,
             oauth_provider.name, locals().get("popup_origin"), locals().get("attempt_id"),

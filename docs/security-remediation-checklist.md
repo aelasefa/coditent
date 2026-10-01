@@ -40,8 +40,8 @@ pending those files.
 | S11 | AUDITING | TBD | Safe OAuth identity linking/state/PKCE/nonce | TBD | Provider configuration verification |
 | S12 | AUDITING | TBD | Sessions/logout/revocation/CSRF | TBD | None expected |
 | S13 | AUDITING | TBD | Bounded uploads/parsing and async blocking work | TBD | Sandbox resource tests |
-| S14 | AUDITING | TBD | Bounded metrics labels | TBD | None expected |
-| S15 | AUDITING | TBD | Sensitive-data log redaction | TBD | Retention/access policy verification |
+| S14 | FIXED_VERIFIED | `apps/api/app/observability.py`, `apps/api/tests/test_observability.py` | Metrics now use resolved route templates (or one `<unmatched>` bucket), normalize methods, and record failures in `finally`; request logs share the same bounded labels. | `test_route_labels_use_templates_and_bound_unmatched_paths`; `test_metrics_record_failures_under_the_route_template` | None |
+| S15 | EXTERNAL_PENDING | `apps/api/app/observability.py`, `apps/api/app/main.py`, `apps/api/app/tasks.py`, AI/screening/email/invitation services, `docker-compose.yml`, `apps/api/start_api.sh`, `nginx/nginx.conf` | Recursive structured-log redaction covers credentials, tokens, cookies, OTPs, emails, CV text, connection passwords, JWTs, and secret query parameters. Raw provider/exception/model text was removed from logs, job state, and invitation responses; 500s expose only a correlation ID. Uvicorn raw access logs are disabled at both launch points and Nginx excludes query/referrer data. | `test_structured_and_free_form_secrets_are_redacted`; metrics tests; match-scoring no-secret fallback regression — 16 focused tests passed; runtime random token URL logged only as `<unmatched>` | Production log-retention, sink access controls, and deletion verification |
 | S16 | AUDITING | TBD | Central password policy, Argon2id, encrypted MFA | TBD | Protected encryption key provisioning |
 | S17 | AUDITING | TBD | Patched/locked dependencies and Google Gen AI SDK | TBD | Official advisory/provider smoke checks |
 | S18 | AUDITING | TBD | Trusted deploy provenance/non-root/RLS boundaries | TBD | Authorized production database/Storage checks |
@@ -86,3 +86,4 @@ their skip counts and are never treated as verification of the skipped behavior.
 
 - 2026-10-01: `docker compose exec -T api python -m pytest tests/test_email_otp.py -q -k 'reregister_rotates or concurrent_registration_attempts'` -> `2 passed, 18 deselected`.
 - 2026-10-01: `apps/web/node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json` -> passed.
+- 2026-10-01: `docker compose exec -T api python -m pytest tests/test_observability.py tests/test_match_scoring.py -q` -> `16 passed` (65 deprecation warnings; zero skips). `aiosqlite` was installed ephemerally in the running test container because it was absent from the image.

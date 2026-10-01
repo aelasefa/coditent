@@ -170,6 +170,9 @@ def send_otp_email(to_email: str, full_name: str, otp: str, expires_at: datetime
     try:
         send_email(to_email, subject, html, attachments=[verification_art_attachment()])
     except Exception as exc:
-        # Log provider status only — message contains no OTP, no key.
-        logger.warning("otp_email_failed", email=to_email, error=str(exc)[:300])
+        logger.warning(
+            "otp_email_failed",
+            email=to_email,
+            exception_type=type(exc).__name__,
+        )
         raise RuntimeError("Could not send verification email") from exc

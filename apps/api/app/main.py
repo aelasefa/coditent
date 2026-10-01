@@ -1,6 +1,8 @@
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -10,7 +12,7 @@ from app.config import settings
 from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.models import User
-from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics
+from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
 from app.routers import admin, applications, assessments, auth, audit, candidates, chat, companies, offers, invitations, recommendations, requests, two_factor
 
 
@@ -91,5 +93,14 @@ async def protected(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> Response:
-    logger.error("unhandled_exception", path=request.url.path, error=str(exc))
-    return Response(content="Internal Server Error", status_code=500)
+    error_id = uuid4().hex
+    logger.error(
+        "unhandled_exception",
+        route=route_label(request),
+        error_id=error_id,
+        exception_type=type(exc).__name__,
+    )
+    return JSONResponse(
+        content={"detail": "Internal server error", "error_id": error_id},
+        status_code=500,
+    )

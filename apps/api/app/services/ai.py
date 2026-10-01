@@ -82,7 +82,11 @@ Retourne: {{"score": 0-100, "reasoning": "Une phrase en français."}}
         )
     except Exception as exc:
         match_logger.error("[MATCH] AI request failed", reason="generation_error")
-        logger.error("ai_request_failed", reason="generation_error", error=str(exc)[:300])
+        logger.error(
+            "ai_request_failed",
+            reason="generation_error",
+            exception_type=type(exc).__name__,
+        )
         return None
 
     raw_text = (getattr(response, "text", "") or "").strip()
@@ -114,7 +118,6 @@ Retourne: {{"score": 0-100, "reasoning": "Une phrase en français."}}
         logger.error(
             "ai_request_failed",
             reason="invalid_json",
-            preview=raw_text[:200],
         )
         return None
     try:
@@ -190,7 +193,11 @@ Retourne un tableau JSON de 10 éléments maximum, du plus pertinent au moins:
             generation_config={"temperature": 0.2, "max_output_tokens": 1000},
         )
     except Exception as exc:
-        logger.error("ai_request_failed", reason="generation_error", error=str(exc)[:500])
+        logger.error(
+            "ai_request_failed",
+            reason="generation_error",
+            exception_type=type(exc).__name__,
+        )
         return []
 
     raw_text = (getattr(response, "text", "") or "").strip()

@@ -147,7 +147,11 @@ REQUIREMENTS: {(offer.requirements or "")[:1500]}"""
             timeout=GENERATION_TIMEOUT_SECONDS,
         )
     except Exception as exc:
-        logger.error("screening_failed", reason="generation_error", error=str(exc)[:300])
+        logger.error(
+            "screening_failed",
+            reason="generation_error",
+            exception_type=type(exc).__name__,
+        )
         raise ValueError("AI provider error") from exc
 
     parsed = _parse_result(getattr(response, "text", "") or "")

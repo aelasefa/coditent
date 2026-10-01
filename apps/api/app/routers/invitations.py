@@ -141,10 +141,13 @@ def _send_employee_invite_email_safe(email: str, company_name: str, role: str, t
         subject, html = _build_employee_invite_email(company_name, role, token, expires_at)
         send_email(email, subject, html, attachments=[employee_invite_art_attachment()])
     except Exception as exc:
-        # Do not expose token; log at warning level via observability if available
         try:
             from app.observability import get_logger
-            get_logger("invitations").warning("employee_invite_email_failed", email=email, error=str(exc))
+            get_logger("invitations").warning(
+                "employee_invite_email_failed",
+                email=email,
+                exception_type=type(exc).__name__,
+            )
         except Exception:
             pass
 
@@ -297,10 +300,14 @@ async def invite_company(
         _send_company_invite_email(email, company_name, token, expires_at)
     except Exception as exc:
         email_sent = False
-        email_error = str(exc)[:300]
+        email_error = "The email provider could not deliver this invitation. Copy the invitation link and share it securely."
         try:
             from app.observability import get_logger
-            get_logger("invitations").warning("company_invite_email_failed", email=email, error=email_error)
+            get_logger("invitations").warning(
+                "company_invite_email_failed",
+                email=email,
+                exception_type=type(exc).__name__,
+            )
         except Exception:
             pass
     out: dict = {"detail": "invited", "invitation_id": inv_id, "invitation_url": invite_url, "email_sent": email_sent}
@@ -376,7 +383,11 @@ async def resend_company_invitation(
         email_sent = False
         try:
             from app.observability import get_logger
-            get_logger("invitations").warning("company_invite_email_failed", email=row["email"], error=str(exc)[:200])
+            get_logger("invitations").warning(
+                "company_invite_email_failed",
+                email=row["email"],
+                exception_type=type(exc).__name__,
+            )
         except Exception:
             pass
     return {"detail": "resent", "invitation_id": new_id, "invitation_url": invite_url, "email_sent": email_sent}

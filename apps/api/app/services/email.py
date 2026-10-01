@@ -59,6 +59,8 @@ def send_email(
             body = response.read().decode("utf-8")
             return json.loads(body) if body else {"status": "queued"}
     except error.HTTPError as exc:
-        # Never include the API key: only status + provider message reach logs.
-        raw = exc.read().decode("utf-8") if exc.fp else str(exc.reason)
-        raise RuntimeError(f"Resend API error {exc.code}: {raw[:300]}") from exc
+        # Provider bodies can echo recipient data or request fragments. Keep
+        # only the bounded status code and retain the exception as the cause.
+        if exc.fp:
+            exc.read()
+        raise RuntimeError(f"Email provider rejected the request ({exc.code})") from exc
