@@ -316,9 +316,38 @@ export async function toggleOffer(offerId: string): Promise<Offer> {
   return data;
 }
 
+interface RecommendationPage {
+  recommendations: Recommendation[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export async function initializeRecommendations(): Promise<{ created: number; active_offers: number }> {
+  const { data } = await api.post<{ created: number; active_offers: number }>(
+    "/recommendations/initialize"
+  );
+  return data;
+}
+
 export async function getRecommendations(): Promise<Recommendation[]> {
-  const { data } = await api.get<{ recommendations: Recommendation[] }>("/recommendations");
-  return data.recommendations;
+  // Initialization is intentionally explicit: the paginated GET stays
+  // read-only while concurrent page loads remain safe under a DB unique key.
+  await initializeRecommendations();
+
+  const recommendations: Recommendation[] = [];
+  const limit = 50;
+  let offset = 0;
+  for (;;) {
+    const { data } = await api.get<RecommendationPage>("/recommendations", {
+      params: { limit, offset },
+    });
+    recommendations.push(...data.recommendations);
+    if (!data.has_more || data.recommendations.length === 0) break;
+    offset += data.recommendations.length;
+  }
+  return recommendations;
 }
 
 export interface RecommendationJob {

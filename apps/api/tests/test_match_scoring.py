@@ -7,6 +7,7 @@ Covers: new-offer eligibility, completed persistence, API shape, no-regen of
 completed rows, local provider fallback, retry
 recovery, apply-independence, candidate isolation, company boundaries.
 """
+import asyncio
 import sys
 import types
 import uuid
@@ -201,6 +202,82 @@ async def test_inactive_offer_not_eligible(db: AsyncSession) -> None:
     assert await match_scoring.get_or_create_pending(db, user.id, offer.id) is None
     with pytest.raises(ValueError):
         await match_scoring.score_single_match(db, user.id, offer.id)
+
+
+@pytest.mark.asyncio
+async def test_initialization_and_all_offsets_cover_more_than_twenty_matches(
+    db: AsyncSession,
+) -> None:
+    user = await _candidate(db, "many-matches@test.local")
+    for index in range(27):
+        await _offer(db, user.id, title=f"Role {index:02d}")
+
+    created, active = await match_scoring.initialize_active_matches(db, user.id)
+    assert (created, active) == (27, 27)
+    assert await match_scoring.initialize_active_matches(db, user.id) == (0, 27)
+
+    first, total = await match_scoring.list_active_matches(
+        db, user.id, limit=20, offset=0
+    )
+    second, second_total = await match_scoring.list_active_matches(
+        db, user.id, limit=20, offset=20
+    )
+    assert (len(first), len(second), total, second_total) == (20, 7, 27, 27)
+    assert {row.offer_id for row in first}.isdisjoint(
+        {row.offer_id for row in second}
+    )
+
+    new_offer = await _offer(db, user.id, title="Newly published role")
+    # Listing is read-only; the new offer appears only after explicit init.
+    before, before_total = await match_scoring.list_active_matches(
+        db, user.id, limit=50, offset=0
+    )
+    assert before_total == len(before) == 27
+    assert new_offer.id not in {row.offer_id for row in before}
+    assert await match_scoring.initialize_active_matches(db, user.id) == (1, 28)
+    after, after_total = await match_scoring.list_active_matches(
+        db, user.id, limit=50, offset=0
+    )
+    assert after_total == len(after) == 28
+    assert new_offer.id in {row.offer_id for row in after}
+
+
+@pytest.mark.asyncio
+async def test_concurrent_initializers_are_conflict_safe(tmp_path) -> None:
+    db_path = tmp_path / "recommendation-concurrency.sqlite3"
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path}",
+        connect_args={"timeout": 30},
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(_Base.metadata.create_all)
+    maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with maker() as seed_db:
+            user = await _candidate(seed_db, "concurrent-init@test.local")
+            for index in range(25):
+                await _offer(seed_db, user.id, title=f"Concurrent role {index:02d}")
+            candidate_id = user.id
+
+        async def initialize_once() -> tuple[int, int]:
+            async with maker() as session:
+                return await match_scoring.initialize_active_matches(
+                    session, candidate_id
+                )
+
+        outcomes = await asyncio.gather(initialize_once(), initialize_once())
+        assert sum(created for created, _active in outcomes) == 25
+        assert {active for _created, active in outcomes} == {25}
+
+        async with maker() as check_db:
+            rows, total = await match_scoring.list_active_matches(
+                check_db, candidate_id, limit=50, offset=0
+            )
+            assert total == len(rows) == 25
+            assert len({row.offer_id for row in rows}) == 25
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

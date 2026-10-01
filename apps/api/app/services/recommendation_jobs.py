@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload
 from app.models import CandidateProfile, Offer, OfferType, SavedRecommendation
 from app.schemas import RecommendationOut, RecommendationRequest
 from app.services.ai import rank_offers
+from app.services.match_scoring import upsert_recommendation_scores
 
 
 def make_cache_key(candidate_id: uuid.UUID, criteria: dict[str, Any]) -> str:
@@ -107,6 +108,7 @@ async def generate_recommendations_for_candidate(
     # Upsert only offers matched by this run. Never wipe scores for offers
     # outside the requested criteria; drop rows only for inactive offers.
     offer_map = {str(offer.id): offer for offer in offers}
+    scored_rows: list[dict[str, Any]] = []
     for row in ai_results:
         offer_id = row.get("offer_id")
         if offer_id not in offer_map:
@@ -114,38 +116,21 @@ async def generate_recommendations_for_candidate(
 
         try:
             parsed_offer_id = uuid.UUID(offer_id)
+            score = int(row.get("score", 0))
         except (TypeError, ValueError):
             continue
-
-        existing_result = await db.execute(
-            select(SavedRecommendation).where(
-                SavedRecommendation.candidate_id == candidate_id,
-                SavedRecommendation.offer_id == parsed_offer_id,
-            )
+        reasoning = str(row.get("reasoning", "")).strip()
+        if not 0 <= score <= 100 or not reasoning:
+            continue
+        scored_rows.append(
+            {
+                "offer_id": parsed_offer_id,
+                "score": score,
+                "reasoning": reasoning[:2_000],
+            }
         )
-        existing = existing_result.scalars().first()
-        if existing is not None:
-            # Never overwrite another candidate's row (query already scopes).
-            existing.ai_score = int(row.get("score", 0))
-            existing.ai_reasoning = str(row.get("reasoning", ""))
-            existing.status = "completed"
-            existing.error = None
-            from datetime import datetime as _dt
 
-            existing.updated_at = _dt.utcnow()
-        else:
-            from datetime import datetime as _dt
-
-            db.add(
-                SavedRecommendation(
-                    candidate_id=candidate_id,
-                    offer_id=parsed_offer_id,
-                    ai_score=int(row.get("score", 0)),
-                    ai_reasoning=str(row.get("reasoning", "")),
-                    status="completed",
-                    updated_at=_dt.utcnow(),
-                )
-            )
+    await upsert_recommendation_scores(db, candidate_id, scored_rows)
 
     # Drop rows only for offers that are actually inactive platform-wide —
     # never wipe scores for offers outside this run's filter criteria.

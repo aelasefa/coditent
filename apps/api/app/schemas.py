@@ -259,6 +259,19 @@ class RecommendationOut(APIModel):
     offer: OfferOut
 
 
+class RecommendationPage(APIModel):
+    recommendations: list[RecommendationOut]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class RecommendationInitialization(APIModel):
+    created: int
+    active_offers: int
+
+
 class AdminStatsOut(APIModel):
     total_users: int
     total_candidates: int

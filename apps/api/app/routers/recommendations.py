@@ -9,10 +9,16 @@ from sqlalchemy.orm import joinedload
 
 from app.cache import get_async_redis
 from app.database import get_db
-from app.dependencies import get_pagination, require_candidate
-from app.models import Company, Offer, SavedRecommendation, User
+from app.dependencies import get_pagination, require_candidate_account
+from app.models import Company, SavedRecommendation, User
 from app.observability import get_logger
-from app.schemas import RecommendationOut, RecommendationRequest
+from app.schemas import (
+    RecommendationInitialization,
+    RecommendationOut,
+    RecommendationPage,
+    RecommendationRequest,
+)
+from app.services.match_scoring import initialize_active_matches, list_active_matches
 from app.services.recommendation_jobs import make_cache_key
 from app.tasks import generate_recommendations_task
 
@@ -28,7 +34,7 @@ def _queue_single_match(candidate_id: uuid.UUID, offer_id: uuid.UUID) -> bool:
 
         score_match_task.delay(str(candidate_id), str(offer_id))
         return True
-    except Exception as exc:
+    except Exception:
         logger.error(
             f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=queue_error"
         )
@@ -38,7 +44,7 @@ def _queue_single_match(candidate_id: uuid.UUID, offer_id: uuid.UUID) -> bool:
 @router.post("/generate", response_model=dict[str, str | bool])
 async def generate_recommendations(
     criteria: RecommendationRequest,
-    current_user: Annotated[User, Depends(require_candidate)],
+    current_user: Annotated[User, Depends(require_candidate_account)],
 ) -> dict[str, str | bool]:
     redis_client = get_async_redis()
     criteria_payload = criteria.model_dump()
@@ -82,7 +88,7 @@ async def generate_recommendations(
 @router.post("/score/{offer_id}", response_model=dict)
 async def score_recommendation(
     offer_id: uuid.UUID,
-    current_user: Annotated[User, Depends(require_candidate)],
+    current_user: Annotated[User, Depends(require_candidate_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Trigger (or retry) AI match scoring for one offer.
@@ -147,7 +153,7 @@ async def _attach_offer_logos(
 @router.get("/by-offer/{offer_id}", response_model=RecommendationOut)
 async def get_recommendation_by_offer(
     offer_id: uuid.UUID,
-    current_user: Annotated[User, Depends(require_candidate)],
+    current_user: Annotated[User, Depends(require_candidate_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> RecommendationOut:
     """Fetch this candidate's own analysis for one offer (tenant-safe)."""
@@ -168,7 +174,7 @@ async def get_recommendation_by_offer(
 
 @router.get("/config-status", response_model=dict)
 async def match_config_status(
-    current_user: Annotated[User, Depends(require_candidate)],
+    current_user: Annotated[User, Depends(require_candidate_account)],
 ) -> dict:
     """Runtime availability of the match pipeline. Never exposes secret values."""
     from app.config import settings
@@ -190,7 +196,7 @@ async def match_config_status(
 @router.get("/jobs/{job_id}")
 async def get_recommendation_job_status(
     job_id: str,
-    current_user: Annotated[User, Depends(require_candidate)],
+    current_user: Annotated[User, Depends(require_candidate_account)],
 ) -> dict:
     redis_client = get_async_redis()
     payload = await redis_client.get(f"job:{job_id}")
@@ -204,62 +210,38 @@ async def get_recommendation_job_status(
     return data
 
 
-@router.get("", response_model=dict[str, list[RecommendationOut]])
+@router.post("/initialize", response_model=RecommendationInitialization)
+async def initialize_recommendations(
+    current_user: Annotated[User, Depends(require_candidate_account)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RecommendationInitialization:
+    """Idempotently expose every active offer to this candidate's discovery feed."""
+    created, active_offers = await initialize_active_matches(db, current_user.id)
+    return RecommendationInitialization(created=created, active_offers=active_offers)
+
+
+@router.get("", response_model=RecommendationPage)
 async def get_recommendations(
-    current_user: Annotated[User, Depends(require_candidate)],
+    current_user: Annotated[User, Depends(require_candidate_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[tuple[int, int], Depends(get_pagination)],
-) -> dict[str, list[RecommendationOut]]:
+) -> RecommendationPage:
+    """Return a read-only stable page; initialization is an explicit POST."""
     limit, offset = pagination
-    result = await db.execute(
-        select(SavedRecommendation)
-        .options(joinedload(SavedRecommendation.offer))
-        .where(SavedRecommendation.candidate_id == current_user.id)
-        .order_by(SavedRecommendation.ai_score.desc())
-        .limit(limit)
-        .offset(offset)
+    recommendations, total = await list_active_matches(
+        db,
+        current_user.id,
+        limit=limit,
+        offset=offset,
     )
-    recommendations = result.scalars().all()
-
-    active_offers_result = await db.execute(select(Offer).where(Offer.active.is_(True)))
-    active_offers = active_offers_result.scalars().all()
-
-    existing_offer_ids = {
-        recommendation.offer_id for recommendation in recommendations if recommendation.offer is not None
-    }
-    missing_offers = [offer for offer in active_offers if offer.id not in existing_offer_ids]
-
-    if missing_offers:
-        from datetime import datetime as _dt
-
-        db.add_all(
-            [
-                SavedRecommendation(
-                    candidate_id=current_user.id,
-                    offer_id=offer.id,
-                    ai_score=0,
-                    ai_reasoning="Match analysis pending.",
-                    status="pending",
-                    updated_at=_dt.utcnow(),
-                )
-                for offer in missing_offers
-            ]
-        )
-        await db.commit()
-        result = await db.execute(
-            select(SavedRecommendation)
-            .options(joinedload(SavedRecommendation.offer))
-            .where(SavedRecommendation.candidate_id == current_user.id)
-            .order_by(SavedRecommendation.ai_score.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-        recommendations = result.scalars().all()
     await _attach_offer_logos(db, list(recommendations))
-    recommendations_with_logos = recommendations
-    return {
-        "recommendations": [
+    return RecommendationPage(
+        recommendations=[
             RecommendationOut.model_validate(recommendation)
-            for recommendation in recommendations_with_logos
-        ]
-    }
+            for recommendation in recommendations
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(recommendations) < total,
+    )
