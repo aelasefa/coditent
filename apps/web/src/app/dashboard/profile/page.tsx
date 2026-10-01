@@ -169,6 +169,7 @@ export default function ProfileBuilderPage() {
     mutationFn: updateProfile,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
       toast("Profile updated", { variant: "success" });
     },
     onError: (err: unknown) => {

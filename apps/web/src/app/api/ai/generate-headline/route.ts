@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 Given:
 - Skills: ${skillsList}
 - Field of Study: ${fieldOfStudy || "Not specified"}
-Generate a single punchy headline (max 120 characters) specific to skills, highlighting strongest value, action-oriented, confident. Return ONLY headline.`;
+Generate a single punchy headline of 60-100 characters specific to skills, highlighting strongest value, action-oriented, confident. Return ONLY headline.`;
 
     const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
     const response = await fetch(url, {
@@ -24,7 +24,11 @@ Generate a single punchy headline (max 120 characters) specific to skills, highl
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 96,
+          thinkingConfig: { thinkingLevel: "MINIMAL" },
+        },
       }),
     });
 
@@ -47,12 +51,16 @@ Generate a single punchy headline (max 120 characters) specific to skills, highl
     }
 
     const data = await response.json();
+    const finishReason = data.candidates?.[0]?.finishReason;
     const headline = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    if (!headline) {
+    if (!headline || finishReason === "MAX_TOKENS") {
       console.error("[generate-headline] Malformed response", JSON.stringify(data).slice(0, 1000));
-      return NextResponse.json({ error: "Gemini returned empty response" }, { status: 502 });
+      return NextResponse.json({ error: "Gemini returned an incomplete response" }, { status: 502 });
     }
-    return NextResponse.json({ headline: headline.slice(0, 120) });
+    const cleanHeadline = headline.length <= 120
+      ? headline
+      : headline.slice(0, 121).replace(/\s+\S*$/, "").trim();
+    return NextResponse.json({ headline: cleanHeadline });
   } catch (error) {
     console.error("[generate-headline] Internal error", error);
     return NextResponse.json({ error: "Internal server error generating headline" }, { status: 500 });

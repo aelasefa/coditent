@@ -33,6 +33,18 @@ export function trimBio(text: string, max: number = BIO_MAX_LENGTH): string {
   return slice.slice(0, max).trim();
 }
 
+/**
+ * Keep only finished sentences. This safely salvages useful text when an
+ * upstream model stops mid-sentence instead of returning a broken bio.
+ */
+export function completeBioSentences(raw: unknown): string {
+  const text = normalizeBioText(raw);
+  if (!text) return "";
+  if (/[.!?][\"')\]]?$/.test(text)) return text;
+  const match = text.match(/^([\s\S]*[.!?])[\"')\]]?(?:\s+[^.!?]*)?$/);
+  return match?.[1]?.trim() ?? "";
+}
+
 /** Read bio from a response payload. Canonical `bio` first, legacy keys normalized. */
 export function extractBio(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -75,5 +87,6 @@ export function isQualityBio(raw: unknown): boolean {
   if (!/[A-Za-z0-9]/.test(text)) return false;
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 8) return false;
+  if (!/[.!?][\"')\]]?$/.test(text)) return false;
   return true;
 }
