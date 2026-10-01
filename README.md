@@ -210,7 +210,7 @@ CODITENT/
 ├── apps/
 │   ├── api/                    # FastAPI backend
 │   │   ├── app/
-│   │   │   ├── main.py         # app factory, 12 routers, CORS, rate-limit, /health /metrics /protected
+│   │   │   ├── main.py         # app factory, routers, CORS, rate-limit, health/readiness, metrics
 │   │   │   ├── config.py       # pydantic-settings, Supabase-only guard, OAuth both-or-neither
 │   │   │   ├── database.py     # async engine (statement_cache_size=0), sessions, URL normalizer
 │   │   │   ├── db.py           # Supabase admin client factory (backend-only)
@@ -327,7 +327,7 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 
 ## Backend architecture
 
-- **Framework/entry:** FastAPI (`apps/api/app/main.py:17-21`, `title="CODITENT API"`), Python 3.12 (`apps/api/Dockerfile`, CI `setup-python 3.12`). Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001` (`docker-compose.yml:25-27`); healthcheck polls `GET /health`.
+- **Framework/entry:** FastAPI (`apps/api/app/main.py`, `title="CODITENT API"`), Python 3.12 (`apps/api/Dockerfile`, CI `setup-python 3.12`). Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001`. `GET /health` is process liveness only; Compose and deployment gates poll `GET /ready`, which checks PostgreSQL, Redis, and a TTL-backed Celery worker heartbeat with bounded timeouts.
 - **Routers:** 12 mounted with prefixes in `main.py:45-56` (`/auth`, `/candidates`, `/offers`, `/recommendations`, `/companies`, `/requests`, `/invites`, `/applications`, `/assessments`, `/audit`, `/chat`, admin without prefix).
 - **AuthN:** `get_current_user` (`dependencies.py:20-48`) — `HTTPBearer(auto_error=False)` first, `access_token` cookie fallback; `sub`→UUID→`users` row. OpenAPI Bearer scheme so Swagger "Authorize" works.
 - **AuthZ gates** (`dependencies.py:51-177`): `require_platform_admin`, `require_company_user`, `require_company_owner`, `require_company_admin` (OWNER/ADMIN), `require_company_member` (all 5 company roles), `require_candidate`, `require_candidate_account` (strict), `require_recruiter` (COMPANY_USER-approved or legacy), `require_admin` (PLATFORM_ADMIN + legacy ADMIN compat). Write paths double-gate (dependency + `can()`).
@@ -459,7 +459,8 @@ Base: `NEXT_PUBLIC_API_URL` (local `http://localhost:8001`; prod via `/api-proxy
 
 | Method | Endpoint | Purpose | Auth | Frontend usage |
 | ------ | -------- | ------- | ---- | -------------- |
-| GET | `/health` | Liveness (compose healthcheck + deploy gate) | PUB | deploy/ops |
+| GET | `/health` | Process liveness; never probes dependencies | PUB | orchestration |
+| GET | `/ready` | Bounded PostgreSQL, Redis, and worker readiness; returns safe component states and `503` when unavailable | PUB | compose/deploy gate |
 | GET | `/metrics` | Prometheus metrics (`observability.py`) | PUB | ops |
 | GET | `/protected` | Auth probe (returns id/email/role) | any user | debug |
 
@@ -854,14 +855,14 @@ Only commands that work with this repo are shown; there is no `db` service and n
 
 | Service | Technology | Internal port | Exposed port | Depends on |
 | ------- | ---------- | ------------: | -----------: | ---------- |
-| `api` | FastAPI/Uvicorn (`alembic upgrade head && uvicorn ... --port 8001`) | 8001 | `8001:8001` | — (healthcheck `GET /health`, 10 s × 10) |
+| `api` | FastAPI/Uvicorn (`alembic upgrade head && uvicorn ... --port 8001`) | 8001 | `8001:8001` | PostgreSQL + Redis + worker readiness (`GET /ready`) |
 | `worker` | Celery (`celery -A app.tasks worker`) | — | — | `api`, `redis` started |
 | `redis` | `redis:7-alpine` | 6379 | `6379:6379` | — |
 | `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | `3001:3000` | `api` started |
 | `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | `80:80, 443:443` | `web`, `api` started |
 | `vault` | `hashicorp/vault:1.15.0` dev | 8200 | `8200:8200` | — |
 
-Networks/volumes: default compose network; no `db_data` volume (Supabase is the store). Env: `api` uses `apps/api/.env` file + `environment:` overrides (`FRONTEND_URL=http://localhost:3001` locally — note it differs from `.env.example`'s `:3000`; TO-VERIFY which your deploy uses). Production: push to `main` → Actions (web lint+build with `NEXT_PUBLIC_API_URL=http://34.205.255.37`, api import check) → Ansible SSH to EC2, render missing `.env` files only, `docker compose up -d --build`, health-gate `http://127.0.0.1:8001/health`.
+Networks/volumes: default compose network; no `db_data` volume (Supabase is the store). Env: `api` uses `apps/api/.env` file + `environment:` overrides (`FRONTEND_URL=http://localhost:3001` locally — note it differs from `.env.example`'s `:3000`; TO-VERIFY which your deploy uses). Production: push to `main` → Actions (web lint+build, API import check, Ansible syntax check) → SSH deployment, `docker compose up -d --build`, readiness gate `http://127.0.0.1:8001/ready`. The generated deploy helper exits nonzero if readiness never succeeds.
 
 ---
 
@@ -1050,8 +1051,8 @@ Previous README claimed 12 pts including the full User-mgmt major "needs friends
 ```text
 Symptom: frontend cannot connect to API
 Likely cause: NEXT_PUBLIC_API_URL unset (build-time) or backend down
-Check: apps/web/.env.local, browser network (direct :8001 vs /api-proxy), docker compose ps, GET /health
-Debug: curl http://localhost:8001/health; rebuild web after changing NEXT_PUBLIC_* (build arg)
+Check: apps/web/.env.local, browser network (direct :8001 vs /api-proxy), `docker compose ps`, `GET /health`, then `GET /ready`
+Debug: `curl http://localhost:8001/health` confirms the process is alive; `curl -f http://localhost:8001/ready` verifies PostgreSQL, Redis, and the worker. Rebuild web after changing `NEXT_PUBLIC_*` build arguments.
 ```
 
 ```text

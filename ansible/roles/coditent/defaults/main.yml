@@ -14,9 +14,11 @@ compose_pull: false
 compose_remove_orphans: true
 
 # Healthcheck
-healthcheck_url: "http://127.0.0.1:8001/health"
+healthcheck_url: "http://127.0.0.1:8001/ready"
 healthcheck_retries: 15
 healthcheck_delay: 5
+readiness_check_timeout_seconds: 2
+worker_heartbeat_ttl_seconds: 30
 
 # Prune options
 docker_prune_images: true

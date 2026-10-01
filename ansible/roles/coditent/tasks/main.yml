@@ -23,7 +23,7 @@
     - compose
     - deploy
 
-- name: Verify application health
+- name: Verify application readiness
   ansible.builtin.include_tasks: verify.yml
   tags:
     - verify

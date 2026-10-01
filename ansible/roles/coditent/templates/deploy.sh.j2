@@ -16,15 +16,22 @@ git pull origin {{ repo_branch }}
 echo "=== Building and restarting Docker containers ==="
 docker compose up -d --build --remove-orphans
 
-echo "=== Waiting for API health check ==="
+echo "=== Waiting for application readiness ==="
+readiness_verified=false
 for i in {1..15}; do
-    if curl -s -f http://127.0.0.1:{{ api_port }}/health > /dev/null; then
-        echo "API is healthy!"
+    if curl --silent --show-error --fail --max-time 5 http://127.0.0.1:{{ api_port }}/ready > /dev/null; then
+        echo "Application is ready!"
+        readiness_verified=true
         break
     fi
-    echo "Waiting for API... ($i/15)"
+    echo "Waiting for dependencies... ($i/15)"
     sleep 3
 done
+
+if [ "$readiness_verified" != "true" ]; then
+    echo "ERROR: application did not become ready after 15 attempts" >&2
+    exit 1
+fi
 
 echo "=== Pruning unused Docker images ==="
 docker image prune -f

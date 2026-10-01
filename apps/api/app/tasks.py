@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 
 from celery import Celery
+from celery.signals import heartbeat_sent, worker_ready
 
 from app.cache import get_sync_redis
 from app.config import settings
 from app.database import AsyncSessionLocal, engine
+from app.health import record_worker_heartbeat
 from app.observability import get_logger
 from app.services.recommendation_jobs import generate_recommendations_for_candidate, make_cache_key
 
@@ -20,6 +23,23 @@ celery_app.conf.update(
 )
 
 logger = get_logger("ai")
+_last_worker_heartbeat_warning_at = 0.0
+
+
+@worker_ready.connect(weak=False)
+@heartbeat_sent.connect(weak=False)
+def _refresh_worker_heartbeat(**_: object) -> None:
+    global _last_worker_heartbeat_warning_at
+    try:
+        record_worker_heartbeat()
+    except Exception as exc:
+        now = time.monotonic()
+        if now - _last_worker_heartbeat_warning_at >= 60:
+            logger.warning(
+                "worker_heartbeat_publish_failed",
+                exception_type=type(exc).__name__,
+            )
+            _last_worker_heartbeat_warning_at = now
 
 
 def _job_key(job_id: str) -> str:

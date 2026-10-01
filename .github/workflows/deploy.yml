@@ -71,12 +71,36 @@ jobs:
         run: |
           python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"
 
+  ci-ansible:
+    name: CI - Validate Ansible
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible and declared collections
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ansible-core==2.17.14
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Syntax-check playbooks
+        run: bash deploy.sh check
+
   # ========================================================
   # STAGE 2: CD (Deploy to AWS EC2 via Ansible - On push to main)
   # ========================================================
   deploy:
     name: CD - Deploy to AWS EC2 (Ansible)
-    needs: [ci-web, ci-api]
+    needs: [ci-web, ci-api, ci-ansible]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
@@ -94,9 +118,8 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "/opt/coditent/deploy.sh"
 
-      - name: Verify Live Public Health Endpoint
+      - name: Verify Live Public Readiness Endpoint
         run: |
-          echo "Verifying public endpoint http://${{ secrets.EC2_HOST }}/health ..."
-          curl -s -f --retry 5 --retry-delay 3 http://${{ secrets.EC2_HOST }}/health
-          echo "Health check passed!"
-
+          echo "Verifying public readiness endpoint ..."
+          curl --silent --show-error --fail --retry 5 --retry-delay 3 "http://${{ secrets.EC2_HOST }}/ready"
+          echo "Readiness check passed!"

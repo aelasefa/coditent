@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     otp_resend_cooldown_seconds: int = 60
     redis_url: str = "redis://localhost:6380/0"
     recommendation_cache_ttl_seconds: int = 900
+    readiness_check_timeout_seconds: float = Field(default=2.0, ge=0.1, le=10.0)
+    worker_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
     log_level: str = "INFO"
 
     @model_validator(mode="after")

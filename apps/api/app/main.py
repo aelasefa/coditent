@@ -10,6 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.dependencies import get_current_user
+from app.health import router as health_router
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
@@ -52,6 +53,7 @@ app.include_router(assessments.router, prefix="/assessments", tags=["Assessments
 app.include_router(audit.router, prefix="/audit", tags=["Audit"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(two_factor.router, prefix="/auth/2fa", tags=["Two-Factor Authentication"])
+app.include_router(health_router, tags=["Health"])
 
 
 
@@ -67,13 +69,6 @@ async def on_startup():
         })
     else:
         logger.info("hashicorp_vault_offline_using_env_fallback")
-
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
-
 
 @app.get("/metrics")
 async def metrics() -> Response:

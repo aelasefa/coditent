@@ -48,6 +48,8 @@ linkedin_client_secret: ""
 linkedin_redirect_uri: "http://{{ ansible_host | default('localhost') }}:8001/auth/sso/linkedin/callback"
 
 # Healthcheck configuration
-healthcheck_url: "http://127.0.0.1:8001/health"
+healthcheck_url: "http://127.0.0.1:8001/ready"
 healthcheck_retries: 15
 healthcheck_delay: 5
+readiness_check_timeout_seconds: 2
+worker_heartbeat_ttl_seconds: 30
