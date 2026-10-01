@@ -4,7 +4,7 @@ Run: python -m pytest tests/test_match_scoring.py -v
 (from apps/api, with pytest, pytest-asyncio, sqlalchemy, aiosqlite installed)
 
 Covers: new-offer eligibility, completed persistence, API shape, no-regen of
-completed rows, FAILED (never permanent PENDING, never fake scores), retry
+completed rows, local provider fallback, retry
 recovery, apply-independence, candidate isolation, company boundaries.
 """
 import sys
@@ -226,6 +226,46 @@ async def test_recommendation_api_returns_stored_score(db: AsyncSession) -> None
 
 
 @pytest.mark.asyncio
+async def test_profile_change_invalidates_only_that_candidates_scores(db: AsyncSession) -> None:
+    candidate = await _candidate(db, "profile-change@test.local")
+    other_candidate = await _candidate(db, "other-profile@test.local")
+    offer = await _offer(db, candidate.id)
+    db.add_all(
+        [
+            SavedRecommendation(
+                candidate_id=candidate.id,
+                offer_id=offer.id,
+                ai_score=84,
+                ai_reasoning="Old profile score.",
+                status="completed",
+            ),
+            SavedRecommendation(
+                candidate_id=other_candidate.id,
+                offer_id=offer.id,
+                ai_score=73,
+                ai_reasoning="Other candidate score.",
+                status="completed",
+            ),
+        ]
+    )
+    await db.commit()
+
+    await match_scoring.invalidate_candidate_matches(db, candidate.id)
+    await db.commit()
+
+    rows = (
+        await db.execute(
+            select(SavedRecommendation).where(SavedRecommendation.offer_id == offer.id)
+        )
+    ).scalars().all()
+    mine = next(row for row in rows if row.candidate_id == candidate.id)
+    other = next(row for row in rows if row.candidate_id == other_candidate.id)
+    assert (mine.ai_score, mine.status, mine.error) == (0, "pending", None)
+    assert mine.ai_reasoning == "Match analysis pending after profile update."
+    assert (other.ai_score, other.status) == (73, "completed")
+
+
+@pytest.mark.asyncio
 async def test_completed_analysis_is_not_regenerated(db: AsyncSession) -> None:
     user = await _candidate(db)
     offer = await _offer(db, user.id)
@@ -261,7 +301,7 @@ async def test_completed_analysis_is_not_regenerated(db: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ai_failure_produces_failed_not_pending(db: AsyncSession) -> None:
+async def test_ai_failure_uses_local_profile_fallback(db: AsyncSession) -> None:
     user = await _candidate(db)
     offer = await _offer(db, user.id)
 
@@ -271,8 +311,7 @@ async def test_ai_failure_produces_failed_not_pending(db: AsyncSession) -> None:
     monkey = pytest.MonkeyPatch()
     monkey.setattr(ai_module, "score_single_offer", _fail)
     try:
-        with pytest.raises(ValueError):
-            await match_scoring.score_single_match(db, user.id, offer.id)
+        result = await match_scoring.score_single_match(db, user.id, offer.id)
     finally:
         monkey.undo()
     row = (
@@ -282,14 +321,15 @@ async def test_ai_failure_produces_failed_not_pending(db: AsyncSession) -> None:
             )
         )
     ).scalar_one()
-    assert row.status == "failed"  # never stuck in pending/processing
-    assert row.ai_score == 0  # no fake score invented
-    assert "attente" not in (row.ai_reasoning or "").lower()
-    assert row.error
+    assert result == {"status": "completed", "score": 50}
+    assert row.status == "completed"
+    assert row.ai_score == 50  # field + React skill
+    assert "local estimate" in row.ai_reasoning.lower()
+    assert row.error is None
 
 
 @pytest.mark.asyncio
-async def test_ai_exception_stores_safe_reason(db: AsyncSession) -> None:
+async def test_ai_exception_uses_fallback_without_leaking_secret(db: AsyncSession) -> None:
     user = await _candidate(db)
     offer = await _offer(db, user.id)
 
@@ -299,8 +339,7 @@ async def test_ai_exception_stores_safe_reason(db: AsyncSession) -> None:
     monkey = pytest.MonkeyPatch()
     monkey.setattr(ai_module, "score_single_offer", _boom)
     try:
-        with pytest.raises(ValueError):
-            await match_scoring.score_single_match(db, user.id, offer.id)
+        await match_scoring.score_single_match(db, user.id, offer.id)
     finally:
         monkey.undo()
     row = (
@@ -310,8 +349,9 @@ async def test_ai_exception_stores_safe_reason(db: AsyncSession) -> None:
             )
         )
     ).scalar_one()
-    assert row.status == "failed"
-    assert "sk-live-leaked" not in (row.error or "")
+    assert row.status == "completed"
+    assert row.error is None
+    assert "sk-live-leaked" not in (row.ai_reasoning or "")
 
 
 @pytest.mark.asyncio

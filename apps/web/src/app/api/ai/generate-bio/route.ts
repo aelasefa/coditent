@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BIO_MAX_LENGTH, extractGeminiText, isQualityBio, trimBio } from "@/lib/bio-utils";
+import { BIO_MAX_LENGTH, completeBioSentences, extractGeminiText, isQualityBio, trimBio } from "@/lib/bio-utils";
 
 const TOTAL_TIMEOUT_MS = 30000;
 const MAX_ATTEMPTS = 2;
@@ -55,7 +55,7 @@ Given these details:
 - Interests: ${interests || "Not specified"}
 - Career Goals: ${careerGoals || "Not specified"}
 
-Write a concise, impactful professional bio (max 500 characters, complete finished sentences only) that:
+Write a concise, impactful professional bio of 2-3 complete sentences and 250-450 characters that:
 1. Opens with strongest value proposition
 2. Showcases 2-3 concrete achievements or impacts
 3. Mentions key skills in context
@@ -84,7 +84,11 @@ Return ONLY the bio text, no quotes, no code fences, nothing else.`;
           },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.8, maxOutputTokens: 600 },
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 256,
+              thinkingConfig: { thinkingLevel: "MINIMAL" },
+            },
           }),
           signal: controller.signal,
         });
@@ -120,7 +124,8 @@ Return ONLY the bio text, no quotes, no code fences, nothing else.`;
         data = null;
       }
       const finishReason = (data as { candidates?: Array<{ finishReason?: string }> } | null)?.candidates?.[0]?.finishReason;
-      const bio = extractGeminiText(data);
+      const rawBio = extractGeminiText(data);
+      const bio = completeBioSentences(rawBio);
 
       if (isQualityBio(bio)) {
         const trimmed = trimBio(bio, BIO_MAX_LENGTH);
@@ -133,7 +138,7 @@ Return ONLY the bio text, no quotes, no code fences, nothing else.`;
 
       // Only empty/quality failures reach here — the single allowed retry case.
       if (attempt < MAX_ATTEMPTS && !controller.signal.aborted) {
-        console.error(`[generate-bio] attempt ${attempt} failed quality (len=${bio.length} finishReason=${finishReason}), retrying once`);
+        console.error(`[generate-bio] attempt ${attempt} failed quality (len=${rawBio.length} finishReason=${finishReason}), retrying once`);
         continue;
       }
       console.error(`[generate-bio] unusable response after ${attempt} attempt(s) finishReason=${finishReason} after ${Date.now() - started}ms`);
