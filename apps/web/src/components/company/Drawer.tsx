@@ -8,6 +8,8 @@ interface DrawerProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  headerLeading?: React.ReactNode;
+  headerMeta?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: "sm" | "md" | "lg" | "xl";
@@ -26,6 +28,8 @@ export function Drawer({
   onClose,
   title,
   subtitle,
+  headerLeading,
+  headerMeta,
   children,
   footer,
   width = "md",
@@ -38,6 +42,8 @@ export function Drawer({
       onClose={onClose}
       title={title}
       description={subtitle}
+      headerLeading={headerLeading}
+      headerMeta={headerMeta}
       footer={footer}
       side="right"
       size={sizeMap[width]}

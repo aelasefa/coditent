@@ -87,54 +87,46 @@ export function CandidateDetail({
 
   return (
     <div className="company-candidate-detail">
-      <section className="company-candidate-profile-header">
-        <div className="flex items-start gap-3">
-        <Avatar name={candidateName(app)} size="lg" src={c?.avatar_url} />
-        <div className="min-w-0 flex-1">
-          <h3 className="break-words text-lg font-bold text-foreground">{candidateName(app)}</h3>
-          <p className="break-words text-[13px] text-muted-foreground">
-            {jobTitle}
-            {c?.email ? ` · ${c.email}` : ""}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <StatusBadge status={app.status} size="sm" />
-            <AiScore app={app} />
-          </div>
-        </div>
-        </div>
-      </section>
-
       {canMoveStage && (
-        <section className="company-candidate-stage-actions" aria-label="Stage actions">
-          {["under_review", "shortlisted", "interview", "accepted"].map((st) => (
-            <Button
-              key={st}
-              size="sm"
-              variant={app.status === st ? "primary" : "outline"}
-              disabled={stagePending}
-              loading={stagePending}
-              onClick={() => onStage(st)}
-            >
-              {({ under_review: "Under review", shortlisted: "Shortlisted", interview: "Interview", accepted: "Hired" } as Record<string, string>)[st]}
-            </Button>
-          ))}
-          {rejectConfirm ? (
-            <span className="inline-flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-background px-2 py-1">
-              <span className="text-xs font-medium text-danger">Reject candidate?</span>
-              <Button size="sm" variant="danger" disabled={stagePending} onClick={onReject}>
-                Confirm
+        <section className="company-candidate-stage-actions" aria-labelledby="candidate-stage-actions-title">
+          <div className="company-candidate-stage-actions-heading">
+            <div>
+              <p className="company-detail-label">Pipeline controls</p>
+              <h3 id="candidate-stage-actions-title">Move this application</h3>
+            </div>
+            <StatusBadge status={app.status} size="sm" />
+          </div>
+          <div className="company-candidate-stage-actions-controls">
+            {["under_review", "shortlisted", "interview", "accepted"].map((st) => (
+              <Button
+                key={st}
+                size="sm"
+                variant={app.status === st ? "primary" : "outline"}
+                disabled={stagePending}
+                loading={stagePending}
+                onClick={() => onStage(st)}
+              >
+                {({ under_review: "Under review", shortlisted: "Shortlisted", interview: "Interview", accepted: "Hired" } as Record<string, string>)[st]}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(false)}>
-                Keep
-              </Button>
-            </span>
-          ) : (
-            app.status !== "rejected" && (
-              <Button size="sm" variant="danger" onClick={() => setRejectConfirm(true)}>
-                Reject
-              </Button>
-            )
-          )}
+            ))}
+            {rejectConfirm ? (
+              <span className="company-candidate-reject-confirm">
+                <span>Reject candidate?</span>
+                <Button size="sm" variant="danger" disabled={stagePending} onClick={onReject}>
+                  Confirm
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(false)}>
+                  Keep
+                </Button>
+              </span>
+            ) : (
+              app.status !== "rejected" && (
+                <Button size="sm" variant="danger" onClick={() => setRejectConfirm(true)}>
+                  Reject
+                </Button>
+              )
+            )}
+          </div>
         </section>
       )}
 
@@ -186,16 +178,23 @@ export function CandidateDetail({
             {
               id: "skills",
               label: "Skills",
-              content: skills.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {skills.map((s) => (
-                    <span key={s} className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-medium text-foreground-secondary">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No profile skills shared for this candidate.</p>
+              content: (
+                <section className="candidate-profile-skills" aria-label="Candidate skills">
+                  <div className="candidate-profile-skills-heading">
+                    <h3>Skills & expertise</h3>
+                    <p>Skills shared on the candidate’s profile.</p>
+                  </div>
+                  {skills.length ? (
+                    <ul className="candidate-profile-skills-list">
+                      {skills.map((skill, index) => <li key={`${skill}-${index}`}>{skill}</li>)}
+                    </ul>
+                  ) : (
+                    <div className="candidate-profile-skills-empty">
+                      <p>No skills shared yet</p>
+                      <p>This candidate has not added skills to their profile.</p>
+                    </div>
+                  )}
+                </section>
               ),
             },
             {
@@ -203,9 +202,12 @@ export function CandidateDetail({
               label: "Assessments",
               content: (
                 <div className="space-y-4">
-                  <div className="mb-4 rounded-xl border border-border-subtle p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-foreground">AI screening</p>
+                  <div className="candidate-screening">
+                  <div className="candidate-screening-heading">
+                    <div>
+                      <h3>AI screening</h3>
+                      <p>AI-generated application review</p>
+                    </div>
                     <AiScore app={app} />
                   </div>
                   {app.ai_status === "failed" ? (
@@ -218,13 +220,19 @@ export function CandidateDetail({
                       ) : null}
                     </div>
                   ) : screening ? (
-                    <div className="mt-2 space-y-1.5">
-                      <p className="text-[13px] leading-relaxed text-foreground-secondary">{screening.summary}</p>
+                    <div className="candidate-screening-report">
+                      <p className="candidate-screening-summary">{screening.summary}</p>
                       {screening.strengths.length > 0 ? (
-                        <p className="text-[13px] text-foreground-secondary"><span className="font-semibold text-foreground">Strengths: </span>{screening.strengths.join("; ")}</p>
+                        <section className="candidate-screening-findings" aria-label="AI screening strengths">
+                          <h4>Strengths</h4>
+                          <ul>{screening.strengths.map((strength, index) => <li key={index}>{strength}</li>)}</ul>
+                        </section>
                       ) : null}
                       {screening.gaps.length > 0 ? (
-                        <p className="text-[13px] text-foreground-secondary"><span className="font-semibold text-foreground">Gaps: </span>{screening.gaps.join("; ")}</p>
+                        <section className="candidate-screening-findings candidate-screening-gaps" aria-label="AI screening gaps">
+                          <h4>Gaps</h4>
+                          <ul>{screening.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>
+                        </section>
                       ) : null}
                     </div>
                   ) : (
@@ -234,7 +242,7 @@ export function CandidateDetail({
                   )}
                 </div>
                   {assessment ? (
-                <div className="space-y-2 text-sm">
+                <div className="candidate-assessment-detail">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Status</span>
                     <StatusBadge status={assessment.status} size="sm" />
@@ -246,7 +254,7 @@ export function CandidateDetail({
                     </span>
                   </div>
                   {assessment.report ? (
-                    <div className="rounded-lg bg-surface-secondary/50 p-3">
+                    <div className="candidate-assessment-report">
                       <p className="text-xs font-semibold text-foreground">AI analysis</p>
                       <p className="mt-1 text-[13px] leading-relaxed text-foreground-secondary">{assessment.report}</p>
                     </div>
@@ -254,14 +262,17 @@ export function CandidateDetail({
                     <p className="text-[13px] text-muted-foreground">No AI analysis recorded for this assessment.</p>
                   )}
                   {app.ai_report ? (
-                    <div className="rounded-lg bg-surface-secondary/50 p-3">
+                    <div className="candidate-assessment-report">
                       <p className="text-xs font-semibold text-foreground">Application AI note</p>
                       <p className="mt-1 text-[13px] text-foreground-secondary">{app.ai_report}</p>
                     </div>
                   ) : null}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No practical assessment registered for this application.</p>
+                <section className="candidate-assessment-notice" aria-label="Practical assessment">
+                  <h3>Practical assessment</h3>
+                  <p>No practical assessment registered for this application.</p>
+                </section>
               )}
                 </div>
               ),
@@ -269,47 +280,72 @@ export function CandidateDetail({
             {
               id: "resume",
               label: "Resume",
-              content: cvHref ? (
-                <div className="space-y-2">
-                  {cvFilename ? (
-                    <p className="truncate text-[13px] font-medium text-foreground" title={cvFilename}>
-                      {cvFilename}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      href={cvHref}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
-                    >
-                      Open CV
-                    </a>
-                    <a
-                      href={cvHref}
-                      download={cvFilename ?? true}
-                      className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-surface-secondary"
-                    >
-                      Download
-                    </a>
+              content: (
+                <section className="candidate-resume" aria-label="Candidate resume">
+                  <div className="candidate-resume-heading">
+                    <h3>Resume</h3>
+                    <p>The CV attached to this application.</p>
                   </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No CV attached to this application.</p>
+                  {cvHref ? (
+                    <>
+                      <div className="candidate-resume-file">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5Z" strokeLinejoin="round" />
+                          <path d="M14 3v5h5M8 12h8M8 16h5" strokeLinecap="round" />
+                        </svg>
+                        <div>
+                          <p className="company-detail-label">Attached document</p>
+                          <p className="candidate-resume-filename">{cvFilename || "Candidate CV"}</p>
+                        </div>
+                      </div>
+                      <div className="candidate-resume-actions">
+                        <a href={cvHref} target="_blank" rel="noreferrer noopener" className="candidate-resume-open">Open CV <span className="sr-only">in a new tab</span></a>
+                        <a href={cvHref} download={cvFilename ?? true} className="candidate-resume-download">Download</a>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="candidate-resume-empty">
+                      <p>No CV attached</p>
+                      <p>No resume is available for this application.</p>
+                    </div>
+                  )}
+                </section>
               ),
             },
             {
               id: "messages",
               label: "Messages",
-              content: chatUnlocked ? (
-                <a
-                  href={`/chat/recruitment/${app.id}`}
-                  className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
-                >
-                  Open chat with {candidateName(app)}
-                </a>
-              ) : (
-                <p className="text-sm text-muted-foreground">Chat opens after candidate moves to next stage.</p>
+              content: (
+                <section className="candidate-messages" aria-label="Recruitment messages">
+                  <div className="candidate-messages-heading">
+                    <div>
+                      <h3>Messages</h3>
+                      <p>Recruitment conversation for this application.</p>
+                    </div>
+                    <span className={chatUnlocked ? "candidate-messages-status candidate-messages-available" : "candidate-messages-status"}>
+                      {chatUnlocked ? "Available" : "Locked"}
+                    </span>
+                  </div>
+                  <div className="candidate-messages-body">
+                    <div className="candidate-messages-person">
+                      <Avatar name={candidateName(app)} size="md" src={c?.avatar_url} />
+                      <div>
+                        <p>{candidateName(app)}</p>
+                        <p>{jobTitle}</p>
+                      </div>
+                    </div>
+                    <p className="candidate-messages-description">
+                      {chatUnlocked
+                        ? "Continue the conversation and coordinate next steps with this candidate."
+                        : "Chat opens after the candidate moves to the next stage."}
+                    </p>
+                    {chatUnlocked ? (
+                      <a href={`/chat/recruitment/${app.id}`} className="candidate-messages-link">
+                        Open chat <span className="sr-only">with {candidateName(app)}</span>
+                      </a>
+                    ) : null}
+                  </div>
+                </section>
               ),
             },
           ]}

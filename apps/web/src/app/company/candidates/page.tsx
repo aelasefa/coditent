@@ -10,12 +10,13 @@ import { EmptyState } from "@/components/company/EmptyState";
 import { Drawer } from "@/components/company/Drawer";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { getApplications, getMe, updateApplicationStatus, getAssessments, getApiBaseUrl, listRecruitmentChats } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import type { ApplicationItem, AssessmentItem, Offer } from "@/lib/types";
 import { HIRING_STAGES, candidateName, hiringStage, jobTitleFor } from "@/components/company/hiring";
-import { AiScore, CandidateCard } from "@/components/company/CandidateCard";
+import { CandidateCard } from "@/components/company/CandidateCard";
 import { CandidateDetail } from "@/components/company/CandidateDetail";
 import { FiSearch, FiUsers } from "react-icons/fi";
 
@@ -134,7 +135,7 @@ function PipelineContent() {
           center
           eyebrow={activeJob ? "Job pipeline" : "Hiring pipeline"}
           title={activeJob ? `Candidates for ${activeJob.title}.` : "Every candidate, in clear view."}
-          subtitle={activeJob ? `${filtered.length} applicants for this role · review each profile and move the process forward.` : `${apps.length} applicants in one workspace · review each profile and move the process forward.`}
+          subtitle={activeJob ? `${filtered.length} applicants for this role - review each profile and move the process forward.` : `${apps.length} applicants in one workspace - review each profile and move the process forward.`}
         />
 
         <div className="company-results-toolbar company-candidate-results-toolbar">
@@ -218,11 +219,12 @@ function PipelineContent() {
                       type="button"
                       onClick={() => setSelectedId(app.id)}
                       aria-label={`Open ${candidateName(app)} in ${g.stage}`}
-                      className="block w-full rounded-lg border border-border-subtle bg-surface p-2.5 text-left hover:border-border-strong"
+                      aria-haspopup="dialog"
+                      className="company-board-candidate-card"
                     >
-                      <span className="block truncate text-[13px] font-semibold text-foreground">{candidateName(app)}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">{jobTitleFor(app, offersById)}</span>
-                      <span className="mt-1.5 block"><AiScore app={app} /></span>
+                      <span className="company-board-candidate-name">{candidateName(app)}</span>
+                      <span className="company-board-candidate-role">{jobTitleFor(app, offersById)}</span>
+                      <span className="company-board-candidate-action">View profile</span>
                     </button>
                   ))}
                   {g.items.length === 0 && <p className="px-1 py-2 text-[11px] text-muted-foreground">Empty</p>}
@@ -237,15 +239,10 @@ function PipelineContent() {
           isOpen={!!selected}
           onClose={() => setSelectedId(null)}
           title={selected ? candidateName(selected) : "Candidate"}
-          subtitle={selected ? `${jobTitleFor(selected, offersById)} · ${selected.status.replace(/_/g, " ")}` : undefined}
+          subtitle={selected ? jobTitleFor(selected, offersById) : undefined}
+          headerLeading={selected ? <Avatar name={candidateName(selected)} size="lg" src={selected.candidate?.avatar_url} /> : undefined}
+          headerMeta={selected ? <StatusBadge status={selected.status} size="sm" /> : undefined}
           width="lg"
-          footer={
-            selected ? (
-              <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                Stage <StatusBadge status={selected.status} size="sm" />
-              </span>
-            ) : undefined
-          }
         >
           {selected && (
             <CandidateDetail
