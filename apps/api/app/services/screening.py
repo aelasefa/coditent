@@ -122,7 +122,10 @@ async def screen_application(db: AsyncSession, application_id: UUID) -> dict[str
     if profile is None and not app.cv_url:
         raise ValueError("No candidate profile or CV to screen")
 
-    cv_text = _cv_text(app.cv_url)
+    # Supabase downloads and PDF/DOCX parsing are synchronous. Keep both out
+    # of the worker's event loop so database heartbeats and other async work
+    # are not stalled by a slow storage request or document parser.
+    cv_text = await asyncio.to_thread(_cv_text, app.cv_url)
     prompt = f"""You are a recruiting screener. Score how well this candidate fits the job.
 Return ONLY one valid JSON object, no other text. Keep the whole object compact:
 {{"score": 0-100, "summary": "1-2 sentences, max 300 characters", "strengths": ["..."], "gaps": ["..."]}}

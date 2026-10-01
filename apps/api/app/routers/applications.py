@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
@@ -261,7 +262,7 @@ async def download_application_cv(
     from app.services.cv_storage import CVStorageError, download_cv
 
     try:
-        data = download_cv(cv_path)
+        data = await asyncio.to_thread(download_cv, cv_path)
     except CVStorageError:
         raise HTTPException(status_code=404, detail="CV not found")
 

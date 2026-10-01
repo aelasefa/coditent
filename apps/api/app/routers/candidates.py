@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Annotated
@@ -24,10 +25,12 @@ from app.schemas import (
 from app.services.cv_extraction import AIExtractionError, extract_profile_from_text
 from app.services.cv_parser import (
     MAX_CV_BYTES,
+    CVParseTimeoutError,
+    CVResourceLimitError,
     NoExtractableTextError,
-    extract_text,
-    get_pdf_page_count,
+    extract_text_with_meta_async,
     validate_cv_file,
+    validate_cv_content_async,
 )
 from app.services.cv_storage import (
     CVStorageError,
@@ -36,6 +39,7 @@ from app.services.cv_storage import (
     download_cv,
     upload_cv,
 )
+from app.services.upload_limits import UploadTooLargeError, read_upload_limited
 
 router = APIRouter()
 logger = get_logger("candidates")
@@ -234,16 +238,29 @@ async def upload_candidate_cv(
 ) -> CVMetaOut:
     filename = file.filename or ""
     try:
-        # Read first to know size (Streamlit-style); cap at MAX+1 to detect oversize
-        data = await file.read()
+        data = await read_upload_limited(file, MAX_CV_BYTES)
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 5MB",
+        ) from exc
     finally:
         await file.close()
     try:
         ext = validate_cv_file(filename, file.content_type, len(data))
+        await validate_cv_content_async(data, ext)
+    except CVResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except CVParseTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CV could not be validated within the processing limit",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if len(data) > MAX_CV_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large. Maximum size is 5MB")
 
     profile = await _get_profile(db, current_user.id)
     # Delete previous CV first (best effort, ownership enforced)
@@ -251,14 +268,14 @@ async def upload_candidate_cv(
     if old_path:
         try:
             assert_owns_path(old_path, str(current_user.id))
-            delete_cv(old_path)
+            await asyncio.to_thread(delete_cv, old_path)
         except CVStorageError:
             pass
 
     base = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     path = f"{current_user.id}/{uuid_lib.uuid4().hex}_{_safe_filename(base)}.{ext}"
     try:
-        upload_cv(path, data, CONTENT_TYPE_BY_EXT[ext])
+        await asyncio.to_thread(upload_cv, path, data, CONTENT_TYPE_BY_EXT[ext])
     except CVStorageError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
@@ -301,7 +318,7 @@ async def download_candidate_cv(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     try:
         assert_owns_path(profile.cv_url, str(current_user.id))
-        data = download_cv(profile.cv_url)
+        data = await asyncio.to_thread(download_cv, profile.cv_url)
     except CVStorageError as exc:
         msg = str(exc)
         if msg == "Forbidden":
@@ -327,7 +344,7 @@ async def delete_candidate_cv(
         return None
     try:
         assert_owns_path(profile.cv_url, str(current_user.id))
-        delete_cv(profile.cv_url)
+        await asyncio.to_thread(delete_cv, profile.cv_url)
     except CVStorageError as exc:
         if str(exc) == "Forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
@@ -353,7 +370,7 @@ async def parse_candidate_cv(
         )
     try:
         assert_owns_path(profile.cv_url, str(current_user.id))
-        data = download_cv(profile.cv_url)
+        data = await asyncio.to_thread(download_cv, profile.cv_url)
     except CVStorageError as exc:
         if str(exc) == "Forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
@@ -365,19 +382,28 @@ async def parse_candidate_cv(
     filename = profile.cv_url.rsplit("/", 1)[-1]
     logger.info("cv_parse_downloaded", file_bytes=len(data))
     try:
-        text = extract_text(filename, data)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "CV_FILE_READ_ERROR", "message": str(exc)},
-        ) from exc
+        text, pages = await extract_text_with_meta_async(filename, data)
     except NoExtractableTextError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "CV_NO_TEXT", "message": str(exc)},
         ) from exc
+    except CVResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"code": "CV_RESOURCE_LIMIT", "message": str(exc)},
+        ) from exc
+    except CVParseTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "CV_PARSE_TIMEOUT", "message": str(exc)},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "CV_FILE_READ_ERROR", "message": str(exc)},
+        ) from exc
 
-    pages = get_pdf_page_count(data)
     logger.info("cv_parse_text", text_chars=len(text), pages=pages if pages is not None else -1)
     try:
         extracted, warnings, ai_meta = await extract_profile_from_text(text)

@@ -5,7 +5,9 @@ Run: python3 -m pytest tests/test_cv_upload.py -v
 import asyncio
 import io
 import sys
+import time
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -49,8 +51,14 @@ from app.services.cv_extraction import (  # noqa: E402
     parse_ai_response,
 )
 from app.services import cv_extraction as ce_mod  # noqa: E402
+from app.services import cv_parser as cp_mod  # noqa: E402
 from app.services.cv_parser import (  # noqa: E402
+    MAX_DOCX_ENTRY_BYTES,
+    MAX_EXTRACTED_TEXT_CHARS,
+    MAX_PDF_PAGES,
     MAX_CV_BYTES,
+    CVParseTimeoutError,
+    CVResourceLimitError,
     NoExtractableTextError,
     check_magic_bytes,
     extract_text,
@@ -60,7 +68,10 @@ from app.services.cv_parser import (  # noqa: E402
     normalize_skills,
     normalize_url,
     clamp_years,
+    validate_docx_bounds,
+    validate_cv_content,
     validate_cv_file,
+    validate_pdf_bounds,
 )
 from app.services.cv_storage import assert_owns_path  # noqa: E402
 
@@ -118,6 +129,12 @@ def test_invalid_file_type():
         validate_cv_file("cv.exe", "application/octet-stream", 100)
     with pytest.raises(ValueError, match="Only PDF and DOCX"):
         extract_text("cv.txt", b"hello")
+    with pytest.raises(ValueError, match="content type does not match"):
+        validate_cv_file(
+            "cv.pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            100,
+        )
 
 
 # 4. Oversized file
@@ -380,6 +397,79 @@ def test_pdf_page_count():
     assert get_pdf_page_count(b"not a pdf") is None
 
 
+def test_pdf_page_limit_is_enforced_before_extraction():
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(MAX_PDF_PAGES + 1):
+        writer.add_blank_page(width=100, height=100)
+    buf = io.BytesIO()
+    writer.write(buf)
+    with pytest.raises(CVResourceLimitError, match="maximum"):
+        validate_pdf_bounds(buf.getvalue())
+
+
+def test_encrypted_pdf_is_rejected_before_extraction():
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.encrypt("secret")
+    buf = io.BytesIO()
+    writer.write(buf)
+    with pytest.raises(ValueError, match="Encrypted PDFs"):
+        validate_pdf_bounds(buf.getvalue())
+
+
+def test_docx_requires_real_office_structure():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("payload.txt", "not a Word document")
+    with pytest.raises(ValueError, match="DOCX structure"):
+        validate_docx_bounds(buf.getvalue())
+
+
+def test_docx_rejects_fake_required_entries():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "not XML")
+        archive.writestr("word/document.xml", "not XML")
+    with pytest.raises(ValueError, match="Invalid DOCX"):
+        validate_cv_content(buf.getvalue(), "docx")
+
+
+def test_docx_rejects_highly_compressed_oversized_entry():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("word/document.xml", "x" * (MAX_DOCX_ENTRY_BYTES + 1))
+    assert len(buf.getvalue()) < MAX_CV_BYTES
+    with pytest.raises(CVResourceLimitError, match="oversized archive entry"):
+        validate_docx_bounds(buf.getvalue())
+
+
+def test_extracted_text_is_bounded_during_accumulation():
+    data = make_docx_bytes(["x" * 1_000 for _ in range(40)])
+    text = extract_text("cv.docx", data)
+    assert len(text) <= MAX_EXTRACTED_TEXT_CHARS
+
+
+def test_parser_timeout_is_reported_deterministically(monkeypatch):
+    def slow_parse(_filename: str, _data: bytes):
+        time.sleep(0.05)
+        return "unused", None
+
+    monkeypatch.setattr(cp_mod, "extract_text_with_meta", slow_parse)
+    with pytest.raises(CVParseTimeoutError, match="time limit"):
+        asyncio.run(
+            cp_mod.extract_text_with_meta_async(
+                "cv.pdf",
+                b"%PDF-1.7",
+                timeout_s=0.001,
+            )
+        )
+
+
 def test_router_error_codes():
     base = Path(__file__).resolve().parents[1]
     router_src = (base / "app" / "routers" / "candidates.py").read_text()
@@ -394,7 +484,7 @@ def test_router_error_codes():
 
 def test_frontend_review_and_retry():
     page = (Path(__file__).resolve().parents[2] / "web" / "src" / "app" / "dashboard" / "profile" / "page.tsx").read_text()
-    assert "Retry extraction" in page
+    assert "Retry reading" in page
     assert "runParse" in page
-    assert "Review extracted info" in page
+    assert "Review details from your CV" in page
     assert "getApiError" in page

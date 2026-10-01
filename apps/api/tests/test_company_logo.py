@@ -10,6 +10,7 @@ Run: python3 -m pytest tests/test_company_logo.py -v
 """
 import sys
 import types
+import io
 from pathlib import Path
 
 import pytest
@@ -49,11 +50,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.permissions import can  # noqa: E402
 from app.services.company_logo import (  # noqa: E402
     ALLOWED_EXTENSIONS,
+    MAX_LOGO_WIDTH,
     MAX_LOGO_BYTES,
+    LogoResourceLimitError,
     LogoStorageError,
     assert_company_logo_path,
     build_logo_path,
     check_logo_magic_bytes,
+    validate_logo_content,
     validate_logo_file,
 )
 
@@ -81,6 +85,33 @@ def test_supported_formats():
     assert ALLOWED_EXTENSIONS == {"png", "jpg", "jpeg", "webp"}
 
 
+def _real_image_bytes(fmt: str = "PNG", size: tuple[int, int] = (32, 32)) -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", size, "#6d28d9").save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def test_logo_content_is_actually_decoded_and_format_checked():
+    validate_logo_content(_real_image_bytes("PNG"), "png")
+    with pytest.raises(ValueError, match="Invalid JPEG"):
+        validate_logo_content(_real_image_bytes("PNG"), "jpg")
+    with pytest.raises(ValueError, match="corrupted"):
+        validate_logo_content(PNG, "png")
+
+
+def test_logo_dimensions_are_bounded_before_storage():
+    data = _real_image_bytes("PNG", (MAX_LOGO_WIDTH + 1, 1))
+    with pytest.raises(LogoResourceLimitError, match="dimensions"):
+        validate_logo_content(data, "png")
+
+
+def test_logo_decoder_enforces_the_byte_limit_too():
+    with pytest.raises(LogoResourceLimitError, match="2MB"):
+        validate_logo_content(PNG + b"x" * MAX_LOGO_BYTES, "png")
+
+
 # 2. Logo URL saved correctly: router persists the storage path on the Company row.
 def test_upload_persists_path_on_company():
     src = (BASE / "app" / "routers" / "companies.py").read_text()
@@ -94,14 +125,14 @@ def test_replace_deletes_old_logo():
     src = (BASE / "app" / "routers" / "companies.py").read_text()
     upload_fn = src.split("async def upload_company_logo", 1)[1].split("@router", 1)[0]
     assert "old_path = company.logo_url" in upload_fn
-    assert "delete_logo(old_path)" in upload_fn
+    assert "asyncio.to_thread(delete_logo, old_path)" in upload_fn
 
 
 # 4. Logo can be removed: delete clears storage and nulls the column.
 def test_remove_clears_logo():
     src = (BASE / "app" / "routers" / "companies.py").read_text()
     delete_fn = src.split("async def delete_company_logo", 1)[1].split("@router", 1)[0]
-    assert "delete_logo(company.logo_url)" in delete_fn
+    assert "asyncio.to_thread(delete_logo, company.logo_url)" in delete_fn
     assert "company.logo_url = None" in delete_fn
     assert "404" in delete_fn  # missing logo -> 404, not 500
 
@@ -114,6 +145,8 @@ def test_invalid_file_type_rejected():
         validate_logo_file("logo.exe", "application/octet-stream", 100)
     with pytest.raises(ValueError, match="Only PNG, JPG, and WebP"):
         validate_logo_file("logo.pdf", "application/pdf", 100)
+    with pytest.raises(ValueError, match="content type does not match"):
+        validate_logo_file("logo.png", "image/jpeg", 100)
     with pytest.raises(ValueError, match="PNG, JPG, (or|and) WebP"):
         validate_logo_file("logo", "image/png", 100)
     with pytest.raises(ValueError, match="Only PNG, JPG, and WebP"):
@@ -198,7 +231,7 @@ def test_ui_falls_back_to_initials():
         "components/candidate/job-card.tsx",
         "components/candidate/job-details.tsx",
         "components/candidate/application-card.tsx",
-        "components/company/AppShell.tsx",
+        "components/shell/company-top-shell.tsx",
     ):
         src = (WEB_SRC / page).read_text()
         assert "<Avatar" in src

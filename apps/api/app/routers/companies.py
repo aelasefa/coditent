@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
@@ -16,15 +17,18 @@ from app.schemas import CompanyCreate, CompanyLogoMetaOut, CompanyOut
 from app.services.company_logo import (
     CONTENT_TYPE_BY_EXT,
     MAX_LOGO_BYTES,
+    LogoResourceLimitError,
     LogoStorageError,
+    LogoValidationTimeoutError,
     assert_company_logo_path,
     build_logo_path,
-    check_logo_magic_bytes,
     delete_logo,
     download_logo,
     upload_logo,
+    validate_logo_content_async,
     validate_logo_file,
 )
+from app.services.upload_limits import UploadTooLargeError, read_upload_limited
 
 router = APIRouter()
 logger = get_logger("companies")
@@ -189,7 +193,7 @@ async def get_company_logo(company_id: UUID, db: Annotated[AsyncSession, Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
     try:
         assert_company_logo_path(company.logo_url, str(company.id))
-        data = download_logo(company.logo_url)
+        data = await asyncio.to_thread(download_logo, company.logo_url)
     except LogoStorageError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
     filename = company.logo_url.rsplit("/", 1)[-1]
@@ -215,17 +219,27 @@ async def upload_company_logo(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
     filename = file.filename or ""
     try:
-        data = await file.read()
+        data = await read_upload_limited(file, MAX_LOGO_BYTES)
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 2MB",
+        ) from exc
     finally:
         await file.close()
     try:
         ext = validate_logo_file(filename, file.content_type, len(data))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if len(data) > MAX_LOGO_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large. Maximum size is 2MB")
-    try:
-        check_logo_magic_bytes(data, ext)
+        await validate_logo_content_async(data, ext)
+    except LogoResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except LogoValidationTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Logo could not be validated within the processing limit",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -239,13 +253,13 @@ async def upload_company_logo(
     if old_path:
         try:
             assert_company_logo_path(old_path, str(company.id))
-            delete_logo(old_path)
+            await asyncio.to_thread(delete_logo, old_path)
         except LogoStorageError:
             pass
 
     path = build_logo_path(str(company.id), ext)
     try:
-        upload_logo(path, data, CONTENT_TYPE_BY_EXT[ext])
+        await asyncio.to_thread(upload_logo, path, data, CONTENT_TYPE_BY_EXT[ext])
     except LogoStorageError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
@@ -276,7 +290,7 @@ async def delete_company_logo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
     try:
         assert_company_logo_path(company.logo_url, str(company.id))
-        delete_logo(company.logo_url)
+        await asyncio.to_thread(delete_logo, company.logo_url)
     except LogoStorageError as exc:
         if str(exc) == "Forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
