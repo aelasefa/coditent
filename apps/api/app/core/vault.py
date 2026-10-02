@@ -9,8 +9,10 @@ class VaultClient:
     """HashiCorp Vault Secret Manager Client for Coditent."""
 
     def __init__(self):
-        self.vault_addr = os.getenv("VAULT_ADDR", "http://vault:8200").rstrip("/")
-        self.vault_token = os.getenv("VAULT_TOKEN", "coditent-vault-token-secret")
+        # Vault is optional and fail-closed. Both values must be injected by
+        # the runtime secret manager before this client becomes enabled.
+        self.vault_addr = os.getenv("VAULT_ADDR", "").strip().rstrip("/")
+        self.vault_token = os.getenv("VAULT_TOKEN", "").strip()
         self.mount_point = "secret"
         self.secret_path = "coditent"
         self.enabled = bool(self.vault_addr and self.vault_token)

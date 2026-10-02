@@ -26,8 +26,6 @@ services:
       DB_POOL_RECYCLE_SECONDS: "300"
       READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-2}"
       WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: coditent-vault-token-secret
     volumes:
       - ./apps/api:/app
     ports:
@@ -138,15 +136,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
-  vault:
-    image: hashicorp/vault:1.15.0
-    container_name: coditent-vault
-    restart: always
-    ports:
-      - "8200:8200"
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: "coditent-vault-token-secret"
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-    cap_add:
-      - IPC_LOCK

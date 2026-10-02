@@ -11,6 +11,28 @@ jobs:
   # ========================================================
   # STAGE 1: CI (Lint & Test Web + API)
   # ========================================================
+  secret-scan:
+    name: CI - Prevent New Secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out complete commit range
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # v3 uses the supported Node 24 runtime. Pin the immutable release
+      # commit, and pin the scanner below the known v8.30.1 rule regression.
+      - name: Scan pushed or proposed commits with redacted output
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.29.1
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "false"
+
   ci-web:
     name: CI - Lint & Test Frontend
     runs-on: ubuntu-latest
@@ -100,7 +122,7 @@ jobs:
   # ========================================================
   deploy:
     name: CD - Deploy to AWS EC2 (Ansible)
-    needs: [ci-web, ci-api, ci-ansible]
+    needs: [secret-scan, ci-web, ci-api, ci-ansible]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

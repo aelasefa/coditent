@@ -25,7 +25,10 @@ class Settings(BaseSettings):
     linkedin_client_id: str | None = None
     linkedin_client_secret: str | None = None
     linkedin_redirect_uri: str = "http://localhost:8001/auth/sso/linkedin/callback"
-    secret_key: str = Field(validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))
+    secret_key: str = Field(
+        min_length=32,
+        validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"),
+    )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     gemini_api_key: str
@@ -50,6 +53,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_oauth_config(self) -> "Settings":
+        normalized_signing_key = self.secret_key.strip().lower()
+        if (
+            normalized_signing_key.startswith("<")
+            or "change-me" in normalized_signing_key
+            or "replace-me" in normalized_signing_key
+            or "your_" in normalized_signing_key
+        ):
+            raise ValueError("JWT_SECRET must be a generated runtime secret, not a placeholder")
         if (self.google_client_id and not self.google_client_secret) or (
             self.google_client_secret and not self.google_client_id
         ):
