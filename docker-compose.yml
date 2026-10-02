@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile
     container_name: coditent-api
     restart: on-failure
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ./apps/api/.env
     environment:
@@ -51,6 +55,10 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     container_name: coditent-worker
     depends_on:
       api:
@@ -104,6 +112,10 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
     container_name: coditent-web
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       api:
         condition: service_healthy

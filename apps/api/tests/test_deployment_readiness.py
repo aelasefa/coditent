@@ -121,3 +121,16 @@ def test_ansible_declares_collection_and_syntax_check() -> None:
     assert "bash deploy.sh check" in workflow
     for playbook in ("setup.yml", "deploy.yml", "restart.yml", "rollback.yml"):
         assert f"playbooks/{playbook}" in deploy_helper
+
+
+def test_application_images_run_as_unprivileged_users() -> None:
+    api_dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text()
+    web_dockerfile = (REPO_ROOT / "apps" / "web" / "Dockerfile").read_text()
+    compose = (REPO_ROOT / "docker-compose.yml").read_text()
+
+    assert "USER 10001:10001" in api_dockerfile
+    assert "USER 10001:10001" in web_dockerfile
+    assert "npm run build" in web_dockerfile
+    assert 'CMD ["npm", "run", "start"' in web_dockerfile
+    assert compose.count("no-new-privileges:true") >= 3
+    assert compose.count("cap_drop:") >= 3
