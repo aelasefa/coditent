@@ -5,6 +5,9 @@
 
 env_name: production
 repo_branch: main
+nginx_tls_enabled: true
+nginx_waf_enabled: true
+compose_file_list: "docker-compose.yml:docker-compose.production.yml"
 
 # In production, Supabase and AI keys can be provided via:
 # 1. ansible-vault (e.g. including vault.yml)

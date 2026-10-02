@@ -1,9 +1,48 @@
 ---
-- name: Install Nginx
+- name: Install Nginx and optional ModSecurity WAF packages
   ansible.builtin.apt:
-    name: nginx
+    name: "{{ ['nginx'] + (['libnginx-mod-http-modsecurity', 'modsecurity-crs'] if nginx_waf_enabled | default(false) else []) }}"
     state: present
     update_cache: yes
+
+- name: Check configured TLS certificate
+  ansible.builtin.stat:
+    path: "{{ tls_certificate_path }}"
+  register: nginx_tls_certificate
+  when: nginx_tls_enabled | default(false)
+
+- name: Check configured TLS private key
+  ansible.builtin.stat:
+    path: "{{ tls_certificate_key_path }}"
+  register: nginx_tls_key
+  when: nginx_tls_enabled | default(false)
+
+- name: Require provisioned TLS material and a real hostname
+  ansible.builtin.assert:
+    that:
+      - server_name not in ['', '_']
+      - nginx_tls_certificate.stat.exists
+      - nginx_tls_key.stat.exists
+    fail_msg: "Provision a trusted certificate/key and set server_name before enabling production TLS"
+  when: nginx_tls_enabled | default(false)
+
+- name: Initialize ModSecurity base configuration
+  ansible.builtin.copy:
+    src: /etc/modsecurity/modsecurity.conf-recommended
+    dest: /etc/modsecurity/modsecurity.conf
+    remote_src: true
+    force: false
+    mode: '0644'
+  when: nginx_waf_enabled | default(false)
+  notify: Reload nginx
+
+- name: Deploy Coditent ModSecurity and JSON-body rules
+  ansible.builtin.template:
+    src: modsecurity-coditent.conf.j2
+    dest: /etc/nginx/modsecurity-coditent.conf
+    mode: '0644'
+  when: nginx_waf_enabled | default(false)
+  notify: Reload nginx
 
 - name: Deploy Coditent Nginx virtual host configuration
   ansible.builtin.template:

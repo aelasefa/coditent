@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    app_env: Literal["development", "test", "production"] = "development"
     # Supabase PostgreSQL is the sole persistent database.
     # Example direct:  postgresql+asyncpg://postgres.<ref>:<password>@db.<ref>.supabase.co:5432/postgres
     # Example pooled:  postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true
@@ -37,7 +38,7 @@ class Settings(BaseSettings):
     resend_from_name: str = "CODITENT"
     access_token_cookie_name: str = "access_token"
     access_token_cookie_secure: bool = True
-    access_token_cookie_samesite: str = "lax"
+    access_token_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     trusted_device_cookie_name: str = "trusted_device"
     trusted_device_expire_days: int = 30
     # Verification codes have a fixed security lifetime. Literal prevents a
@@ -76,19 +77,41 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"DATABASE_URL contains local marker '{marker}'. Local DB removed — use Supabase."
                 )
+        if self.app_env == "production":
+            if urlsplit(self.frontend_url).scheme != "https":
+                raise ValueError("FRONTEND_URL must use HTTPS in production")
+            if not self.access_token_cookie_secure:
+                raise ValueError("ACCESS_TOKEN_COOKIE_SECURE must be true in production")
+            configured_redirects = (
+                (self.google_client_id, self.google_redirect_uri),
+                (self.linkedin_client_id, self.linkedin_redirect_uri),
+            )
+            if any(
+                client_id and urlsplit(uri).scheme != "https"
+                for client_id, uri in configured_redirects
+            ):
+                raise ValueError("OAuth redirect URIs must use HTTPS in production")
+            if any(
+                urlsplit(origin.strip()).scheme != "https"
+                for origin in self.cors_origins.split(",")
+                if origin.strip()
+            ):
+                raise ValueError("Production CORS origins must use HTTPS")
         return self
 
     @property
     def allowed_cors_origins(self) -> list[str]:
         """Return unique, explicit HTTP(S) origins; wildcards are rejected."""
-        candidates = [
-            self.frontend_url,
-            "http://localhost:3001",
-            "http://127.0.0.1:3001",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            *self.cors_origins.split(","),
-        ]
+        candidates = [self.frontend_url, *self.cors_origins.split(",")]
+        if self.app_env != "production":
+            candidates.extend(
+                [
+                    "http://localhost:3001",
+                    "http://127.0.0.1:3001",
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                ]
+            )
         origins: list[str] = []
         for candidate in candidates:
             origin = candidate.strip().rstrip("/")
@@ -97,6 +120,8 @@ class Settings(BaseSettings):
             parsed = urlsplit(origin)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path:
                 raise ValueError(f"Invalid CORS origin: {origin}")
+            if self.app_env == "production" and parsed.scheme != "https":
+                raise ValueError("Production CORS origins must use HTTPS")
             if origin not in origins:
                 origins.append(origin)
         return origins

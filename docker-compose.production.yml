@@ -1,0 +1,20 @@
+# Production-only overrides. The host Nginx ingress is the sole public
+# listener; API, Redis, and the container proxy remain loopback/internal.
+services:
+  api:
+    environment:
+      APP_ENV: production
+      FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
+      CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
+      ACCESS_TOKEN_COOKIE_SECURE: "true"
+      GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
+      LINKEDIN_REDIRECT_URI: "${LINKEDIN_REDIRECT_URI:-}"
+
+  worker:
+    environment:
+      APP_ENV: production
+      FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
+      CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
+      ACCESS_TOKEN_COOKIE_SECURE: "true"
+      GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
+      LINKEDIN_REDIRECT_URI: "${LINKEDIN_REDIRECT_URI:-}"

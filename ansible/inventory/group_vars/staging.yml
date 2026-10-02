@@ -5,6 +5,9 @@
 
 env_name: staging
 repo_branch: develop
+nginx_tls_enabled: true
+nginx_waf_enabled: true
+compose_file_list: "docker-compose.yml:docker-compose.production.yml"
 
 database_url: "{{ vault_database_url | default(lookup('env', 'DATABASE_URL')) | default('') }}"
 supabase_url: "{{ vault_supabase_url | default(lookup('env', 'SUPABASE_URL')) | default('') }}"

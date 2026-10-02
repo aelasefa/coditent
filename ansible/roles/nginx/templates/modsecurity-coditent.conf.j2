@@ -1,0 +1,14 @@
+# Managed by Ansible. Apply OWASP CRS to the actual public ingress and force
+# JSON request-body parsing before rules inspect API payloads.
+Include /etc/modsecurity/modsecurity.conf
+
+SecRuleEngine On
+SecRequestBodyAccess On
+SecRequestBodyLimit 10485760
+SecRequestBodyNoFilesLimit 1048576
+SecRequestBodyLimitAction Reject
+
+SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)" \
+    "id:1000001,phase:1,pass,nolog,ctl:requestBodyProcessor=JSON"
+
+Include /usr/share/modsecurity-crs/owasp-crs.load

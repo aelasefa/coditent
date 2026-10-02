@@ -28,11 +28,17 @@ docker_prune_images: true
 
 # Nginx reverse proxy configuration
 nginx_enabled: true
+nginx_tls_enabled: false
+nginx_waf_enabled: false
 server_name: "{{ ansible_host | default('_') }}"
+tls_certificate_path: "/etc/letsencrypt/live/{{ server_name }}/fullchain.pem"
+tls_certificate_key_path: "/etc/letsencrypt/live/{{ server_name }}/privkey.pem"
 
 # Application URLs
-frontend_url: "http://{{ ansible_host | default('localhost') }}"
-next_public_api_url: "http://{{ ansible_host | default('localhost') }}"
+public_scheme: "{{ 'https' if nginx_tls_enabled else 'http' }}"
+frontend_url: "{{ public_scheme }}://{{ server_name }}"
+next_public_api_url: "/api-proxy"
+cors_origins: "{{ frontend_url }}"
 invitation_expiration_hours: 72
 
 # Resend Mail Configuration
@@ -43,11 +49,11 @@ resend_from_name: "CODITENT"
 # OAuth Defaults (optional)
 google_client_id: ""
 google_client_secret: ""
-google_redirect_uri: "http://{{ ansible_host | default('localhost') }}:8001/auth/sso/google/callback"
+google_redirect_uri: "{{ frontend_url }}/auth/sso/google/callback"
 
 linkedin_client_id: ""
 linkedin_client_secret: ""
-linkedin_redirect_uri: "http://{{ ansible_host | default('localhost') }}:8001/auth/sso/linkedin/callback"
+linkedin_redirect_uri: "{{ frontend_url }}/auth/sso/linkedin/callback"
 
 # Healthcheck configuration
 healthcheck_url: "http://127.0.0.1:8001/ready"
