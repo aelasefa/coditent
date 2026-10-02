@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -134,3 +135,15 @@ def test_application_images_run_as_unprivileged_users() -> None:
     assert 'CMD ["npm", "run", "start"' in web_dockerfile
     assert compose.count("no-new-privileges:true") >= 3
     assert compose.count("cap_drop:") >= 3
+
+
+def test_web_runtime_and_framework_are_on_supported_patched_lines() -> None:
+    web_dockerfile = (REPO_ROOT / "apps" / "web" / "Dockerfile").read_text()
+    package = json.loads((REPO_ROOT / "apps" / "web" / "package.json").read_text())
+
+    assert web_dockerfile.count("FROM node:22-alpine") == 3
+    assert package["engines"]["node"] == ">=22.0.0"
+    assert package["dependencies"]["next"] == "16.3.8"
+    assert package["dependencies"]["react"] == "19.3.0"
+    assert package["dependencies"]["react-dom"] == "19.3.0"
+    assert package["dependencies"]["axios"] == "1.20.0"

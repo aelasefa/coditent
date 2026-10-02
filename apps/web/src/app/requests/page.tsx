@@ -28,7 +28,9 @@ function RequestsInner() {
   const createMut = useMutation({
     mutationFn: () => createRequest({ company_id: companyId, recruiter_id: recruiterId || undefined, message: message || undefined }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["requests"] }); setMsg("Request sent"); setMessage(""); setRecruiterId(""); },
-    onError: (e: any) => setMsg(e?.response?.data?.detail || "Failed (candidates only)"),
+    onError: (error: unknown) => setMsg(
+      (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed (candidates only)"
+    ),
   });
   const updateMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: "accepted" | "rejected" }) => updateRequestStatus(id, status),
@@ -67,9 +69,6 @@ function RequestsInner() {
           const isRecruiter = me?.role === "RECRUITER" || me?.role === "ADMIN" || me?.role === "COMPANY_USER" || me?.role === "PLATFORM_ADMIN";
           const isCompanyMember = me?.role === "COMPANY_USER" && me?.company_id === r.company_id;
           const canAct = isRecruiter && (isCompanyMember || me?.role === "PLATFORM_ADMIN" || me?.role === "ADMIN" || me?.role === "RECRUITER");
-          const otherId = me?.id === r.candidate_id ? (r.recruiter_id || r.company_id) : r.candidate_id;
-          // chat partner: if candidate accepted, chat with recruiter; else generic
-          const chatTarget = me?.role === "CANDIDATE" ? (r.recruiter_id || r.candidate_id) : r.candidate_id;
           return (
           <div key={r.id} className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
             <p className="text-sm"><span className="font-medium">{r.candidate?.full_name || "Candidate"}</span> → <span className="font-medium">{r.company?.name || "Company"}</span> {r.recruiter ? `· recruiter ${r.recruiter.full_name}` : ""}</p>

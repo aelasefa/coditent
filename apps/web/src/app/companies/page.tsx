@@ -14,12 +14,16 @@ export default function CompaniesPage() {
   const createMut = useMutation({
     mutationFn: () => createCompany({ name, region: region || undefined }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["companies"] }); setMsg("Company created & joined"); setName(""); setRegion(""); },
-    onError: (e: any) => setMsg(e?.response?.data?.detail || "Failed"),
+    onError: (error: unknown) => setMsg(
+      (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed"
+    ),
   });
   const joinMut = useMutation({
     mutationFn: (id: string) => joinCompany(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["companies"] }); setMsg("Joined company"); },
-    onError: (e: any) => setMsg(e?.response?.data?.detail || "Failed"),
+    onError: (error: unknown) => setMsg(
+      (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed"
+    ),
   });
 
   return (

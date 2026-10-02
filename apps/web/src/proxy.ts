@@ -80,7 +80,7 @@ function roleLogic(request: NextRequest): NextResponse {
   return NextResponse.next();
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { supabase, supabaseResponse } = createSupabaseClient(request);
 
   // Refresh the Supabase session so auth cookies stay valid.
