@@ -134,10 +134,21 @@ def _handoff_key(code: str) -> str:
     return f"oauth:handoff:{digest}"
 
 
-async def create_oauth_handoff(token: str, user_id: str, is_new_registration: bool) -> str:
+async def create_oauth_handoff(
+    token: str,
+    user_id: str,
+    is_new_registration: bool,
+    *,
+    requires_2fa: bool = False,
+) -> str:
     code = secrets.token_urlsafe(32)
     payload = json.dumps(
-        {"token": token, "user_id": user_id, "is_new_registration": is_new_registration}
+        {
+            "token": token,
+            "user_id": user_id,
+            "is_new_registration": is_new_registration,
+            "requires_2fa": requires_2fa,
+        }
     )
     stored = await get_async_redis().set(
         _handoff_key(code), payload, ex=oauth_handoff_expire_seconds, nx=True
@@ -158,6 +169,8 @@ async def consume_oauth_handoff(code: str) -> dict[str, str | bool]:
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff") from exc
     if not isinstance(data.get("token"), str) or not isinstance(data.get("user_id"), str):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
+    if not isinstance(data.get("requires_2fa", False), bool):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
     return data
 

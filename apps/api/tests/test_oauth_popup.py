@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -9,9 +10,14 @@ from pydantic import ValidationError
 from starlette.requests import Request
 
 from app.models import CandidateProfile, User, UserRole
-from app.routers.auth import _build_sso_response, _create_sso_candidate
-from app.schemas import RegisterRequest
-from app.services import oauth_service
+from app.routers.auth import (
+    _build_sso_response,
+    _create_sso_candidate,
+    exchange_oauth_handoff,
+)
+from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
+from app.services import authentication, oauth_service
+from app.services.authentication import complete_authentication
 from app.services.oauth_service import OAuthIdentity
 
 
@@ -27,6 +33,9 @@ class FakeRedis:
 
     async def getdel(self, key):
         return self.values.pop(key, None)
+
+    async def get(self, key):
+        return self.values.get(key)
 
 
 class FakeDb:
@@ -48,12 +57,29 @@ class FakeDb:
         return None
 
 
+class ExistingUserDb:
+    def __init__(self, user: User):
+        self.user = user
+
+    async def execute(self, _query):
+        return SimpleNamespace(scalar_one_or_none=lambda: self.user)
+
+
 def _html_request() -> Request:
     return Request({
         "type": "http",
         "method": "GET",
         "path": "/auth/sso/google/callback",
         "headers": [(b"accept", b"text/html")],
+    })
+
+
+def _json_request() -> Request:
+    return Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/auth/sso/google/callback",
+        "headers": [(b"accept", b"application/json")],
     })
 
 
@@ -87,6 +113,22 @@ def test_handoff_is_single_use(monkeypatch):
     assert exc.value.status_code == 401
 
 
+def test_handoff_preserves_mfa_requirement(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    code = asyncio.run(
+        oauth_service.create_oauth_handoff(
+            "mfa-challenge",
+            "user-1",
+            False,
+            requires_2fa=True,
+        )
+    )
+    payload = asyncio.run(oauth_service.consume_oauth_handoff(code))
+    assert payload["token"] == "mfa-challenge"
+    assert payload["requires_2fa"] is True
+
+
 def test_html_callback_contains_only_handoff_not_access_token():
     response = _build_sso_response(
         _html_request(),
@@ -104,6 +146,74 @@ def test_html_callback_contains_only_handoff_not_access_token():
     assert params["handoff"] == ["one-time-handoff-code"]
     assert "raw-access-token" not in location
     assert not parsed.fragment
+
+
+def test_json_oauth_callback_returns_mfa_challenge_without_access_cookie():
+    user = User(
+        id=uuid.uuid4(),
+        email="mfa-oauth@example.com",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        full_name="MFA OAuth",
+        is_2fa_enabled=True,
+    )
+    response = _build_sso_response(
+        _json_request(),
+        "purpose-bound-mfa-token",
+        user,
+        "",
+        "http://127.0.0.1:3001",
+        "attempt-123",
+        "google",
+        requires_2fa=True,
+        is_new_registration=False,
+    )
+    body = json.loads(response.body)
+    assert body == {
+        "require_2fa": True,
+        "mfa_token": "purpose-bound-mfa-token",
+        "is_new_registration": False,
+    }
+    assert "set-cookie" not in response.headers
+
+
+def test_oauth_handoff_exchange_cannot_bypass_existing_local_mfa(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(authentication, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    user = User(
+        id=uuid.uuid4(),
+        email="existing-mfa@example.com",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        full_name="Existing MFA",
+        is_2fa_enabled=True,
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+
+    completion = asyncio.run(complete_authentication(user))
+    assert completion.requires_2fa is True
+    code = asyncio.run(
+        oauth_service.create_oauth_handoff(
+            completion.token,
+            str(user.id),
+            False,
+            requires_2fa=True,
+        )
+    )
+    response = asyncio.run(
+        exchange_oauth_handoff(
+            OAuthHandoffExchangeRequest(code=code),
+            ExistingUserDb(user),
+        )
+    )
+    body = json.loads(response.body)
+    assert body["require_2fa"] is True
+    assert body["mfa_token"] == completion.token
+    assert "token" not in body
+    assert "set-cookie" not in response.headers
 
 
 def test_public_registration_role_is_candidate_only_and_optional():

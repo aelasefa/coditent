@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "@/components/ui/logo";
-import { exchangeOAuthHandoff, getMe } from "@/lib/api";
-import { saveToken } from "@/lib/auth";
+import { exchangeOAuthHandoff, getMe, verifyTwoFactor } from "@/lib/api";
+import { saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
   isOAuthPopupAck,
@@ -18,7 +18,7 @@ import {
 import authStyles from "../../../(auth)/login/login-page.module.css";
 import styles from "./sso-callback.module.css";
 
-type CallbackState = "loading" | "success" | "error";
+type CallbackState = "loading" | "mfa" | "success" | "error";
 
 const errorMessages: Record<string, string> = {
   invalid_sso_callback: "The sign-in response was incomplete or malformed.",
@@ -44,6 +44,9 @@ export default function SsoCallbackPage() {
   const [state, setState] = useState<CallbackState>("loading");
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
+  const [mfaChallenge, setMfaChallenge] = useState<{ token: string; isNewRegistration: boolean } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -123,6 +126,14 @@ export default function SsoCallbackPage() {
       try {
         const session = await exchangeOAuthHandoff(handoffCode);
         if (!active) return;
+        if ("require_2fa" in session) {
+          setMfaChallenge({
+            token: session.mfa_token,
+            isNewRegistration: Boolean(session.is_new_registration),
+          });
+          setState("mfa");
+          return;
+        }
         saveToken(session.token);
         const user = await getMe();
         localStorage.setItem("user", JSON.stringify(user));
@@ -200,6 +211,34 @@ export default function SsoCallbackPage() {
     router.replace(provider === "linkedin" ? "/login" : "/login");
   }
 
+  async function submitMfa(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!mfaChallenge || mfaBusy) return;
+    const code = mfaCode.trim();
+    if (!/^\d{6}$/.test(code) && !/^[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}$/.test(code)) {
+      setErrorCode("invalid_mfa_code");
+      return;
+    }
+    setMfaBusy(true);
+    setErrorCode(null);
+    try {
+      const session = await verifyTwoFactor(mfaChallenge.token, code);
+      saveToken(session.token);
+      if (session.trusted_device_token) saveTrustedDevice(session.trusted_device_token);
+      localStorage.setItem("user", JSON.stringify(session.user));
+      router.replace(
+        await getPostAuthDestination(queryClient, session.user, {
+          isNewRegistration: mfaChallenge.isNewRegistration,
+        })
+      );
+    } catch {
+      setErrorCode("invalid_mfa_code");
+      setState("mfa");
+    } finally {
+      setMfaBusy(false);
+    }
+  }
+
   return (
     <main className={authStyles.page}>
       <video
@@ -227,15 +266,34 @@ export default function SsoCallbackPage() {
               </div>
               <p className={authStyles.eyebrow}>Secure authentication</p>
               <h1 className={styles.title}>
-                {state === "loading" ? "Signing you in" : state === "success" ? "Signed in successfully" : "Couldn’t sign you in"}
+                {state === "loading" ? "Signing you in" : state === "mfa" ? "Verify it’s you" : state === "success" ? "Signed in successfully" : "Couldn’t sign you in"}
               </h1>
               <p className={styles.subtitle}>
                 {state === "loading"
                   ? "Finishing your secure sign-in…"
+                  : state === "mfa"
+                    ? errorCode === "invalid_mfa_code"
+                      ? "That authenticator or recovery code was invalid. Try again."
+                      : "Enter the code required by your Coditent account."
                   : state === "success"
                     ? "Returning you to Coditent…"
                     : errorMessage}
               </p>
+              {state === "mfa" ? (
+                <form className={styles.actions} onSubmit={submitMfa}>
+                  <input
+                    aria-label="Authenticator or recovery code"
+                    autoComplete="one-time-code"
+                    className={styles.secondaryButton}
+                    value={mfaCode}
+                    onChange={(event) => setMfaCode(event.target.value.slice(0, 20))}
+                    required
+                  />
+                  <button type="submit" disabled={mfaBusy} className={styles.primaryButton}>
+                    {mfaBusy ? "Verifying…" : "Verify and continue"}
+                  </button>
+                </form>
+              ) : null}
               {state === "error" ? (
                 <div className={styles.actions}>
                   <button type="button" className={styles.primaryButton} onClick={tryAgain}>Try again</button>

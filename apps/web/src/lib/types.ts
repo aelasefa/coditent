@@ -123,9 +123,9 @@ export interface TwoFactorEnableResult {
   backup_codes: string[];
 }
 
-export interface OAuthHandoffResult extends TokenResponse {
-  is_new_registration: boolean;
-}
+export type OAuthHandoffResult =
+  | (TokenResponse & { is_new_registration: boolean })
+  | (MfaChallengeResponse & { is_new_registration: boolean });
 
 export interface OnboardingState {
   search_timeline: string | null;
@@ -287,6 +287,8 @@ export interface RecruitmentChatContext {
   company_logo_url?: string | null;
   peer?: RecruitmentPeer | null;
   messages: ChatMessage[];
+  next_cursor?: string | null;
+  has_more?: boolean;
 }
 
 export interface RecruitmentChatListItem {

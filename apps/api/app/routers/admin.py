@@ -11,7 +11,7 @@ from app.dependencies import get_pagination, require_admin
 from app.models import AdminActivityLog, Company, CompanyStatus, Offer, User, UserRole
 from app.observability import get_logger
 from app.schemas import AdminActivityOut, AdminStatsOut, OfferOut, RecruiterApprovalOut, TokenResponse, UserOut
-from app.utils.jwt import create_access_token
+from app.services.authentication import AuthenticationRejected, issue_access_token
 
 
 router = APIRouter(prefix="/admin")
@@ -206,15 +206,19 @@ async def impersonate_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-            "impersonated_by": "admin",
-            "admin_id": str(current_admin.id),
-        }
-    )
+    try:
+        token = issue_access_token(
+            user,
+            extra_claims={
+                "impersonated_by": "admin",
+                "admin_id": str(current_admin.id),
+            },
+        )
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Target account is not active",
+        ) from exc
 
     user_out = UserOut(
         id=user.id,

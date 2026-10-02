@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -61,7 +60,16 @@ from app.services.oauth_service import (
     verify_oauth_state,
 )
 from app.services.passwords import hash_password, verify_password, verify_password_and_rehash
-from app.utils.jwt import create_access_token, verify_token
+from app.services.authentication import (
+    AuthenticationRejected,
+    AuthenticationStoreUnavailable,
+    complete_authentication,
+    ensure_access_session_active,
+    ensure_account_can_authenticate,
+    ensure_mfa_challenge_active,
+    issue_access_token,
+)
+from app.utils.jwt import verify_access_token, verify_mfa_token
 from app.services.two_factor import verify_and_consume_backup_code, verify_totp_code
 
 
@@ -185,6 +193,9 @@ def _build_sso_response(
     popup_origin: str,
     attempt_id: str,
     provider: str,
+    *,
+    requires_2fa: bool = False,
+    is_new_registration: bool = False,
 ) -> Response:
     accept_header = request.headers.get("accept", "").lower()
     wants_html = "text/html" in accept_header
@@ -196,12 +207,23 @@ def _build_sso_response(
             status_code=status.HTTP_302_FOUND,
         )
     else:
+        if requires_2fa:
+            content = TwoFactorChallengeResponse(
+                mfa_token=token,
+                is_new_registration=is_new_registration,
+            ).model_dump(mode="json")
+        else:
+            content = OAuthHandoffExchangeResponse(
+                token=token,
+                user=UserOut.model_validate(user),
+                is_new_registration=is_new_registration,
+            ).model_dump(mode="json")
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content=TokenResponse(token=token, user=UserOut.model_validate(user)).model_dump(mode="json"),
+            content=content,
         )
 
-    if not wants_html:
+    if not wants_html and not requires_2fa:
         _set_access_cookie(response, token)
     return response
 
@@ -323,28 +345,62 @@ async def sso_callback(
         user = await _create_sso_candidate(db, identity)
     else:
         user = await _sync_existing_sso_user(db, user, identity)
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    trusted_device = request.cookies.get(settings.trusted_device_cookie_name)
+    try:
+        completion = await complete_authentication(
+            user,
+            trusted_device_token=trusted_device,
+        )
+    except AuthenticationRejected:
+        return _build_sso_error_response(
+            request,
+            "account_not_active",
+            status.HTTP_403_FORBIDDEN,
+            oauth_provider.name,
+            popup_origin,
+            attempt_id,
+        )
+    except AuthenticationStoreUnavailable:
+        return _build_sso_error_response(
+            request,
+            "authentication_service_unavailable",
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            oauth_provider.name,
+            popup_origin,
+            attempt_id,
+        )
+    token = completion.token
     wants_html = "text/html" in request.headers.get("accept", "").lower()
     handoff_code = (
-        await create_oauth_handoff(token, str(user.id), is_new_registration)
+        await create_oauth_handoff(
+            token,
+            str(user.id),
+            is_new_registration,
+            requires_2fa=completion.requires_2fa,
+        )
         if wants_html
         else ""
     )
 
     response = _build_sso_response(
-        request, token, user, handoff_code, popup_origin, attempt_id, oauth_provider.name
+        request,
+        token,
+        user,
+        handoff_code,
+        popup_origin,
+        attempt_id,
+        oauth_provider.name,
+        requires_2fa=completion.requires_2fa,
+        is_new_registration=is_new_registration,
     )
     logger.info("sso_success", provider=oauth_provider.name, user_id=str(user.id))
     return response
 
 
-@router.post("/oauth/handoff/exchange", response_model=OAuthHandoffExchangeResponse)
+@router.post(
+    "/oauth/handoff/exchange",
+    response_model=OAuthHandoffExchangeResponse | TwoFactorChallengeResponse,
+)
 async def exchange_oauth_handoff(
     data: OAuthHandoffExchangeRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -358,7 +414,37 @@ async def exchange_oauth_handoff(
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
+    try:
+        ensure_account_can_authenticate(user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account_not_active") from exc
     token = str(handoff["token"])
+    requires_2fa = bool(handoff.get("requires_2fa"))
+    try:
+        if requires_2fa:
+            payload = verify_mfa_token(token)
+            await ensure_mfa_challenge_active(payload)
+        else:
+            payload = verify_access_token(token)
+            await ensure_access_session_active(payload)
+        if payload.get("sub") != str(user.id):
+            raise ValueError("Token subject mismatch")
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="authentication_service_unavailable",
+        ) from exc
+    except (AuthenticationRejected, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff") from exc
+
+    if requires_2fa:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=TwoFactorChallengeResponse(
+                mfa_token=token,
+                is_new_registration=bool(handoff.get("is_new_registration")),
+            ).model_dump(mode="json"),
+        )
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
         content=OAuthHandoffExchangeResponse(
@@ -580,13 +666,7 @@ async def verify_email(
 
     logger.info("register_success", user_id=str(user.id), role=user.role.value)
 
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    token = issue_access_token(user)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
@@ -706,41 +786,30 @@ async def login(
         logger.info("password_hash_upgraded", user_id=str(user.id), algorithm="argon2id")
 
     trusted_device = data.trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
-    trusted_device_valid = False
-    if user.is_2fa_enabled and trusted_device:
-        try:
-            trusted_payload = verify_token(trusted_device)
-            trusted_device_valid = (
-                trusted_payload.get("type") == "trusted_device"
-                and trusted_payload.get("sub") == str(user.id)
-                and trusted_payload.get("factor")
-                == hashlib.sha256((user.totp_secret or "").encode()).hexdigest()
-            )
-        except ValueError:
-            trusted_device_valid = False
-
-    if user.is_2fa_enabled and not trusted_device_valid:
-        from datetime import timedelta
-        mfa_token = create_access_token(
-            {"sub": str(user.id), "type": "mfa_pending"},
-            expires_delta=timedelta(minutes=5),
+    try:
+        completion = await complete_authentication(
+            user,
+            trusted_device_token=trusted_device,
         )
+    except AuthenticationRejected as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active") from exc
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+
+    if completion.requires_2fa:
         logger.info("login_2fa_challenge_issued", user_id=str(user.id))
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content={"require_2fa": True, "mfa_token": mfa_token},
+            content={"require_2fa": True, "mfa_token": completion.token},
         )
 
     if user.is_2fa_enabled:
         logger.info("login_trusted_device", user_id=str(user.id))
 
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    token = completion.token
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
@@ -827,7 +896,7 @@ async def confirm_email_change(
     except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That email address is already in use.") from exc
-    token = create_access_token({"sub": str(current_user.id), "email": current_user.email, "role": current_user.role.value})
+    token = issue_access_token(current_user)
     _set_access_cookie(response, token)
     return TokenResponse(token=token, user=UserOut.model_validate(current_user))
 

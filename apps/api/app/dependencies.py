@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models import User
-from app.utils.jwt import verify_token
+from app.services.authentication import (
+    AuthenticationRejected,
+    AuthenticationStoreUnavailable,
+    ensure_access_session_active,
+    ensure_account_can_authenticate,
+)
+from app.utils.jwt import verify_access_token
 
 # Standard Bearer security scheme so OpenAPI/Swagger offers Authorize and
 # sends `Authorization: Bearer <JWT>` automatically. auto_error=False keeps
@@ -17,11 +23,10 @@ from app.utils.jwt import verify_token
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    db: Annotated[AsyncSession, Depends(get_db)],
+async def get_current_access_payload(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
     access_token_cookie: Annotated[str | None, Cookie(alias=settings.access_token_cookie_name)] = None,
-) -> User:
+) -> dict:
     token: str | None = None
     if credentials and credentials.credentials:
         token = credentials.credentials.strip()
@@ -32,20 +37,39 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
 
     try:
-        payload = verify_token(token)
-        if payload.get("type") is not None:
-            raise ValueError("This token cannot be used as an access token")
-        subject = payload.get("sub")
-        if not subject:
-            raise ValueError("Missing subject")
-        user_id = uuid.UUID(subject)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        payload = verify_access_token(token)
+        await ensure_access_session_active(payload)
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+    except (AuthenticationRejected, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        ) from exc
+    return payload
+
+
+async def get_current_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    payload: Annotated[dict, Depends(get_current_access_payload)],
+) -> User:
+    user_id = uuid.UUID(str(payload["sub"]))
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    try:
+        ensure_account_can_authenticate(user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is not active",
+        ) from exc
 
     return user
 

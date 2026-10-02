@@ -1,5 +1,6 @@
-import hashlib
+from datetime import timedelta
 from typing import Annotated
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,16 @@ from app.services.two_factor import (
     verify_totp_code,
 )
 from app.services.passwords import verify_password
-from app.utils.jwt import create_access_token, verify_token
+from app.services.authentication import (
+    AuthenticationRejected,
+    AuthenticationStoreUnavailable,
+    consume_mfa_challenge,
+    ensure_account_can_authenticate,
+    ensure_mfa_challenge_active,
+    factor_fingerprint,
+    issue_access_token,
+)
+from app.utils.jwt import create_trusted_device_token, verify_mfa_token
 
 router = APIRouter()
 logger = get_logger("two_factor")
@@ -183,18 +193,20 @@ async def two_factor_verify_challenge(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     try:
-        payload = verify_token(data.mfa_token)
-    except Exception:
-        payload = None
-
-    if not payload or payload.get("type") != "mfa_pending":
+        payload = verify_mfa_token(data.mfa_token)
+        await ensure_mfa_challenge_active(payload)
+        user_id = UUID(str(payload["sub"]))
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable.",
+        ) from exc
+    except (AuthenticationRejected, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired MFA session token.",
-        )
+        ) from exc
 
-
-    user_id = payload.get("sub")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_2fa_enabled:
@@ -202,6 +214,13 @@ async def two_factor_verify_challenge(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User not found or 2FA not active.",
         )
+    try:
+        ensure_account_can_authenticate(user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is not active.",
+        ) from exc
 
     totp_valid = verify_totp_code(user.totp_secret or "", data.code)
     backup_valid, updated_backup_json = verify_and_consume_backup_code(user.backup_codes, data.code)
@@ -213,28 +232,31 @@ async def two_factor_verify_challenge(
             detail="Invalid verification code or backup code.",
         )
 
+    try:
+        await consume_mfa_challenge(payload)
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable.",
+        ) from exc
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA session token.",
+        ) from exc
+
     if backup_valid:
         user.backup_codes = updated_backup_json
         await db.commit()
         logger.info("2fa_backup_code_consumed", user_id=str(user.id))
 
-    final_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    final_token = issue_access_token(user)
     _set_access_cookie(response, final_token)
-    from datetime import timedelta
     from app.config import settings
 
-    trusted_device_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "type": "trusted_device",
-            "factor": hashlib.sha256((user.totp_secret or "").encode()).hexdigest(),
-        },
+    trusted_device_token = create_trusted_device_token(
+        str(user.id),
+        factor=factor_fingerprint(user),
         expires_delta=timedelta(days=settings.trusted_device_expire_days),
     )
     response.set_cookie(

@@ -428,6 +428,7 @@ class TwoFactorDisableRequest(APIModel):
 class TwoFactorChallengeResponse(APIModel):
     require_2fa: bool = True
     mfa_token: str
+    is_new_registration: bool = False
 
 
 class TwoFactorVerifyRequest(APIModel):
