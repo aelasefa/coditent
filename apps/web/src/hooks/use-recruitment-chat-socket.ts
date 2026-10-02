@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRecruitmentWsUrl } from "@/lib/api";
+import { createRecruitmentSocketTicket, getRecruitmentWsUrl } from "@/lib/api";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type { ChatMessage } from "@/lib/types";
 
 type SocketFrame =
   | { type: "message_send"; content: string }
-  | { type: "messages_read" };
+  | { type: "messages_read" }
+  | { type: "pong" };
 
 type IncomingFrame = {
   type?: string;
@@ -59,52 +60,62 @@ export function useRecruitmentChatSocket({
     let closed = false;
     let socket: WebSocket | null = null;
 
-    const socketUrl = getRecruitmentWsUrl(applicationId);
-    const safeSocketEndpoint = (() => {
+    async function connect() {
+      let safeSocketEndpoint = "recruitment chat endpoint";
       try {
+        const { ticket } = await createRecruitmentSocketTicket(applicationId);
+        if (closed) return;
+        const socketUrl = getRecruitmentWsUrl(applicationId, ticket);
         const parsed = new URL(socketUrl);
-        return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
-      } catch {
-        return "recruitment chat endpoint";
-      }
-    })();
+        safeSocketEndpoint = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+        socket = new WebSocket(socketUrl);
+        socketRef.current = socket;
 
-    try {
-      socket = new WebSocket(socketUrl);
-    } catch (error) {
-      console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
-      return;
+        socket.onopen = () => {
+          if (!closed) setLive(true);
+        };
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data as string) as IncomingFrame;
+            if (payload.type === "ping") {
+              try {
+                socket?.send(JSON.stringify({ type: "pong" } satisfies SocketFrame));
+              } catch {
+                socket?.close();
+              }
+              return;
+            }
+            if (payload.type === "message" && payload.message) {
+              onMessageRef.current(payload.message);
+              return;
+            }
+            if (payload.type === "messages_read" && payload.message_ids?.length && payload.read_at) {
+              onMessagesReadRef.current(payload.message_ids, payload.read_at);
+            }
+          } catch {
+            /* Ignore malformed frames and keep the conversation connected. */
+          }
+        };
+        socket.onclose = () => {
+          if (!closed) setLive(false);
+        };
+        socket.onerror = (error) => {
+          console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
+          try {
+            socket?.close();
+          } catch {
+            /* noop */
+          }
+        };
+      } catch (error) {
+        if (!closed) {
+          setLive(false);
+          console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
+        }
+      }
     }
-    socketRef.current = socket;
 
-    socket.onopen = () => {
-      if (!closed) setLive(true);
-    };
-    socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data as string) as IncomingFrame;
-        if (payload.type === "message" && payload.message) {
-          onMessageRef.current(payload.message);
-          return;
-        }
-        if (payload.type === "messages_read" && payload.message_ids?.length && payload.read_at) {
-          onMessagesReadRef.current(payload.message_ids, payload.read_at);
-        }
-      } catch {
-        /* Ignore malformed frames and keep the conversation connected. */
-      }
-    };
-    socket.onclose = () => {
-      if (!closed) setLive(false);
-    };
-    socket.onerror = (error) => {
-      console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
-      try {
-        socket?.close();
-      } catch {
-        /* noop */
-      }
-    };
+    void connect();
 
     return () => {
       closed = true;

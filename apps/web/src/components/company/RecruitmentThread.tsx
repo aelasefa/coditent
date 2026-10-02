@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getMe, getRecruitmentChat, markRecruitmentMessagesRead, sendRecruitmentMessage } from "@/lib/api";
+import { getMe, getRecruitmentChat, getRecruitmentMessagesPage, markRecruitmentMessagesRead, sendRecruitmentMessage } from "@/lib/api";
 import type { ChatMessage, RecruitmentChatContext } from "@/lib/types";
 import { MessageList, Composer } from "@/components/candidate/chat-view";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +43,22 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
     retry: false,
   });
   const ctx = chatQuery.data;
+  const olderMessagesMut = useMutation({
+    mutationFn: () => getRecruitmentMessagesPage(applicationId, ctx?.next_cursor),
+    onSuccess: (page) => {
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => {
+        if (!previous) return previous;
+        const existing = new Set(previous.messages.map((message) => message.id));
+        return {
+          ...previous,
+          messages: [...page.messages.filter((message) => !existing.has(message.id)), ...previous.messages],
+          next_cursor: page.next_cursor,
+          has_more: page.has_more,
+        };
+      });
+    },
+    onError: () => toast("Could not load earlier messages", { description: "Retry.", variant: "error" }),
+  });
 
   const unreadIncomingKey = ctx?.messages
     .filter((message) => message.receiver_id === me?.id && !message.read_at)
@@ -116,6 +132,18 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
       <p className="border-b border-border-subtle px-4 py-2 text-[11px] text-muted-foreground">
         {recruitmentSocket.live ? "Live" : "Auto-refresh"} · private recruitment conversation
       </p>
+      {ctx.has_more ? (
+        <div className="border-b border-border-subtle px-4 py-2 text-center">
+          <button
+            type="button"
+            className="text-xs font-semibold text-primary underline disabled:opacity-60"
+            disabled={olderMessagesMut.isPending}
+            onClick={() => olderMessagesMut.mutate()}
+          >
+            {olderMessagesMut.isPending ? "Loading…" : "Load earlier messages"}
+          </button>
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1">
         <MessageList
           messages={ctx.messages}

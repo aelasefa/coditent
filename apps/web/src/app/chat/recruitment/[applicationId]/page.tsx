@@ -6,6 +6,7 @@ import {
   getApiBaseUrl,
   getMe,
   getRecruitmentChat,
+  getRecruitmentMessagesPage,
   markRecruitmentMessagesRead,
   sendRecruitmentMessage,
 } from "@/lib/api";
@@ -54,6 +55,22 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
     retry: false,
   });
   const ctx = chatQuery.data;
+  const olderMessagesMut = useMutation({
+    mutationFn: () => getRecruitmentMessagesPage(applicationId, ctx?.next_cursor),
+    onSuccess: (page) => {
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => {
+        if (!previous) return previous;
+        const existing = new Set(previous.messages.map((message) => message.id));
+        return {
+          ...previous,
+          messages: [...page.messages.filter((message) => !existing.has(message.id)), ...previous.messages],
+          next_cursor: page.next_cursor,
+          has_more: page.has_more,
+        };
+      });
+    },
+    onError: () => toast("Could not load earlier messages", { description: "Retry.", variant: "error" }),
+  });
   const backHref = me?.role === "CANDIDATE" ? "/chat" : "/company/candidates";
 
   const unreadIncomingKey = ctx?.messages
@@ -144,6 +161,18 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
 
         {ctx && ctx.chat_enabled && (
           <>
+            {ctx.has_more ? (
+              <div className="border-b border-border-subtle px-4 py-2 text-center">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-primary underline disabled:opacity-60"
+                  disabled={olderMessagesMut.isPending}
+                  onClick={() => olderMessagesMut.mutate()}
+                >
+                  {olderMessagesMut.isPending ? "Loading…" : "Load earlier messages"}
+                </button>
+              </div>
+            ) : null}
             <MessageList
               messages={ctx.messages}
               myId={me?.id}

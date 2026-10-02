@@ -1,6 +1,6 @@
 "use client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getConversation, getConversations, getMe, sendMessage } from "@/lib/api";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getConversationPage, getConversations, getMe, sendMessage } from "@/lib/api";
 import { ChatWorkspace } from "@/components/candidate/chat-workspace";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
@@ -12,10 +12,25 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
   const { toast } = useToast();
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe });
   const convQuery = useQuery({ queryKey: ["conversations"], queryFn: getConversations, staleTime: 60_000 });
-  const msgQuery = useQuery({
+  const msgQuery = useInfiniteQuery({
     queryKey: ["chat", params.id],
-    queryFn: () => getConversation(params.id),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => getConversationPage(params.id, pageParam),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     refetchInterval: 3000,
+  });
+
+  const messages = Array.from(
+    new Map(
+      (msgQuery.data?.pages ?? [])
+        .slice()
+        .reverse()
+        .flatMap((page) => page.messages)
+        .map((message) => [message.id, message]),
+    ).values(),
+  ).sort((left, right) => {
+    const byTime = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+    return byTime || left.id.localeCompare(right.id);
   });
 
   const peer = (convQuery.data ?? []).find((c) => c.user.id === params.id)?.user ?? null;
@@ -48,7 +63,21 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
             </button>
           </div>
         ) : (
-          <MessageList messages={msgQuery.data ?? []} myId={meQuery.data?.id} />
+          <>
+            {msgQuery.hasNextPage ? (
+              <div className="border-b border-border-subtle px-4 py-2 text-center">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-primary underline disabled:opacity-60"
+                  disabled={msgQuery.isFetchingNextPage}
+                  onClick={() => void msgQuery.fetchNextPage()}
+                >
+                  {msgQuery.isFetchingNextPage ? "Loading…" : "Load earlier messages"}
+                </button>
+              </div>
+            ) : null}
+            <MessageList messages={messages} myId={meQuery.data?.id} />
+          </>
         )}
         <Composer
           peerName={peer?.full_name ?? "recruiter"}

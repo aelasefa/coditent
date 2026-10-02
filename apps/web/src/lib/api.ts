@@ -459,9 +459,25 @@ export async function sendMessage(receiverId: string, content: string): Promise<
   return data;
 }
 
+export type ChatMessagePage = {
+  messages: import("@/lib/types").ChatMessage[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+export async function getConversationPage(
+  userId: string,
+  before?: string | null,
+  limit = 50,
+): Promise<ChatMessagePage> {
+  const { data } = await api.get<ChatMessagePage>(`/chat/with/${userId}`, {
+    params: { before: before ?? undefined, limit },
+  });
+  return data;
+}
+
 export async function getConversation(userId: string): Promise<import("@/lib/types").ChatMessage[]> {
-  const { data } = await api.get<{ messages: import("@/lib/types").ChatMessage[] }>(`/chat/with/${userId}`);
-  return data.messages;
+  return (await getConversationPage(userId)).messages;
 }
 
 export async function getConversations(): Promise<{ user: import("@/lib/types").User; last_message: string; last_at: string }[]> {
@@ -675,7 +691,25 @@ export async function setResponsibleHr(offerId: string, responsibleHrId: string)
 }
 
 export async function getRecruitmentChat(applicationId: string): Promise<import("@/lib/types").RecruitmentChatContext> {
-  const { data } = await api.get(`/chat/recruitment/${applicationId}`);
+  const { data } = await api.get<import("@/lib/types").RecruitmentChatContext>(`/chat/recruitment/${applicationId}`);
+  if (!data.chat_enabled) return data;
+  const page = await getRecruitmentMessagesPage(applicationId);
+  return {
+    ...data,
+    messages: page.messages,
+    next_cursor: page.next_cursor,
+    has_more: page.has_more,
+  };
+}
+
+export async function getRecruitmentMessagesPage(
+  applicationId: string,
+  before?: string | null,
+  limit = 50,
+): Promise<ChatMessagePage> {
+  const { data } = await api.get<ChatMessagePage>(`/chat/recruitment/${applicationId}/messages`, {
+    params: { before: before ?? undefined, limit },
+  });
   return data;
 }
 
@@ -698,11 +732,19 @@ export async function listRecruitmentChats(): Promise<import("@/lib/types").Recr
   return data.recruitment_chats;
 }
 
-export function getRecruitmentWsUrl(applicationId: string): string {
+export async function createRecruitmentSocketTicket(
+  applicationId: string,
+): Promise<{ ticket: string; expires_in_seconds: number }> {
+  const { data } = await api.post<{ ticket: string; expires_in_seconds: number }>(
+    `/chat/recruitment/${applicationId}/socket-ticket`,
+  );
+  return data;
+}
+
+export function getRecruitmentWsUrl(applicationId: string, ticket: string): string {
   const base = getApiBaseUrl();
-  const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
   const wsBase = base.startsWith("/")
     ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
     : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
-  return `${wsBase}/chat/recruitment/${applicationId}/ws?token=${encodeURIComponent(token ?? "")}`;
+  return `${wsBase}/chat/recruitment/${applicationId}/ws?ticket=${encodeURIComponent(ticket)}`;
 }
