@@ -227,9 +227,12 @@ export default function CompanyDashboard() {
         <section aria-label="Open jobs needing attention">
           <div className="flex items-center justify-between">
             <h2 className="ct-section-title">Open jobs</h2>
-            <Link href="/company/jobs" className="text-[13px] font-semibold text-primary hover:underline">
+            <a
+              href="/company/jobs"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface px-4 text-[13px] font-semibold text-primary hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
               Manage jobs
-            </Link>
+            </a>
           </div>
           {offersQ.isError ? (
             <div className="mt-3"><SectionError onRetry={() => offersQ.refetch()} /></div>

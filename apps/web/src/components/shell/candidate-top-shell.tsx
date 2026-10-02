@@ -111,15 +111,11 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
           <div id={mobileNavId} className={styles.mobilePanel}>
             <div className={styles.mobilePanelInner}>
               <nav aria-label="Candidate navigation" className={styles.mobileNav}>
-                {candidateNavItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link key={item.href} href={item.href} aria-current={activeForPath(pathname, item) ? "page" : undefined} onClick={() => setMobileOpen(false)} className={activeForPath(pathname, item) ? styles.mobileLinkActive : styles.mobileLink}>
-                      <span aria-hidden="true"><Icon /></span>
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
+                {candidateNavItems.map((item) => (
+                  <Link key={item.href} href={item.href} aria-current={activeForPath(pathname, item) ? "page" : undefined} onClick={() => setMobileOpen(false)} className={activeForPath(pathname, item) ? styles.mobileLinkActive : styles.mobileLink}>
+                    {item.label}
+                  </Link>
+                ))}
               </nav>
               <div className={styles.mobileAccount}>
                 <div><Avatar name={user.name} src={avatarPreview ?? user.avatarUrl} size="sm" /><span><strong>{user.name}</strong>{user.email ? <small>{user.email}</small> : null}</span></div>

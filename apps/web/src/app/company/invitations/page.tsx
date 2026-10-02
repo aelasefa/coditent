@@ -95,7 +95,6 @@ export default function CompanyInvitationsPage() {
           tone="dark"
           title="Invitations"
           subtitle="Invite colleagues by email. They register through the link and join this company."
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{invitations.length} sent</span>}
         />
 
         {canInvite ? (
@@ -131,7 +130,10 @@ export default function CompanyInvitationsPage() {
         )}
 
         <section aria-label="Sent invitations">
-          <h2 className="ct-section-title">Sent invitations</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="ct-section-title">Sent invitations</h2>
+            <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-primary">{invitations.length} sent</span>
+          </div>
           {isLoading ? (
             <div className="mt-3"><TableSkeleton rows={4} cols={3} /></div>
           ) : isError ? (

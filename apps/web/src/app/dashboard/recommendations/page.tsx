@@ -179,11 +179,27 @@ function RecommendationsContent() {
   const error = recsQuery.isError;
 
   return (
-    <PageContainer variant="wide">
-      <div className={styles.discoverIntro}>
-        <div><h1 className="ct-page-title">Discover opportunities</h1><p>Search open roles, then analyze matches for your field and region.</p></div>
-        <p>Match analysis appears on each role when it is ready.</p>
-      </div>
+    <PageContainer variant="wide" className={styles.discoverPage}>
+      <header className={`${styles.overviewHero} ${styles.discoverHero}`}>
+        <div className={styles.heroCopy}>
+          <p className={styles.eyebrow}>Discover opportunities</p>
+          <h1 className={styles.heroTitle}>Find work that fits where you're going.</h1>
+          <p className={styles.heroDescription}>Search open jobs and internships, compare your match, and focus on the roles that move your career forward.</p>
+        </div>
+        <div className={styles.discoverHeroArt} aria-hidden="true">
+          <div className={styles.discoveryOrbit}>
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className={styles.discoveryPath}>
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
+      </header>
 
       <div className={styles.filterPanel}><FilterBar
             filters={filters}
