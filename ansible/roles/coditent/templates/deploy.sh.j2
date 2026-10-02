@@ -6,12 +6,26 @@
 set -euo pipefail
 
 APP_DIR="{{ app_dir }}"
+EXPECTED_COMMIT="${1:-}"
+
+if [[ ! "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: deployment requires the tested 40-character commit SHA" >&2
+    exit 2
+fi
+
 cd "$APP_DIR"
 
-echo "=== Pulling latest changes from Git ==="
-git fetch origin {{ repo_branch }}
-git checkout {{ repo_branch }}
-git pull origin {{ repo_branch }}
+echo "=== Fetching and verifying tested commit ==="
+git fetch --prune origin {{ repo_branch }}
+git cat-file -e "${EXPECTED_COMMIT}^{commit}"
+git merge-base --is-ancestor "$EXPECTED_COMMIT" "origin/{{ repo_branch }}"
+git checkout --detach "$EXPECTED_COMMIT"
+
+DEPLOYED_COMMIT="$(git rev-parse HEAD)"
+if [ "$DEPLOYED_COMMIT" != "$EXPECTED_COMMIT" ]; then
+    echo "ERROR: checked-out commit does not match tested commit" >&2
+    exit 3
+fi
 
 echo "=== Building and restarting Docker containers ==="
 docker compose up -d --build --remove-orphans
@@ -36,4 +50,4 @@ fi
 echo "=== Pruning unused Docker images ==="
 docker image prune -f
 
-echo "=== Deployment finished successfully at $(date) ==="
+echo "=== Deployment finished successfully for ${DEPLOYED_COMMIT} at $(date) ==="

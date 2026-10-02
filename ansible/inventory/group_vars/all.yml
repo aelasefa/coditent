@@ -11,6 +11,8 @@ app_group: ubuntu
 # Git repository settings
 repo_url: "https://github.com/aelasefa/coditent.git"
 repo_branch: main
+# CI/automation should override this with the immutable tested commit SHA.
+deploy_commit: "{{ repo_branch }}"
 repo_force: yes
 
 # Service Ports

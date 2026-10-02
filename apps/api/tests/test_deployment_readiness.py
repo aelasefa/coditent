@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEPLOY_TEMPLATE = (
     REPO_ROOT / "ansible" / "roles" / "coditent" / "templates" / "deploy.sh.j2"
 )
+TESTED_COMMIT = "a" * 40
 
 
 def _render_deploy_script(app_dir: Path) -> str:
@@ -33,7 +34,11 @@ def _run_rendered_deploy(tmp_path: Path, *, curl_exit: int) -> subprocess.Comple
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    _write_fake_command(bin_dir, "git")
+    _write_fake_command(
+        bin_dir,
+        "git",
+        f'if [ "${{1:-}}" = "rev-parse" ]; then echo "{TESTED_COMMIT}"; fi\nexit 0',
+    )
     _write_fake_command(bin_dir, "docker")
     _write_fake_command(bin_dir, "sleep")
     _write_fake_command(bin_dir, "curl", f"exit {curl_exit}")
@@ -41,7 +46,7 @@ def _run_rendered_deploy(tmp_path: Path, *, curl_exit: int) -> subprocess.Comple
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
     return subprocess.run(
-        ["bash", str(script)],
+        ["bash", str(script), TESTED_COMMIT],
         cwd=tmp_path,
         env=environment,
         text=True,
@@ -65,6 +70,35 @@ def test_deploy_reports_success_only_after_readiness(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Application is ready!" in result.stdout
     assert "Deployment finished successfully" in result.stdout
+
+
+def test_deploy_rejects_missing_or_untrusted_revision(tmp_path: Path) -> None:
+    script = tmp_path / "deploy.sh"
+    script.write_text(_render_deploy_script(tmp_path))
+    script.chmod(0o755)
+
+    result = subprocess.run(
+        ["bash", str(script), "main"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "requires the tested 40-character commit SHA" in result.stderr
+
+
+def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+    assert "EC2_SSH_KNOWN_HOSTS" in workflow
+    assert "ssh-keyscan" not in workflow
+    assert "StrictHostKeyChecking=no" not in workflow
+    assert "StrictHostKeyChecking=yes" in workflow
+    assert "TESTED_COMMIT: ${{ github.sha }}" in workflow
+    assert "PUBLIC_BASE_URL must use HTTPS" in workflow
+    assert "--proto '=https'" in workflow
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
