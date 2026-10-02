@@ -20,8 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Application, CandidateProfile, Offer, User
 from app.observability import get_logger
+from app.services.cv_assets import (
+    CVAssetOwnershipError,
+    get_application_cv_asset,
+)
 from app.services.cv_parser import extract_text
-from app.services.cv_storage import CVStorageError, download_cv
+from app.services.cv_storage import assert_owns_path, download_cv
 
 genai.configure(api_key=settings.gemini_api_key)
 _model = genai.GenerativeModel("gemini-3-flash-preview")
@@ -45,9 +49,12 @@ def _profile_snapshot(profile: CandidateProfile | None, user: User | None) -> st
     )
 
 
-def _cv_text(cv_url: str | None) -> str:
+def _cv_text(cv_url: str | None, owner_id: UUID) -> str:
     if not cv_url:
         return ""
+    # Ownership is checked outside the broad parser/storage error handling so
+    # a mismatched key aborts screening instead of silently reaching the AI.
+    assert_owns_path(cv_url, str(owner_id))
     try:
         data = download_cv(cv_url)
         filename = cv_url.rsplit("/", 1)[-1]
@@ -110,6 +117,12 @@ async def screen_application(db: AsyncSession, application_id: UUID) -> dict[str
     app = result.scalar_one_or_none()
     if app is None:
         raise ValueError("Application not found")
+    try:
+        cv_asset = await get_application_cv_asset(db, app)
+    except CVAssetOwnershipError as exc:
+        raise ValueError("Application CV ownership mismatch") from exc
+    if app.cv_asset_id is not None and cv_asset is None:
+        raise ValueError("Application CV ownership mismatch")
 
     profile_result = await db.execute(select(CandidateProfile).where(CandidateProfile.user_id == app.candidate_id))
     profile = profile_result.scalar_one_or_none()
@@ -119,13 +132,17 @@ async def screen_application(db: AsyncSession, application_id: UUID) -> dict[str
     offer = offer_result.scalar_one_or_none()
     if offer is None:
         raise ValueError("Offer not found")
-    if profile is None and not app.cv_url:
+    if profile is None and cv_asset is None:
         raise ValueError("No candidate profile or CV to screen")
 
     # Supabase downloads and PDF/DOCX parsing are synchronous. Keep both out
     # of the worker's event loop so database heartbeats and other async work
     # are not stalled by a slow storage request or document parser.
-    cv_text = await asyncio.to_thread(_cv_text, app.cv_url)
+    cv_text = await asyncio.to_thread(
+        _cv_text,
+        cv_asset.storage_path if cv_asset else None,
+        app.candidate_id,
+    )
     prompt = f"""You are a recruiting screener. Score how well this candidate fits the job.
 Return ONLY one valid JSON object, no other text. Keep the whole object compact:
 {{"score": 0-100, "summary": "1-2 sentences, max 300 characters", "strengths": ["..."], "gaps": ["..."]}}

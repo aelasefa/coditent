@@ -2,7 +2,19 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import UUID, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    UUID,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -96,8 +108,45 @@ class User(Base):
     )
 
 
+class CVAsset(Base):
+    """Immutable, owner-bound CV version.
+
+    Candidate profiles point at the current version while applications retain
+    the exact version submitted at apply time. Assets remain until neither a
+    profile nor an application references them.
+    """
+
+    __tablename__ = "cv_assets"
+    __table_args__ = (
+        UniqueConstraint("id", "owner_id", name="uq_cv_assets_id_owner"),
+        UniqueConstraint("owner_id", "version", name="uq_cv_assets_owner_version"),
+        UniqueConstraint("storage_path", name="uq_cv_assets_storage_path"),
+        Index("ix_cv_assets_owner_id", "owner_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String, nullable=False)
+    original_filename: Mapped[str] = mapped_column(String, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class CandidateProfile(Base):
     __tablename__ = "candidate_profiles"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["current_cv_asset_id", "user_id"],
+            ["cv_assets.id", "cv_assets.owner_id"],
+            name="fk_candidate_profiles_current_cv_owner",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_candidate_profiles_current_cv_asset_id", "current_cv_asset_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
@@ -113,6 +162,9 @@ class CandidateProfile(Base):
     linkedin_url: Mapped[str | None] = mapped_column(String, nullable=True)
     portfolio_url: Mapped[str | None] = mapped_column(String, nullable=True)
     languages: Mapped[str | None] = mapped_column(Text, nullable=True)
+    current_cv_asset_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # Compatibility projection for existing API clients. The immutable asset
+    # row above is authoritative and all storage/worker access resolves it.
     cv_url: Mapped[str | None] = mapped_column(String, nullable=True)
     desired_opportunity_type: Mapped[str | None] = mapped_column(String, nullable=True)
     desired_location: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -301,9 +353,16 @@ class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
         UniqueConstraint("candidate_id", "opportunity_id", name="uq_applications_candidate_opportunity"),
+        ForeignKeyConstraint(
+            ["cv_asset_id", "candidate_id"],
+            ["cv_assets.id", "cv_assets.owner_id"],
+            name="fk_applications_cv_asset_owner",
+            ondelete="RESTRICT",
+        ),
         Index("ix_applications_candidate_id", "candidate_id"),
         Index("ix_applications_opportunity_id", "opportunity_id"),
         Index("ix_applications_company_id", "company_id"),
+        Index("ix_applications_cv_asset_id", "cv_asset_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -311,6 +370,9 @@ class Application(Base):
     opportunity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("offers.id", ondelete="CASCADE"), nullable=False)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
     status: Mapped[str] = mapped_column(String, default="applied", nullable=False)
+    cv_asset_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # Legacy compatibility snapshot only. Authorization and retrieval never
+    # trust this string; they resolve ``cv_asset_id`` and validate its owner.
     cv_url: Mapped[str | None] = mapped_column(String, nullable=True)
     cover_letter: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_score: Mapped[int | None] = mapped_column(Integer, nullable=True)

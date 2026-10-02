@@ -92,15 +92,31 @@ async def test_logo_upload_rejects_spoofed_png_before_db_or_storage() -> None:
 @pytest.mark.asyncio
 async def test_no_text_cv_route_returns_documented_422(monkeypatch) -> None:
     user_id = uuid4()
-    profile = SimpleNamespace(cv_url=f"{user_id}/blank.pdf")
+    asset_id = uuid4()
+    profile = SimpleNamespace(
+        user_id=user_id,
+        current_cv_asset_id=asset_id,
+        cv_url=f"{user_id}/blank.pdf",
+    )
+    asset = SimpleNamespace(
+        id=asset_id,
+        owner_id=user_id,
+        storage_path=profile.cv_url,
+        original_filename="blank.pdf",
+        content_type="application/pdf",
+    )
 
     async def fake_profile(_db, _user_id):
         return profile
+
+    async def fake_current_asset(_db, _profile, _owner_id):
+        return asset
 
     async def no_text(_filename: str, _data: bytes):
         raise NoExtractableTextError("No extractable text found")
 
     monkeypatch.setattr(candidates, "_get_profile", fake_profile)
+    monkeypatch.setattr(candidates, "get_current_cv_asset", fake_current_asset)
     monkeypatch.setattr(candidates, "download_cv", lambda _path: b"%PDF-1.7")
     monkeypatch.setattr(candidates, "extract_text_with_meta_async", no_text)
 

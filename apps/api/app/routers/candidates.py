@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_candidate, require_candidate_account
-from app.models import CandidateProfile, User
+from app.models import CVAsset, CandidateProfile, User
 from app.observability import get_logger
 from app.schemas import (
     CVMetaOut,
@@ -23,6 +23,12 @@ from app.schemas import (
     ProfileUpdate,
 )
 from app.services.cv_extraction import AIExtractionError, extract_profile_from_text
+from app.services.cv_assets import (
+    CVAssetOwnershipError,
+    garbage_collect_cv_asset,
+    get_current_cv_asset,
+    next_cv_asset_version,
+)
 from app.services.cv_parser import (
     MAX_CV_BYTES,
     CVParseTimeoutError,
@@ -34,7 +40,6 @@ from app.services.cv_parser import (
 )
 from app.services.cv_storage import (
     CVStorageError,
-    assert_owns_path,
     delete_cv,
     download_cv,
     upload_cv,
@@ -263,27 +268,65 @@ async def upload_candidate_cv(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     profile = await _get_profile(db, current_user.id)
-    # Delete previous CV first (best effort, ownership enforced)
-    old_path = profile.cv_url
-    if old_path:
-        try:
-            assert_owns_path(old_path, str(current_user.id))
-            await asyncio.to_thread(delete_cv, old_path)
-        except CVStorageError:
-            pass
-
-    base = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    path = f"{current_user.id}/{uuid_lib.uuid4().hex}_{_safe_filename(base)}.{ext}"
+    try:
+        old_asset = await get_current_cv_asset(
+            db,
+            profile,
+            current_user.id,
+            lock=True,
+        )
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Current CV is invalid",
+        ) from exc
+    old_asset_id = old_asset.id if old_asset is not None else None
+    version = await next_cv_asset_version(db, current_user.id)
+    asset_id = uuid_lib.uuid4()
+    submitted_name = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    base = submitted_name.rsplit(".", 1)[0]
+    display_filename = f"{_safe_filename(base)}.{ext}"
+    path = f"{current_user.id}/{asset_id.hex}_{_safe_filename(base)}.{ext}"
     try:
         await asyncio.to_thread(upload_cv, path, data, CONTENT_TYPE_BY_EXT[ext])
     except CVStorageError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
+    asset = CVAsset(
+        id=asset_id,
+        owner_id=current_user.id,
+        version=version,
+        storage_path=path,
+        original_filename=display_filename,
+        content_type=CONTENT_TYPE_BY_EXT[ext],
+        size_bytes=len(data),
+    )
+    db.add(asset)
+    profile.current_cv_asset_id = asset.id
     profile.cv_url = path
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        try:
+            await asyncio.to_thread(delete_cv, path)
+        except CVStorageError:
+            logger.warning("cv_failed_upload_cleanup_deferred", asset_id=str(asset.id))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV could not be saved",
+        ) from exc
     await db.refresh(profile)
+    if old_asset_id and old_asset_id != asset.id:
+        await garbage_collect_cv_asset(db, old_asset_id, current_user.id)
     logger.info("cv_uploaded", user_id=str(current_user.id))
-    return CVMetaOut(cv_url=path, filename=filename, content_type=CONTENT_TYPE_BY_EXT[ext], size_bytes=len(data))
+    return CVMetaOut(
+        cv_url=path,
+        filename=display_filename,
+        content_type=CONTENT_TYPE_BY_EXT[ext],
+        size_bytes=len(data),
+    )
 
 
 @router.get("/cv/meta", response_model=CVMetaOut)
@@ -292,19 +335,17 @@ async def get_cv_meta(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CVMetaOut:
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-    except CVStorageError as exc:
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-    filename = profile.cv_url.rsplit("/", 1)[-1]
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     return CVMetaOut(
-        cv_url=profile.cv_url,
-        filename=filename,
-        content_type=CONTENT_TYPE_BY_EXT.get(ext),
-        size_bytes=None,
+        cv_url=asset.storage_path,
+        filename=asset.original_filename,
+        content_type=asset.content_type,
+        size_bytes=asset.size_bytes,
     )
 
 
@@ -314,23 +355,20 @@ async def download_candidate_cv(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
+    try:
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-        data = await asyncio.to_thread(download_cv, profile.cv_url)
+        data = await asyncio.to_thread(download_cv, asset.storage_path)
     except CVStorageError as exc:
-        msg = str(exc)
-        if msg == "Forbidden":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV not found") from exc
-    filename = profile.cv_url.rsplit("/", 1)[-1]
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    media = CONTENT_TYPE_BY_EXT.get(ext, "application/octet-stream")
     return StreamingResponse(
         iter([data]),
-        media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        media_type=asset.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{asset.original_filename}"'},
     )
 
 
@@ -340,18 +378,29 @@ async def delete_candidate_cv(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
-        return None
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-        await asyncio.to_thread(delete_cv, profile.cv_url)
-    except CVStorageError as exc:
-        if str(exc) == "Forbidden":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-        # Storage missing but DB points to it: still clear DB to stay consistent
-        logger.error("cv_delete_storage_miss")
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    if asset is None:
+        if profile.cv_url:
+            profile.cv_url = None
+            await db.commit()
+        return None
+    old_asset_id = asset.id
+    profile.current_cv_asset_id = None
     profile.cv_url = None
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV could not be removed",
+        ) from exc
+    # Application snapshots follow the explicit retain-while-application-exists
+    # policy; cleanup deletes storage only when no application references it.
+    await garbage_collect_cv_asset(db, old_asset_id, current_user.id)
     logger.info("cv_deleted", user_id=str(current_user.id))
     return None
 
@@ -363,23 +412,24 @@ async def parse_candidate_cv(
 ) -> CVParseOut:
     """Extract structured data from stored CV. Read-only: never mutates profile (retry-safe)."""
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
+    try:
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    if asset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "CV_FILE_READ_ERROR", "message": "No CV uploaded"},
         )
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-        data = await asyncio.to_thread(download_cv, profile.cv_url)
+        data = await asyncio.to_thread(download_cv, asset.storage_path)
     except CVStorageError as exc:
-        if str(exc) == "Forbidden":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "CV_FILE_READ_ERROR", "message": "CV not found"},
         ) from exc
 
-    filename = profile.cv_url.rsplit("/", 1)[-1]
+    filename = asset.original_filename
     logger.info("cv_parse_downloaded", file_bytes=len(data))
     try:
         text, pages = await extract_text_with_meta_async(filename, data)

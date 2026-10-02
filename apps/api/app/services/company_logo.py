@@ -212,5 +212,13 @@ def delete_logo(path: str) -> None:
 
 def assert_company_logo_path(path: str, company_id: str) -> None:
     """Scope check: a logo path must live under its owning company prefix."""
-    if not path.startswith(f"{company_id}/"):
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+    if (
+        normalized != path
+        or len(parts) < 2
+        or parts[0] != company_id
+        or any(part in {"", ".", ".."} for part in parts)
+        or any(ord(character) < 32 or ord(character) == 127 for character in path)
+    ):
         raise LogoStorageError("Forbidden")

@@ -11,7 +11,13 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Application, CandidateProfile, Company, Offer, User
+from app.models import Application, CVAsset, CandidateProfile, Company, Offer, User
+from app.services.cv_assets import (
+    CVAssetOwnershipError,
+    assert_cv_asset_owner,
+    get_application_cv_asset,
+    get_current_cv_asset,
+)
 from app.services.recruitment_chat import (
     get_or_create_recruitment_conversation,
     is_chat_enabled_for_status,
@@ -72,9 +78,15 @@ async def list_applications(
         profiles = await _profiles_by_user_id(
             db, {row[0].candidate_id for row in rows}
         )
+        cv_assets = await _cv_assets_by_id(db, [row[0] for row in rows])
         return {
             "applications": [
-                _serialize_application(a, u, profiles.get(a.candidate_id))
+                _serialize_application(
+                    a,
+                    u,
+                    profiles.get(a.candidate_id),
+                    cv_assets.get(a.cv_asset_id) if a.cv_asset_id else None,
+                )
                 for a, u in rows
             ]
         }
@@ -85,25 +97,22 @@ async def list_applications(
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
-def _effective_cv_path(app: Application, profile: CandidateProfile | None) -> str | None:
-    """Resolve the candidate's CV for an application.
-
-    Source of truth is the candidate profile; the application stores a snapshot
-    copied at apply time. Fall back to the live profile CV so applications
-    created before the snapshot existed still resolve the existing file.
-    No second CV record is ever created here.
-    """
-    if app.cv_url:
-        return app.cv_url
-    if profile is not None and profile.cv_url:
-        return profile.cv_url
-    return None
+def _effective_cv_path(app: Application, asset: CVAsset | None) -> str | None:
+    """Return only the immutable owner-bound asset frozen at apply time."""
+    if asset is None or app.cv_asset_id != asset.id:
+        return None
+    try:
+        assert_cv_asset_owner(asset, app.candidate_id)
+    except CVAssetOwnershipError:
+        return None
+    return asset.storage_path
 
 
 def _serialize_application(
     app: Application,
     candidate: User | None,
     profile: CandidateProfile | None = None,
+    cv_asset: CVAsset | None = None,
 ) -> dict:
     """Recruiter-facing application payload.
 
@@ -111,7 +120,7 @@ def _serialize_application(
     (skills + CV). Skills come from the single source of truth,
     CandidateProfile.skills — the same value the candidate sees.
     """
-    cv_path = _effective_cv_path(app, profile)
+    cv_path = _effective_cv_path(app, cv_asset)
     return {
         "id": str(app.id),
         "candidate_id": str(app.candidate_id),
@@ -157,10 +166,10 @@ def _serialize_application(
         # re-checks company isolation on every request.
         "cv": (
             {
-                "filename": cv_path.rsplit("/", 1)[-1],
+                "filename": cv_asset.original_filename,
                 "download_url": f"/applications/{app.id}/cv",
             }
-            if cv_path
+            if cv_path and cv_asset is not None
             else None
         ),
     }
@@ -175,6 +184,17 @@ async def _profiles_by_user_id(
         select(CandidateProfile).where(CandidateProfile.user_id.in_(user_ids))
     )
     return {profile.user_id: profile for profile in result.scalars().all()}
+
+
+async def _cv_assets_by_id(
+    db: AsyncSession,
+    applications: list[Application],
+) -> dict[UUID, CVAsset]:
+    asset_ids = {app.cv_asset_id for app in applications if app.cv_asset_id is not None}
+    if not asset_ids:
+        return {}
+    result = await db.execute(select(CVAsset).where(CVAsset.id.in_(asset_ids)))
+    return {asset.id: asset for asset in result.scalars().all()}
 
 
 def _queue_screening(application_id: UUID) -> None:
@@ -202,7 +222,18 @@ async def get_application(
             raise HTTPException(status_code=404, detail="Application not found")
         candidate = (await db.execute(select(User).where(User.id == app.candidate_id))).scalar_one_or_none()
         profiles = await _profiles_by_user_id(db, {app.candidate_id})
-        return _serialize_application(app, candidate, profiles.get(app.candidate_id))
+        try:
+            cv_asset = await get_application_cv_asset(db, app)
+        except CVAssetOwnershipError as exc:
+            raise HTTPException(status_code=404, detail="Application CV not found") from exc
+        if app.cv_asset_id is not None and cv_asset is None:
+            raise HTTPException(status_code=404, detail="Application CV not found")
+        return _serialize_application(
+            app,
+            candidate,
+            profiles.get(app.candidate_id),
+            cv_asset,
+        )
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "view_applications"):
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -211,7 +242,18 @@ async def get_application(
             raise HTTPException(status_code=404, detail="Application not found")
         candidate = (await db.execute(select(User).where(User.id == app.candidate_id))).scalar_one_or_none()
         profiles = await _profiles_by_user_id(db, {app.candidate_id})
-        return _serialize_application(app, candidate, profiles.get(app.candidate_id))
+        try:
+            cv_asset = await get_application_cv_asset(db, app)
+        except CVAssetOwnershipError as exc:
+            raise HTTPException(status_code=404, detail="Application CV not found") from exc
+        if app.cv_asset_id is not None and cv_asset is None:
+            raise HTTPException(status_code=404, detail="Application CV not found")
+        return _serialize_application(
+            app,
+            candidate,
+            profiles.get(app.candidate_id),
+            cv_asset,
+        )
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
@@ -247,17 +289,13 @@ async def download_application_cv(
     elif current_user.role.value != "PLATFORM_ADMIN":
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    profile = (
-        await db.execute(
-            select(CandidateProfile).where(CandidateProfile.user_id == app.candidate_id)
-        )
-    ).scalar_one_or_none()
-    cv_path = _effective_cv_path(app, profile)
-    if not cv_path:
+    try:
+        cv_asset = await get_application_cv_asset(db, app)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=404, detail="CV not found") from exc
+    if cv_asset is None:
         raise HTTPException(status_code=404, detail="No CV attached to this application")
-    # Defense in depth: storage keys are "<candidate_id>/...".
-    if not cv_path.startswith(f"{app.candidate_id}/"):
-        raise HTTPException(status_code=404, detail="CV not found")
+    cv_path = cv_asset.storage_path
 
     from app.services.cv_storage import CVStorageError, download_cv
 
@@ -266,12 +304,6 @@ async def download_application_cv(
     except CVStorageError:
         raise HTTPException(status_code=404, detail="CV not found")
 
-    filename = cv_path.rsplit("/", 1)[-1]
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    media = {
-        "pdf": "application/pdf",
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    }.get(ext, "application/octet-stream")
     await log_audit(
         db,
         action="RECRUITER_CV_VIEWED",
@@ -282,8 +314,10 @@ async def download_application_cv(
     )
     return StreamingResponse(
         iter([data]),
-        media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        media_type=cv_asset.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{cv_asset.original_filename}"'
+        },
     )
 
 
@@ -295,6 +329,9 @@ async def create_application(
 ) -> dict:
     if current_user.role.value != "CANDIDATE":
         raise HTTPException(status_code=403, detail="Only candidates can apply")
+    # ``cv_url`` is intentionally ignored for compatibility with older web
+    # clients. Storage keys are server-managed and the current owned asset is
+    # selected below, so client input can never choose a CV version.
     opportunity_id = data.get("opportunity_id")
     if not opportunity_id:
         raise HTTPException(status_code=400, detail="opportunity_id required")
@@ -308,8 +345,36 @@ async def create_application(
     existing = (await db.execute(select(Application).where(Application.candidate_id == current_user.id, Application.opportunity_id == opp_id))).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="Already applied")
-    # company_id derived from offer, never trust client
-    app = Application(candidate_id=current_user.id, opportunity_id=opp_id, company_id=offer.company_id, status="applied", cv_url=data.get("cv_url"), cover_letter=data.get("cover_letter"))
+    profile = (
+        await db.execute(
+            select(CandidateProfile).where(CandidateProfile.user_id == current_user.id)
+        )
+    ).scalar_one_or_none()
+    cv_asset: CVAsset | None = None
+    if profile is not None and profile.current_cv_asset_id is not None:
+        try:
+            # Hold the immutable asset row until the application snapshot
+            # commits so replacement cleanup cannot race this reference.
+            cv_asset = await get_current_cv_asset(
+                db,
+                profile,
+                current_user.id,
+                lock=True,
+            )
+        except CVAssetOwnershipError as exc:
+            raise HTTPException(status_code=409, detail="Current CV is invalid") from exc
+        if cv_asset is None:
+            raise HTTPException(status_code=409, detail="Current CV is unavailable")
+    # company_id and the immutable CV version are derived server-side.
+    app = Application(
+        candidate_id=current_user.id,
+        opportunity_id=opp_id,
+        company_id=offer.company_id,
+        status="applied",
+        cv_asset_id=cv_asset.id if cv_asset else None,
+        cv_url=cv_asset.storage_path if cv_asset else None,
+        cover_letter=data.get("cover_letter"),
+    )
     db.add(app)
     await db.commit()
     await db.refresh(app)

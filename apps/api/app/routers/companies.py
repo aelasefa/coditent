@@ -85,7 +85,8 @@ async def create_company(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Company already exists")
     company = Company(
         name=data.name.strip(), region=data.region, description=data.description,
-        logo_url=data.logo_url, industry=data.industry, location=data.location,
+        # Logo storage keys are set only by the validated upload endpoint.
+        logo_url=None, industry=data.industry, location=data.location,
         website=data.website, company_size=data.company_size, contact_email=data.contact_email,
         contact_phone=data.contact_phone, owner_id=current_user.id,
     )
@@ -163,7 +164,7 @@ async def update_company(
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     # Only allow whitelisted fields
-    for field in ["name", "region", "description", "logo_url", "industry", "location", "website", "company_size", "contact_email", "contact_phone"]:
+    for field in ["name", "region", "description", "industry", "location", "website", "company_size", "contact_email", "contact_phone"]:
         val = getattr(data, field, None)
         if val is not None:
             setattr(company, field, val.strip() if isinstance(val, str) else val)
@@ -243,29 +244,46 @@ async def upload_company_logo(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    result = await db.execute(select(Company).where(Company.id == company_id))
+    # Serialize replacements for one company so concurrent uploads always
+    # observe and clean the actual superseded object, never leave the first
+    # successful replacement orphaned.
+    result = await db.execute(
+        select(Company).where(Company.id == company_id).with_for_update()
+    )
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
 
-    # Delete previous logo first (best effort, scope-enforced).
     old_path = company.logo_url
-    if old_path:
-        try:
-            assert_company_logo_path(old_path, str(company.id))
-            await asyncio.to_thread(delete_logo, old_path)
-        except LogoStorageError:
-            pass
-
     path = build_logo_path(str(company.id), ext)
     try:
         await asyncio.to_thread(upload_logo, path, data, CONTENT_TYPE_BY_EXT[ext])
     except LogoStorageError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     company.logo_url = path
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        try:
+            await asyncio.to_thread(delete_logo, path)
+        except LogoStorageError:
+            logger.warning("logo_failed_upload_cleanup_deferred", company_id=str(company_id))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Logo could not be saved",
+        ) from exc
     await db.refresh(company)
+    # Replacement is now visible. Only the superseded object can be removed;
+    # upload or database failures above always leave the prior logo untouched.
+    if old_path and old_path != path:
+        try:
+            assert_company_logo_path(old_path, str(company.id))
+            await asyncio.to_thread(delete_logo, old_path)
+        except LogoStorageError:
+            logger.warning("logo_replacement_cleanup_deferred", company_id=str(company.id))
     await log_audit(db, action="COMPANY_LOGO_UPDATED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
     logger.info("company_logo_uploaded", company_id=str(company.id))
     return CompanyLogoMetaOut(logo_url=path, filename=filename, content_type=CONTENT_TYPE_BY_EXT[ext], size_bytes=len(data))
@@ -282,22 +300,35 @@ async def delete_company_logo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not can(current_user.company_role, "edit_company"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
-    result = await db.execute(select(Company).where(Company.id == company_id))
+    result = await db.execute(
+        select(Company).where(Company.id == company_id).with_for_update()
+    )
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not company.logo_url:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+    old_path = company.logo_url
     try:
-        assert_company_logo_path(company.logo_url, str(company.id))
-        await asyncio.to_thread(delete_logo, company.logo_url)
+        assert_company_logo_path(old_path, str(company.id))
     except LogoStorageError as exc:
         if str(exc) == "Forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-        # Storage missing but DB points to it: still clear DB to stay consistent.
-        logger.error("company_logo_delete_storage_miss")
     company.logo_url = None
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Logo could not be removed",
+        ) from exc
+    try:
+        await asyncio.to_thread(delete_logo, old_path)
+    except LogoStorageError:
+        # The committed reference is authoritative; retain an orphan for a
+        # later storage cleanup rather than restoring a stale database link.
+        logger.warning("company_logo_delete_cleanup_deferred", company_id=str(company.id))
     await log_audit(db, action="COMPANY_LOGO_REMOVED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
     logger.info("company_logo_deleted", company_id=str(company.id))
     return None

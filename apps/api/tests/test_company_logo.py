@@ -126,14 +126,20 @@ def test_replace_deletes_old_logo():
     upload_fn = src.split("async def upload_company_logo", 1)[1].split("@router", 1)[0]
     assert "old_path = company.logo_url" in upload_fn
     assert "asyncio.to_thread(delete_logo, old_path)" in upload_fn
+    assert upload_fn.index("await db.commit()") < upload_fn.index(
+        "asyncio.to_thread(delete_logo, old_path)"
+    )
 
 
 # 4. Logo can be removed: delete clears storage and nulls the column.
 def test_remove_clears_logo():
     src = (BASE / "app" / "routers" / "companies.py").read_text()
     delete_fn = src.split("async def delete_company_logo", 1)[1].split("@router", 1)[0]
-    assert "asyncio.to_thread(delete_logo, company.logo_url)" in delete_fn
+    assert "asyncio.to_thread(delete_logo, old_path)" in delete_fn
     assert "company.logo_url = None" in delete_fn
+    assert delete_fn.index("await db.commit()") < delete_fn.index(
+        "asyncio.to_thread(delete_logo, old_path)"
+    )
     assert "404" in delete_fn  # missing logo -> 404, not 500
 
 
