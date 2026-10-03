@@ -99,6 +99,8 @@ cp apps/web/.env.example apps/web/.env.local  # frontend: public vars only
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Web | Publishable key for SSR session refresh. App users are NOT Supabase Auth users | Yes | No | `sb_publishable_YOUR_PUBLISHABLE_KEY` |
 | `NEXT_PUBLIC_API_URL` | Web (`apps/web/src/lib/api.ts`, `next.config.mjs`, Docker build arg) | Backend base URL; `http://localhost:8001` locally | Yes | No | `http://localhost:8001` |
 | `JWT_SECRET` | API (`apps/api/app/utils/jwt.py`, `app/config.py`) | HS256 signing secret, 60-min tokens | Yes | Yes | `change-me-to-a-random-32-char-secret` |
+| `TOTP_ENCRYPTION_KEY` | API MFA service and migrations | Fernet key for encrypted authenticator secrets; generate once and keep in the secret manager | Yes when MFA exists | Yes | *(generate with `Fernet.generate_key()`)* |
+| `EMAIL_OUTBOX_ENCRYPTION_KEY` | API and AI/email dispatcher | Independent Fernet key encrypting recipients, OTPs, and invitation URLs in the durable email outbox | Yes when email is enabled | Yes | *(generate independently with `Fernet.generate_key()`)* |
 | `GEMINI_API_KEY` | API (`services/ai.py`, `services/screening.py`, `services/cv_extraction.py`); Web bio route (`apps/web/src/app/api/ai/generate-bio/route.ts`) | Google Gemini key, model `gemini-3-flash-preview` | Yes (AI) | Yes | `YOUR_GEMINI_API_KEY` |
 | `REDIS_URL` | API + worker (`apps/api/app/cache.py`, `app/tasks.py`) | Redis for Celery broker/backend, rec cache, job keys | Yes | No | `redis://redis:6379/0` |
 | `FRONTEND_URL` | API (`docker-compose.yml`, invite emails) | Builds invitation links `${FRONTEND_URL}/invite/...` | Yes | No | `http://localhost:3000` |

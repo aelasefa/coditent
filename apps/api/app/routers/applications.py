@@ -1,23 +1,38 @@
 import asyncio
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Application, CVAsset, CandidateProfile, Company, Offer, User
+from app.models import Assessment, Application, CVAsset, CandidateProfile, Company, Offer, User
+from app.schemas import (
+    ApplicationCreate,
+    ApplicationCreatedOut,
+    ApplicationStatusOut,
+    ApplicationStatusUpdate,
+)
 from app.services.cv_assets import (
     CVAssetOwnershipError,
     assert_cv_asset_owner,
     get_application_cv_asset,
     get_current_cv_asset,
 )
+from app.services.ai_jobs import (
+    AIQueueFullError,
+    application_source_fingerprint,
+    enqueue_ai_job,
+)
+from app.services.offer_eligibility import offer_is_eligible
+from app.services.notifications import create_notification
 from app.services.recruitment_chat import (
     get_or_create_recruitment_conversation,
     is_chat_enabled_for_status,
@@ -51,6 +66,7 @@ async def list_applications(
                 "id": str(app.id),
                 "opportunity_id": str(app.opportunity_id),
                 "status": app.status,
+                "stage_version": app.stage_version,
                 "chat_enabled": is_chat_enabled_for_status(app.status),
                 "created_at": app.created_at.isoformat(),
                 "updated_at": app.updated_at.isoformat() if app.updated_at else None,
@@ -93,7 +109,7 @@ async def list_applications(
     if current_user.role.value == "PLATFORM_ADMIN":
         result = await db.execute(select(Application).order_by(Application.created_at.desc()))
         apps = result.scalars().all()
-        return {"applications": [{"id": str(a.id), "status": a.status, "chat_enabled": is_chat_enabled_for_status(a.status)} for a in apps]}
+        return {"applications": [{"id": str(a.id), "status": a.status, "stage_version": a.stage_version, "chat_enabled": is_chat_enabled_for_status(a.status)} for a in apps]}
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
@@ -126,10 +142,20 @@ def _serialize_application(
         "candidate_id": str(app.candidate_id),
         "opportunity_id": str(app.opportunity_id),
         "status": app.status,
+        "stage_version": app.stage_version,
         "chat_enabled": is_chat_enabled_for_status(app.status),
         "ai_score": app.ai_score,
         "ai_report": app.ai_report,
         "ai_status": getattr(app, "ai_status", None) or "pending",
+        "interview_scheduled_at": (
+            app.interview_scheduled_at.isoformat()
+            if app.interview_scheduled_at
+            else None
+        ),
+        "interview_notes": app.interview_notes,
+        "status_changed_at": (
+            app.status_changed_at.isoformat() if app.status_changed_at else None
+        ),
         "created_at": app.created_at.isoformat() if app.created_at else None,
         "updated_at": app.updated_at.isoformat() if app.updated_at else None,
         "candidate": (
@@ -197,15 +223,6 @@ async def _cv_assets_by_id(
     return {asset.id: asset for asset in result.scalars().all()}
 
 
-def _queue_screening(application_id: UUID) -> None:
-    try:
-        from app.tasks import screen_application_task
-
-        screen_application_task.delay(str(application_id))
-    except Exception:
-        pass
-
-
 @router.get("/{application_id}", response_model=dict)
 async def get_application(
     application_id: UUID,
@@ -216,7 +233,7 @@ async def get_application(
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     if current_user.role.value == "PLATFORM_ADMIN":
-        return {"id": str(app.id), "candidate_id": str(app.candidate_id), "opportunity_id": str(app.opportunity_id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
+        return {"id": str(app.id), "candidate_id": str(app.candidate_id), "opportunity_id": str(app.opportunity_id), "status": app.status, "stage_version": app.stage_version, "chat_enabled": is_chat_enabled_for_status(app.status)}
     if current_user.role.value == "CANDIDATE":
         if app.candidate_id != current_user.id:
             raise HTTPException(status_code=404, detail="Application not found")
@@ -321,9 +338,9 @@ async def download_application_cv(
     )
 
 
-@router.post("", response_model=dict)
+@router.post("", response_model=ApplicationCreatedOut, status_code=201)
 async def create_application(
-    data: dict,
+    data: ApplicationCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
@@ -332,19 +349,15 @@ async def create_application(
     # ``cv_url`` is intentionally ignored for compatibility with older web
     # clients. Storage keys are server-managed and the current owned asset is
     # selected below, so client input can never choose a CV version.
-    opportunity_id = data.get("opportunity_id")
-    if not opportunity_id:
-        raise HTTPException(status_code=400, detail="opportunity_id required")
-    try:
-        opp_id = UUID(str(opportunity_id))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid opportunity_id")
+    opp_id = data.opportunity_id
     offer = (await db.execute(select(Offer).where(Offer.id == opp_id))).scalar_one_or_none()
     if not offer:
         raise HTTPException(status_code=404, detail="Opportunity not found")
+    if not offer_is_eligible(offer):
+        raise HTTPException(status_code=409, detail="Opportunity is no longer accepting applications")
     existing = (await db.execute(select(Application).where(Application.candidate_id == current_user.id, Application.opportunity_id == opp_id))).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=400, detail="Already applied")
+        raise HTTPException(status_code=409, detail="Already applied")
     profile = (
         await db.execute(
             select(CandidateProfile).where(CandidateProfile.user_id == current_user.id)
@@ -373,14 +386,40 @@ async def create_application(
         status="applied",
         cv_asset_id=cv_asset.id if cv_asset else None,
         cv_url=cv_asset.storage_path if cv_asset else None,
-        cover_letter=data.get("cover_letter"),
+        cover_letter=data.cover_letter,
     )
     db.add(app)
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Already applied") from exc
+    source_fingerprint = await application_source_fingerprint(db, app.id)
+    if source_fingerprint is None:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Application cannot be screened")
+    try:
+        job = await enqueue_ai_job(
+            db,
+            kind="application_screen",
+            actor_id=current_user.id,
+            company_id=offer.company_id,
+            resource_id=app.id,
+            payload={"application_id": str(app.id)},
+            source_fingerprint=source_fingerprint,
+        )
+    except AIQueueFullError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=503, detail="AI screening queue is full; retry later") from exc
     await db.commit()
     await db.refresh(app)
     await log_audit(db, action="APPLICATION_CREATED", actor=current_user, company_id=offer.company_id, resource_type="application", resource_id=app.id)
-    _queue_screening(app.id)
-    return {"id": str(app.id), "status": app.status}
+    return ApplicationCreatedOut(
+        id=app.id,
+        status=app.status,
+        stage_version=app.stage_version,
+        ai_job_id=job.id,
+    )
 
 
 @router.post("/{app_id}/screen", response_model=dict)
@@ -393,32 +432,88 @@ async def retry_application_screening(
     app = (await db.execute(select(Application).where(Application.id == app_id))).scalar_one_or_none()
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
+    offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
+    if offer is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "evaluate_candidates"):
             raise HTTPException(status_code=403, detail="Forbidden")
-        offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
-        if not offer or offer.company_id != current_user.company_id:
+        if offer.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Application not found")
     elif current_user.role.value != "PLATFORM_ADMIN":
         raise HTTPException(status_code=403, detail="Forbidden")
     if (getattr(app, "ai_status", None) or "pending") == "processing":
         return {"id": str(app.id), "ai_status": "processing"}
+    source_fingerprint = await application_source_fingerprint(db, app.id)
+    if source_fingerprint is None:
+        raise HTTPException(status_code=409, detail="Application cannot be screened")
+    try:
+        job = await enqueue_ai_job(
+            db,
+            kind="application_screen",
+            actor_id=app.candidate_id,
+            company_id=offer.company_id,
+            resource_id=app.id,
+            payload={"application_id": str(app.id)},
+            source_fingerprint=source_fingerprint,
+            reset_failed=True,
+        )
+    except AIQueueFullError as exc:
+        raise HTTPException(status_code=503, detail="AI screening queue is full; retry later") from exc
     app.ai_status = "pending"
     await db.commit()
-    _queue_screening(app.id)
-    return {"id": str(app.id), "ai_status": "pending"}
+    return {"id": str(app.id), "ai_status": "pending", "ai_job_id": str(job.id)}
 
 
-@router.patch("/{app_id}", response_model=dict)
+_ALLOWED_STAGE_TRANSITIONS: dict[str, frozenset[str]] = {
+    "applied": frozenset({"under_review", "rejected"}),
+    "under_review": frozenset(
+        {"shortlisted", "assessment_required", "interview", "rejected"}
+    ),
+    "shortlisted": frozenset({"assessment_required", "interview", "rejected"}),
+    "assessment_required": frozenset({"assessment_completed", "rejected"}),
+    "assessment_completed": frozenset({"interview", "accepted", "rejected"}),
+    "interview": frozenset({"accepted", "rejected"}),
+    "accepted": frozenset(),
+    "rejected": frozenset(),
+}
+
+
+async def _validate_stage_evidence(
+    db: AsyncSession,
+    app: Application,
+    data: ApplicationStatusUpdate,
+) -> None:
+    if data.status == "assessment_completed":
+        assessment = (
+            await db.execute(
+                select(Assessment).where(
+                    Assessment.application_id == app.id,
+                    Assessment.status.in_(("completed", "graded", "reviewed")),
+                    Assessment.score.is_not(None),
+                )
+            )
+        ).scalars().first()
+        if assessment is None:
+            raise HTTPException(
+                status_code=409,
+                detail="A graded assessment is required before completing assessment",
+            )
+    if data.status == "interview" and data.interview_scheduled_at is None:
+        raise HTTPException(
+            status_code=422,
+            detail="interview_scheduled_at is required for the interview stage",
+        )
+
+
+@router.patch("/{app_id}", response_model=ApplicationStatusOut)
 async def update_application_status(
     app_id: UUID,
-    data: dict,
+    data: ApplicationStatusUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
-    new_status = data.get("status")
-    if new_status not in ["under_review", "shortlisted", "assessment_required", "assessment_completed", "interview", "accepted", "rejected"]:
-        raise HTTPException(status_code=400, detail="Invalid status")
+) -> ApplicationStatusOut:
+    new_status = data.status
     # Idempotent conversation anchor: lock the application row first so
     # concurrent accepts / stage moves reuse the SAME recruitment conversation
     # (application_id) instead of creating a second one. Stage changes only
@@ -427,30 +522,93 @@ async def update_application_status(
     # Candidate must not modify recruiter-controlled state
     if current_user.role.value == "CANDIDATE":
         raise HTTPException(status_code=403, detail="Forbidden")
-    if current_user.role.value == "PLATFORM_ADMIN":
-        was_enabled = is_chat_enabled_for_status(app.status)
-        app.status = new_status
-        await db.commit()
-        await db.refresh(app)
-        await log_audit(db, action="APPLICATION_STATUS_CHANGED", actor=current_user, resource_type="application", resource_id=app.id, details=new_status)
-        if is_chat_enabled_for_status(new_status) and not was_enabled:
-            await log_audit(db, action="RECRUITMENT_CHAT_ENABLED", actor=current_user, resource_type="application", resource_id=app.id, details=new_status)
-        return {"id": str(app.id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "move_recruitment_stage"):
             raise HTTPException(status_code=403, detail="Forbidden")
         offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
         if not offer or offer.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Application not found")
-        was_enabled = is_chat_enabled_for_status(app.status)
-        app.status = new_status
-        await db.commit()
-        await db.refresh(app)
-        action = "CANDIDATE_SHORTLISTED" if new_status == "shortlisted" else "CANDIDATE_REJECTED" if new_status == "rejected" else "APPLICATION_STATUS_CHANGED"
-        await log_audit(db, action=action, actor=current_user, company_id=current_user.company_id, resource_type="application", resource_id=app.id, details=new_status)
-        if is_chat_enabled_for_status(new_status) and not was_enabled:
-            # Recruitment chat becomes available — surfaced to the candidate via
-            # chat_enabled and to the company via the audit/notification feed.
-            await log_audit(db, action="RECRUITMENT_CHAT_ENABLED", actor=current_user, company_id=current_user.company_id, resource_type="application", resource_id=app.id, details=new_status)
-        return {"id": str(app.id), "status": app.status, "chat_enabled": is_chat_enabled_for_status(app.status)}
-    raise HTTPException(status_code=403, detail="Forbidden")
+    elif current_user.role.value != "PLATFORM_ADMIN":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if app.stage_version != data.expected_version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "STALE_APPLICATION_STAGE",
+                "current_status": app.status,
+                "current_version": app.stage_version,
+            },
+        )
+    if new_status == app.status:
+        return ApplicationStatusOut(
+            id=app.id,
+            status=app.status,
+            stage_version=app.stage_version,
+            chat_enabled=is_chat_enabled_for_status(app.status),
+        )
+    allowed = _ALLOWED_STAGE_TRANSITIONS.get(app.status, frozenset())
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Transition from {app.status} to {new_status} is not allowed",
+        )
+    await _validate_stage_evidence(db, app, data)
+
+    was_enabled = is_chat_enabled_for_status(app.status)
+    app.status = new_status
+    app.stage_version += 1
+    app.status_changed_at = datetime.utcnow()
+    if new_status == "interview":
+        app.interview_scheduled_at = data.interview_scheduled_at
+        app.interview_notes = data.interview_notes
+    label = new_status.replace("_", " ").title()
+    await create_notification(
+        db,
+        user_id=app.candidate_id,
+        category="interview" if new_status == "interview" else "application",
+        title="Interview scheduled" if new_status == "interview" else "Application updated",
+        body=(
+            f"Your application moved to {label}."
+            if new_status != "interview"
+            else f"Your application moved to {label}. Open it to review the scheduled time."
+        ),
+        action_url="/dashboard/applications",
+        resource_type="application",
+        resource_id=app.id,
+        dedupe_key=f"application-stage:{app.id}:{app.stage_version}",
+    )
+    await db.commit()
+    await db.refresh(app)
+    action = (
+        "CANDIDATE_SHORTLISTED"
+        if new_status == "shortlisted"
+        else "CANDIDATE_REJECTED"
+        if new_status == "rejected"
+        else "APPLICATION_STATUS_CHANGED"
+    )
+    await log_audit(
+        db,
+        action=action,
+        actor=current_user,
+        company_id=getattr(current_user, "company_id", None),
+        resource_type="application",
+        resource_id=app.id,
+        details=new_status,
+    )
+    if is_chat_enabled_for_status(new_status) and not was_enabled:
+        await log_audit(
+            db,
+            action="RECRUITMENT_CHAT_ENABLED",
+            actor=current_user,
+            company_id=getattr(current_user, "company_id", None),
+            resource_type="application",
+            resource_id=app.id,
+            details=new_status,
+        )
+    return ApplicationStatusOut(
+        id=app.id,
+        status=app.status,
+        stage_version=app.stage_version,
+        chat_enabled=is_chat_enabled_for_status(app.status),
+    )

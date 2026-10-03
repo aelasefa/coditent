@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 router = APIRouter()
 
 WORKER_HEARTBEAT_KEY = "coditent:health:worker"
+DISPATCHER_HEARTBEAT_KEY = "coditent:health:ai-dispatcher"
 
 ComponentStatus = Literal["ok", "unavailable"]
 
@@ -53,6 +54,12 @@ async def _probe_worker() -> bool:
     return await get_async_redis().get(WORKER_HEARTBEAT_KEY) is not None
 
 
+async def _probe_dispatcher() -> bool:
+    from app.cache import get_async_redis
+
+    return await get_async_redis().get(DISPATCHER_HEARTBEAT_KEY) is not None
+
+
 async def _bounded_status(probe: Callable[[], Awaitable[bool]]) -> ComponentStatus:
     try:
         available = await asyncio.wait_for(
@@ -66,15 +73,17 @@ async def _bounded_status(probe: Callable[[], Awaitable[bool]]) -> ComponentStat
 
 
 async def readiness_payload() -> tuple[int, dict[str, object]]:
-    database, redis, worker = await asyncio.gather(
+    database, redis, worker, dispatcher = await asyncio.gather(
         _bounded_status(_probe_database),
         _bounded_status(_probe_redis),
         _bounded_status(_probe_worker),
+        _bounded_status(_probe_dispatcher),
     )
     components: dict[str, ComponentStatus] = {
         "database": database,
         "redis": redis,
         "worker": worker,
+        "ai_dispatcher": dispatcher,
     }
     ready = all(value == "ok" for value in components.values())
     return (
@@ -115,6 +124,17 @@ def worker_heartbeat_is_fresh_sync(client: _SyncRedisClient | None = None) -> bo
 
             client = get_sync_redis()
         return client.get(WORKER_HEARTBEAT_KEY) is not None
+    except Exception:
+        return False
+
+
+def dispatcher_heartbeat_is_fresh_sync(client: _SyncRedisClient | None = None) -> bool:
+    try:
+        if client is None:
+            from app.cache import get_sync_redis
+
+            client = get_sync_redis()
+        return client.get(DISPATCHER_HEARTBEAT_KEY) is not None
     except Exception:
         return False
 

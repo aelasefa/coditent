@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import socket
 import time
 import uuid
 
@@ -20,10 +22,42 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,
 )
 
 logger = get_logger("ai")
 _last_worker_heartbeat_warning_at = 0.0
+
+
+@celery_app.task(
+    bind=True,
+    name="ai_jobs.execute",
+    acks_late=True,
+    reject_on_worker_lost=True,
+    soft_time_limit=90,
+    time_limit=120,
+)
+def execute_ai_job_task(self, job_id: str) -> str:
+    """Execute one durable outbox job; database state is authoritative."""
+    from app.services.ai_job_runner import execute_ai_job
+
+    parsed_job_id = uuid.UUID(job_id)
+    delivery_id = str(getattr(self.request, "id", "delivery"))
+    worker_id = f"{socket.gethostname()}:{os.getpid()}:{delivery_id}"[:100]
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(engine.dispose())
+        outcome = loop.run_until_complete(
+            execute_ai_job(AsyncSessionLocal, parsed_job_id, worker_id=worker_id)
+        )
+        logger.info("durable_ai_job_finished", job_id=job_id, outcome=outcome)
+        return outcome
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 @worker_ready.connect(weak=False)

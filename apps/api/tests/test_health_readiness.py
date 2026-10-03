@@ -34,19 +34,23 @@ def _mock_probes(
     database: bool = True,
     redis: bool = True,
     worker: bool = True,
+    dispatcher: bool = True,
 ) -> None:
     monkeypatch.setattr(health, "_probe_database", AsyncMock(return_value=database))
     monkeypatch.setattr(health, "_probe_redis", AsyncMock(return_value=redis))
     monkeypatch.setattr(health, "_probe_worker", AsyncMock(return_value=worker))
+    monkeypatch.setattr(health, "_probe_dispatcher", AsyncMock(return_value=dispatcher))
 
 
 def test_health_is_pure_liveness(monkeypatch: pytest.MonkeyPatch) -> None:
     database = AsyncMock(side_effect=AssertionError("must not probe database"))
     redis = AsyncMock(side_effect=AssertionError("must not probe redis"))
     worker = AsyncMock(side_effect=AssertionError("must not probe worker"))
+    dispatcher = AsyncMock(side_effect=AssertionError("must not probe dispatcher"))
     monkeypatch.setattr(health, "_probe_database", database)
     monkeypatch.setattr(health, "_probe_redis", redis)
     monkeypatch.setattr(health, "_probe_worker", worker)
+    monkeypatch.setattr(health, "_probe_dispatcher", dispatcher)
 
     response = _request("/health")
 
@@ -55,6 +59,7 @@ def test_health_is_pure_liveness(monkeypatch: pytest.MonkeyPatch) -> None:
     database.assert_not_awaited()
     redis.assert_not_awaited()
     worker.assert_not_awaited()
+    dispatcher.assert_not_awaited()
 
 
 def test_ready_reports_all_components(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,7 +70,12 @@ def test_ready_reports_all_components(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "components": {"database": "ok", "redis": "ok", "worker": "ok"},
+        "components": {
+            "database": "ok",
+            "redis": "ok",
+            "worker": "ok",
+            "ai_dispatcher": "ok",
+        },
     }
 
 
@@ -80,6 +90,7 @@ def test_ready_returns_safe_503_when_database_fails(
     )
     monkeypatch.setattr(health, "_probe_redis", AsyncMock(return_value=True))
     monkeypatch.setattr(health, "_probe_worker", AsyncMock(return_value=True))
+    monkeypatch.setattr(health, "_probe_dispatcher", AsyncMock(return_value=True))
 
     response = _request("/ready")
 
@@ -90,6 +101,7 @@ def test_ready_returns_safe_503_when_database_fails(
             "database": "unavailable",
             "redis": "ok",
             "worker": "ok",
+            "ai_dispatcher": "ok",
         },
     }
     assert secret_detail not in response.text
@@ -132,6 +144,7 @@ def test_ready_probe_timeout_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(health, "_probe_database", slow_database)
     monkeypatch.setattr(health, "_probe_redis", AsyncMock(return_value=True))
     monkeypatch.setattr(health, "_probe_worker", AsyncMock(return_value=True))
+    monkeypatch.setattr(health, "_probe_dispatcher", AsyncMock(return_value=True))
 
     response = _request("/ready")
 

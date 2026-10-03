@@ -15,15 +15,6 @@ from pathlib import Path
 
 import pytest
 
-# --- Stub heavy modules before importing app code ---
-_g = types.ModuleType("google")
-_ga = types.ModuleType("google.generativeai")
-_ga.configure = lambda **kwargs: None
-_ga.GenerativeModel = lambda *a, **k: None
-_g.generativeai = _ga
-sys.modules.setdefault("google", _g)
-sys.modules.setdefault("google.generativeai", _ga)
-
 _obs = types.ModuleType("app.observability")
 
 
@@ -38,7 +29,12 @@ _obs.get_logger = lambda name="t": _Log()
 sys.modules["app.observability"] = _obs
 
 _cfg = types.ModuleType("app.config")
-_cfg.settings = types.SimpleNamespace(gemini_api_key="test", database_url="sqlite://")
+_cfg.settings = types.SimpleNamespace(
+    gemini_api_key="test",
+    gemini_model="gemini-3-flash-preview",
+    ai_provider_timeout_seconds=30,
+    database_url="sqlite://",
+)
 sys.modules["app.config"] = _cfg
 
 _db = types.ModuleType("app.db")
@@ -224,8 +220,10 @@ def test_company_without_logo_still_works():
     src = (BASE / "app" / "routers" / "companies.py").read_text()
     get_fn = src.split("async def get_company_logo", 1)[1].split("@router", 1)[0]
     assert "if not company or not company.logo_url" in get_fn
-    # get_company itself never requires a logo.
-    assert "logo_url=company.logo_url" in src
+    # The response is built from the ORM object through a from-attributes
+    # schema, so a nullable logo is serialized without a special-case branch.
+    assert "CompanyOut.model_validate(company)" in src
+    assert "return _company_out(company, count)" in src
 
 
 # 10. UI falls back to company initials (never a broken image).

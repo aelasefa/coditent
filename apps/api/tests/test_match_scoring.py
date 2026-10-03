@@ -16,15 +16,6 @@ from pathlib import Path
 
 import pytest
 
-# --- Stub heavy modules before importing app code (same pattern as other tests) ---
-_g = types.ModuleType("google")
-_ga = types.ModuleType("google.generativeai")
-_ga.configure = lambda **kwargs: None
-_ga.GenerativeModel = lambda *a, **k: None
-_g.generativeai = _ga
-sys.modules.setdefault("google", _g)
-sys.modules.setdefault("google.generativeai", _ga)
-
 _obs = types.ModuleType("app.observability")
 
 
@@ -44,6 +35,8 @@ _cfg.settings = types.SimpleNamespace(
     database_url="sqlite://",
     redis_url="redis://localhost:6379/0",
     recommendation_cache_ttl_seconds=900,
+    ai_provider_timeout_seconds=30,
+    gemini_model="gemini-3-flash-preview",
 )
 sys.modules["app.config"] = _cfg
 
@@ -84,6 +77,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 import app.services.ai as ai_module  # noqa: E402
 import app.services.match_scoring as match_scoring  # noqa: E402
@@ -106,7 +100,10 @@ import pytest_asyncio  # noqa: E402
 
 @pytest_asyncio.fixture()
 async def db() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+    )
     async with engine.begin() as conn:
         await conn.run_sync(_Base.metadata.create_all)
     maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)

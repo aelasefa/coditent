@@ -70,6 +70,8 @@ async def generate_recommendations_for_candidate(
     db: AsyncSession,
     candidate_id: uuid.UUID,
     criteria: dict[str, Any],
+    *,
+    commit: bool = True,
 ) -> list[dict[str, Any]]:
     criteria_obj = RecommendationRequest(**criteria)
 
@@ -147,7 +149,10 @@ async def generate_recommendations_for_candidate(
     for stale in inactive_result.scalars().all():
         await db.delete(stale)
 
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
 
     recommendations_result = await db.execute(
         select(SavedRecommendation)

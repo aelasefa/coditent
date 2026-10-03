@@ -1,4 +1,4 @@
-"""Focused assertions that async routes offload synchronous email providers."""
+"""Focused assertions for non-blocking OTP and durable invitation delivery."""
 
 from inspect import unwrap
 from unittest.mock import AsyncMock, patch
@@ -7,8 +7,8 @@ from uuid import uuid4
 import pytest
 from starlette.requests import Request
 
-from app.models import User, UserRole
-from app.schemas import RegisterRequest
+from app.models import EmailDelivery, User, UserRole
+from app.schemas import CompanyInviteCreateRequest, RegisterRequest
 
 
 class _EmptyResult:
@@ -77,7 +77,7 @@ async def test_registration_offloads_synchronous_otp_email() -> None:
 
 
 @pytest.mark.asyncio
-async def test_company_invitation_offloads_synchronous_email() -> None:
+async def test_company_invitation_queues_delivery_before_commit() -> None:
     from app.routers import invitations
 
     database = _RouteDatabase()
@@ -89,19 +89,24 @@ async def test_company_invitation_offloads_synchronous_email() -> None:
         is_approved=True,
         full_name="Platform Admin",
     )
-    offload = AsyncMock(return_value=None)
+    delivery = EmailDelivery(id=uuid4(), status="pending")
+    queue = AsyncMock(return_value=delivery)
+    attempt = AsyncMock(return_value=(True, "sent", None))
 
     with (
-        patch.object(invitations.asyncio, "to_thread", offload),
+        patch.object(invitations, "_queue_company_invite_email", queue),
+        patch.object(invitations, "_attempt_queued_delivery", attempt),
         patch.object(invitations, "log_audit", AsyncMock(return_value=None)),
     ):
         result = await invitations.invite_company(
-            {"email": "owner@example.com", "company_name": "Atlas Labs"},
+            CompanyInviteCreateRequest(email="owner@example.com", company_name="Atlas Labs"),
             admin,
             database,  # type: ignore[arg-type]
         )
 
     assert result["email_sent"] is True
+    assert result["delivery_status"] == "sent"
+    assert result["delivery_id"] == delivery.id
     assert database.commits == 1
-    offload.assert_awaited_once()
-    assert offload.await_args.args[0] is invitations._send_company_invite_email
+    queue.assert_awaited_once()
+    attempt.assert_awaited_once_with(database, delivery)

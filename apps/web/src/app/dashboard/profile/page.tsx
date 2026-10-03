@@ -14,8 +14,10 @@ import {
   getCVDownloadUrl,
   getMe,
   getProfile,
+  generateProfileBio,
+  generateProfileHeadline,
   parseCV,
-  updateAvatar,
+  uploadAvatar,
   updateProfile,
   uploadCV,
 } from "@/lib/api";
@@ -91,6 +93,7 @@ export default function ProfileBuilderPage() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUploadProgress, setPhotoUploadProgress] = useState(0);
   const [skills, setSkills] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState<"headline" | "bio" | null>(null);
   const [cvMeta, setCvMeta] = useState<{ filename?: string | null } | null>(null);
@@ -185,12 +188,10 @@ export default function ProfileBuilderPage() {
     }
     setAiLoading("headline");
     try {
-      const res = await fetch("/api/ai/generate-headline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skills, fieldOfStudy: form.getValues("field_of_study") }),
+      const data = await generateProfileHeadline({
+        skills,
+        field_of_study: form.getValues("field_of_study"),
       });
-      const data = await res.json();
       if (data.headline) form.setValue("headline", String(data.headline).slice(0, 120), { shouldDirty: true });
       else toast("AI headline failed", { description: "No headline returned.", variant: "error" });
     } catch {
@@ -200,7 +201,6 @@ export default function ProfileBuilderPage() {
     }
   };
 
-  const BIO_REQUEST_TIMEOUT_MS = 45000;
   const bioGenRef = useRef(false);
 
   const handleGenerateBio = async () => {
@@ -213,44 +213,25 @@ export default function ProfileBuilderPage() {
       return;
     }
     setAiLoading("bio");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), BIO_REQUEST_TIMEOUT_MS);
     try {
-      const res = await fetch("/api/ai/generate-bio", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          skills,
-          fieldOfStudy: form.getValues("field_of_study"),
-          headline: form.getValues("headline"),
-        }),
-        signal: controller.signal,
+      const data = await generateProfileBio({
+        skills,
+        field_of_study: form.getValues("field_of_study"),
+        headline: form.getValues("headline"),
       });
-      let data: { success?: boolean; bio?: unknown; error?: unknown } | null = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-      // Contract: { success: true, bio } — legacy keys normalized intentionally.
-      // Client-side quality defense: server already validates, never trust blindly.
-      const raw = data && typeof data === "object" ? (data.bio ?? (data as Record<string, unknown>)["text"] ?? (data as Record<string, unknown>)["result"] ?? (data as Record<string, unknown>)["content"] ?? "") : "";
+      const raw = data.bio;
       const bio = typeof raw === "string" ? raw.trim() : "";
-      if (res.ok && data && (data as { success?: boolean }).success !== false && isQualityBio(bio)) {
+      if (data.success !== false && isQualityBio(bio)) {
         form.setValue("bio", bio.slice(0, 500), { shouldDirty: true });
         form.clearErrors("bio");
       } else {
-        const serverMsg = data && typeof data === "object" && typeof (data as Record<string, unknown>)["error"] === "string" ? String((data as Record<string, unknown>)["error"]) : "";
-        toast("Could not generate your bio. Please try again.", { description: serverMsg || undefined, variant: "error" });
+        toast("Could not generate your bio. Please try again.", { variant: "error" });
       }
-    } catch (error) {
-      const timedOut = error instanceof Error && error.name === "AbortError";
-      const offline = error instanceof TypeError;
-      toast(timedOut ? "Bio generation timed out. Please try again." : offline ? "Unable to connect to the server. Please check your connection and try again." : "Could not generate your bio. Please try again.", {
+    } catch {
+      toast("Could not generate your bio. Please try again.", {
         variant: "error",
       });
     } finally {
-      clearTimeout(timeout);
       bioGenRef.current = false;
       setAiLoading(null);
     }
@@ -368,12 +349,16 @@ export default function ProfileBuilderPage() {
     try {
       if (photoFile && photoPreview) {
         try {
-          const savedUser = await updateAvatar(photoPreview);
+          setPhotoUploadProgress(1);
+          const savedUser = await uploadAvatar(photoFile, setPhotoUploadProgress);
           queryClient.setQueryData(["me"], savedUser);
           setPhotoFile(null);
           setAvatarPreview(null);
+          setPhotoPreview(savedUser.avatar_url ?? null);
+          setPhotoUploadProgress(0);
           if (photoFileRef.current) photoFileRef.current.value = "";
         } catch {
+          setPhotoUploadProgress(0);
           toast("Could not save photo", { description: "Please try again.", variant: "error" });
           return;
         }
@@ -411,8 +396,8 @@ export default function ProfileBuilderPage() {
     const input = e.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
-      toast("Choose an image under 2 MB", { variant: "warning" });
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      toast("Choose a PNG, JPG, or WebP image under 2 MB", { variant: "warning" });
       input.value = "";
       return;
     }
@@ -525,9 +510,9 @@ export default function ProfileBuilderPage() {
             </div>
           </div>
           <div className={styles.profileIntroActions}>
-            <input ref={photoFileRef} type="file" accept="image/*" onChange={handlePhotoChange} className="sr-only" aria-label="Choose profile photo" />
+            <input ref={photoFileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhotoChange} className="sr-only" aria-label="Choose profile photo" />
             <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => photoFileRef.current?.click()}>Change photo</Button>
-            <span>Image up to 2 MB</span>
+            <span>{photoUploadProgress > 0 ? `Uploading ${photoUploadProgress}%` : "PNG, JPG, or WebP up to 2 MB"}</span>
           </div>
         </div>
         <ProfileArtwork />

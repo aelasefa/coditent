@@ -48,6 +48,7 @@ from app.services.socket_tickets import (
     consume_socket_ticket,
     create_socket_ticket,
 )
+from app.services.notifications import create_notification
 
 router = APIRouter()
 
@@ -90,6 +91,18 @@ async def send_message(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chat only allowed after request is accepted")
     msg = ChatMessage(sender_id=current_user.id, receiver_id=recv_user.id, content=data.content.strip())
     db.add(msg)
+    await db.flush()
+    await create_notification(
+        db,
+        user_id=recv_user.id,
+        category="message",
+        title="New message",
+        body=f"{current_user.full_name} sent you a message.",
+        action_url="/chat",
+        resource_type="chat_message",
+        resource_id=msg.id,
+        dedupe_key=f"chat-message:{msg.id}",
+    )
     await db.commit()
     await db.refresh(msg)
     return ChatMessageOut(id=msg.id, sender_id=msg.sender_id, receiver_id=msg.receiver_id, content=msg.content, created_at=msg.created_at, sender=UserOut.model_validate(current_user))
@@ -500,6 +513,22 @@ async def send_recruitment_message(
         content=content,
     )
     db.add(msg)
+    await db.flush()
+    await create_notification(
+        db,
+        user_id=peer.id,
+        category="message",
+        title="New recruitment message",
+        body=f"{current_user.full_name} sent a message about {offer.title}.",
+        action_url=(
+            "/company/messages"
+            if peer.role.value == "COMPANY_USER"
+            else "/chat"
+        ),
+        resource_type="application",
+        resource_id=app.id,
+        dedupe_key=f"recruitment-message:{msg.id}",
+    )
     await db.commit()
     await db.refresh(msg)
     out = _message_out(msg, current_user)

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { safeNextDestination } from "@/lib/auth-redirect";
-import { exchangeOAuthHandoff, getApiBaseUrl, getMe, verifyTwoFactor } from "@/lib/api";
+import { exchangeOAuthHandoff, getApiBaseUrl, getMe, logoutSession, verifyTwoFactor } from "@/lib/api";
 import { removeToken, saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
@@ -146,7 +146,7 @@ export function SocialLoginButtons({
         acknowledge(result.attemptId);
         popupRef.current = null;
         closeChannel();
-        removeToken();
+        await logoutSession().catch(() => removeToken());
         setPopupError("Authentication completed, but the Coditent session could not be verified. Please try again.");
       }
     }

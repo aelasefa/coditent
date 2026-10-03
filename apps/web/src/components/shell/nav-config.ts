@@ -14,6 +14,8 @@ import {
   FiShield,
   FiTrendingUp,
   FiSettings,
+  FiAward,
+  FiBell,
 } from "react-icons/fi";
 
 export type NavMatch = "exact" | "prefix";
@@ -42,12 +44,14 @@ export const candidateNavItems: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: FiHome, match: "exact" },
   { label: "Discover", href: "/dashboard/recommendations", icon: FiSearch, match: "prefix" },
   { label: "My Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
+  { label: "Assessments", href: "/dashboard/assessments", icon: FiFileText, match: "prefix" },
+  { label: "Practice", href: "/dashboard/missions", icon: FiAward, match: "prefix" },
+  { label: "Friends", href: "/dashboard/friends", icon: FiUsers, match: "prefix" },
   { label: "Messages", href: "/chat", icon: FiMessageSquare, match: "prefix" },
+  { label: "Alerts", href: "/dashboard/notifications", icon: FiBell, match: "prefix" },
   { label: "Profile", href: "/profile", icon: FiUser, match: "prefix" },
 ];
 
-// Practice + Assessments hidden: routes do not exist yet. No fake links.
-// Secondary Notifications/Settings/Help hidden: no candidate API or routes yet.
 export const companyNavSections: NavSection[] = [
   {
     title: "Overview",
@@ -86,5 +90,6 @@ export const companyNavItems: NavItem[] = [
   { label: "Jobs", href: "/company/jobs", icon: FiBriefcase, match: "prefix" },
   { label: "Candidates", href: "/company/candidates", icon: FiUsers, match: "prefix" },
   { label: "Messages", href: "/company/messages", icon: FiMessageSquare, match: "prefix" },
+  { label: "Alerts", href: "/company/notifications", icon: FiBell, match: "prefix" },
   { label: "Team", href: "/company/team", icon: FiUser, match: "prefix" },
 ];

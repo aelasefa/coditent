@@ -10,18 +10,11 @@ from types import SimpleNamespace
 import pytest
 
 
-# Isolate imports from production providers and configuration.
-_google = types.ModuleType("google")
-_genai = types.ModuleType("google.generativeai")
-_genai.configure = lambda **_kwargs: None
-_genai.GenerativeModel = lambda *_args, **_kwargs: SimpleNamespace()
-_google.generativeai = _genai
-sys.modules.setdefault("google", _google)
-sys.modules.setdefault("google.generativeai", _genai)
-
 _config = types.ModuleType("app.config")
 _config.settings = SimpleNamespace(
     gemini_api_key="test",
+    gemini_model="gemini-3-flash-preview",
+    ai_provider_timeout_seconds=30,
     database_url="sqlite://",
     redis_url="redis://localhost:6379/0",
     secret_key="test-secret",
@@ -50,14 +43,22 @@ sys.modules["app.observability"] = _observability
 from sqlalchemy.orm import DeclarativeBase  # noqa: E402
 
 
-class _Base(DeclarativeBase):
-    pass
+# Keep one declarative registry when this module is collected together with
+# other isolated service tests. Replacing ``app.database`` after ``app.models``
+# has already been imported creates an empty metadata registry and makes table
+# setup silently create no tables.
+_existing_database = sys.modules.get("app.database")
+if _existing_database is not None and hasattr(_existing_database, "Base"):
+    _Base = _existing_database.Base
+    _database = _existing_database
+else:
+    class _Base(DeclarativeBase):
+        pass
 
-
-_database = types.ModuleType("app.database")
-_database.Base = _Base
-_database.engine = None
-_database.AsyncSessionLocal = None
+    _database = types.ModuleType("app.database")
+    _database.Base = _Base
+    _database.engine = None
+    _database.AsyncSessionLocal = None
 
 
 async def _get_db():
@@ -79,6 +80,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.models import (  # noqa: E402
     Application,
@@ -91,6 +93,7 @@ from app.models import (  # noqa: E402
     UserRole,
 )
 from app.routers import applications, candidates, companies  # noqa: E402
+from app.schemas import ApplicationCreate  # noqa: E402
 from app.services import cv_assets, cv_storage, screening  # noqa: E402
 
 
@@ -115,7 +118,10 @@ class _Upload:
 
 @pytest_asyncio.fixture()
 async def db() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+    )
     async with engine.begin() as connection:
         await connection.run_sync(_Base.metadata.create_all)
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -185,22 +191,27 @@ async def test_apply_ignores_foreign_key_then_replace_and_delete_retains_snapsho
     uploaded: list[str] = []
     deleted: list[str] = []
     monkeypatch.setattr(applications, "log_audit", _no_audit)
-    monkeypatch.setattr(applications, "_queue_screening", queued.append)
+
+    async def enqueue_test_job(_db, *, resource_id, **_kwargs):
+        queued.append(resource_id)
+        return SimpleNamespace(id=uuid.uuid4())
+
+    monkeypatch.setattr(applications, "enqueue_ai_job", enqueue_test_job)
     monkeypatch.setattr(candidates, "validate_cv_content_async", _valid_content)
     monkeypatch.setattr(candidates, "upload_cv", lambda path, *_args: uploaded.append(path))
     monkeypatch.setattr(candidates, "delete_cv", lambda path: deleted.append(path))
     monkeypatch.setattr(cv_assets, "delete_cv", lambda path: deleted.append(path))
 
     result = await applications.create_application(
-        {
-            "opportunity_id": str(offer.id),
-            "cv_url": f"{uuid.uuid4()}/foreign.pdf",
-        },
+        ApplicationCreate(
+            opportunity_id=offer.id,
+            cv_url=f"{uuid.uuid4()}/foreign.pdf",
+        ),
         candidate,
         db,
     )
     application = await db.scalar(
-        select(Application).where(Application.id == uuid.UUID(result["id"]))
+        select(Application).where(Application.id == result.id)
     )
     assert application is not None
     assert application.cv_asset_id == old_asset.id
@@ -357,11 +368,7 @@ async def test_worker_rejects_foreign_asset_before_storage_or_ai(monkeypatch) ->
 
     monkeypatch.setattr(screening, "get_application_cv_asset", no_owned_asset)
     monkeypatch.setattr(screening, "_cv_text", forbidden_storage)
-    monkeypatch.setattr(
-        screening,
-        "_model",
-        SimpleNamespace(generate_content=forbidden_ai),
-    )
+    monkeypatch.setattr(screening, "generate_text", forbidden_ai)
 
     with pytest.raises(ValueError, match="ownership mismatch"):
         await screening.screen_application(_DB(), app.id)

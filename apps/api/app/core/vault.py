@@ -32,24 +32,6 @@ class VaultClient:
             logger.debug("Vault health check failed", extra={"exception_type": type(exc).__name__})
             return False
 
-    def write_secrets(self, secrets_dict: Dict[str, Any]) -> bool:
-        """Store key-value secrets in Vault KV v2 engine."""
-        if not self.enabled:
-            return False
-        try:
-            url = f"{self.vault_addr}/v1/{self.mount_point}/data/{self.secret_path}"
-            payload = {"data": secrets_dict}
-            with httpx.Client(timeout=5.0) as client:
-                resp = client.post(url, headers=self._headers(), json=payload)
-                if resp.status_code in (200, 204):
-                    logger.info("Successfully wrote secrets to HashiCorp Vault")
-                    return True
-                logger.warning("Vault write failed", extra={"status_code": resp.status_code})
-                return False
-        except Exception as exc:
-            logger.error("Error writing secrets to Vault", extra={"exception_type": type(exc).__name__})
-            return False
-
     def read_secrets(self) -> Optional[Dict[str, Any]]:
         """Retrieve key-value secrets from Vault KV v2 engine."""
         if not self.enabled:

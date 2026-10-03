@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from app.services.passwords import NewPassword
 from app.utils.sanitizer import sanitize_input_text
 
@@ -11,12 +11,20 @@ class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+def _naive_utc(value: datetime | None) -> datetime | None:
+    """Normalize API datetimes for the database's UTC-naive columns."""
+    if value is not None and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
 
 class UserOut(APIModel):
     id: uuid.UUID
     email: str
     role: str
     is_approved: bool
+    is_active: bool = True
     full_name: str
     avatar_url: str | None = None
     company_id: uuid.UUID | None = None
@@ -53,6 +61,19 @@ class LoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
     trusted_device_token: str | None = Field(default=None, max_length=2048)
+
+
+class PasswordRecoveryRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+
+
+class PasswordRecoveryConfirm(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=32, max_length=512)
+    new_password: NewPassword
 
 
 class AdminLoginRequest(APIModel):
@@ -130,10 +151,6 @@ class OnboardingStateOut(APIModel):
     onboarding_completed_at: datetime | None = None
 
 
-class AvatarUpdate(APIModel):
-    avatar_url: str = Field(max_length=5_000_000)
-
-
 class AccountNameUpdate(APIModel):
     full_name: str = Field(min_length=2, max_length=100)
 
@@ -174,11 +191,58 @@ class EmployeeInviteAcceptRequest(InvitationAccountAcceptRequest):
     pass
 
 
+class CompanyInviteCreateRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    company_name: str = Field(min_length=2, max_length=150)
+    contact_name: str | None = Field(default=None, max_length=100)
+    contact_role: str | None = Field(default=None, max_length=100)
+
+    @field_validator("company_name", "contact_name", "contact_role", mode="before")
+    @classmethod
+    def normalize_invitation_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = sanitize_input_text(value.strip())
+        return normalized or None
+
+
+class EmployeeInviteCreateRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    role: Literal["ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]
+
+
+class EmployeeInviteResendRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invitation_id: uuid.UUID
+
+
+class EmployeeInviteExistingAcceptRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=10, max_length=512)
+
+
+class InvitationDeliveryOut(APIModel):
+    detail: Literal["invited", "resent"]
+    invitation_id: uuid.UUID
+    invitation_url: str
+    email_sent: bool
+    email_error: str | None = None
+    delivery_id: uuid.UUID | None = None
+    delivery_status: Literal["pending", "processing", "retry", "sent", "failed"]
+
+
 class UserMeOut(APIModel):
     id: uuid.UUID
     email: str
     role: str
     is_approved: bool
+    is_active: bool = True
     full_name: str
     avatar_url: str | None = None
     company_id: uuid.UUID | None = None
@@ -191,24 +255,159 @@ class RecruiterApprovalOut(APIModel):
     email: str
     role: str
     is_approved: bool
+    is_active: bool = True
     full_name: str
     created_at: datetime
 
 
+class AdminUserCreate(APIModel):
+    """Create a platform-managed candidate account.
+
+    Company membership remains invitation-only and platform administrators are
+    provisioned through the documented seed/rotation path.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    password: NewPassword
+    full_name: str = Field(min_length=2, max_length=100)
+    role: Literal["CANDIDATE"] = "CANDIDATE"
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_full_name(cls, value: str) -> str:
+        cleaned = sanitize_input_text(value).strip()
+        if len(cleaned) < 2:
+            raise ValueError("Full name must contain at least two characters")
+        return cleaned
+
+
+class AdminUserUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr | None = None
+    full_name: str | None = Field(default=None, min_length=2, max_length=100)
+    is_active: bool | None = None
+
+    @field_validator("full_name")
+    @classmethod
+    def clean_optional_full_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = sanitize_input_text(value).strip()
+        if len(cleaned) < 2:
+            raise ValueError("Full name must contain at least two characters")
+        return cleaned
+
+
+class AdminMutationOut(APIModel):
+    id: uuid.UUID
+    detail: str
+    is_active: bool | None = None
+    affected_users: int = 0
+    closed_offers: int = 0
+
+
 class OfferCreate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
     title: str = Field(min_length=2, max_length=150)
-    company: str = Field(min_length=2, max_length=150)
+    # Compatibility input only. The backend derives the authoritative company
+    # name and ID from the authenticated membership.
+    company: str | None = Field(default=None, min_length=2, max_length=150)
     region: str = Field(min_length=2, max_length=100)
     field: str = Field(min_length=2, max_length=100)
     type: Literal["JOB", "INTERNSHIP"]
     description: str = Field(min_length=10, max_length=10000)
     requirements: str = Field(min_length=10, max_length=10000)
+    location: str | None = Field(default=None, max_length=160)
+    work_mode: Literal["remote", "hybrid", "on-site"] | None = None
+    required_skills: str | None = Field(default=None, max_length=2000)
+    required_experience: str | None = Field(default=None, max_length=500)
+    education_requirements: str | None = Field(default=None, max_length=1000)
+    salary_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    deadline: datetime | None = None
+    opportunity_status: Literal["draft", "active"] = "active"
 
-    @field_validator("title", "company", "description", "requirements", "region", "field", mode="before")
+    @field_validator(
+        "title",
+        "company",
+        "description",
+        "requirements",
+        "region",
+        "field",
+        "location",
+        "required_skills",
+        "required_experience",
+        "education_requirements",
+        mode="before",
+    )
     @classmethod
     def sanitize_offer_text(cls, v: str | None) -> str | None:
         return sanitize_input_text(v)
 
+    @field_validator("deadline")
+    @classmethod
+    def normalize_deadline(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+    @model_validator(mode="after")
+    def validate_salary_range(self) -> "OfferCreate":
+        if self.salary_min is not None and self.salary_max is not None and self.salary_min > self.salary_max:
+            raise ValueError("salary_min must be less than or equal to salary_max")
+        return self
+
+
+class OfferUpdate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    title: str | None = Field(default=None, min_length=2, max_length=150)
+    company: str | None = Field(default=None, min_length=2, max_length=150)
+    region: str | None = Field(default=None, min_length=2, max_length=100)
+    field: str | None = Field(default=None, min_length=2, max_length=100)
+    type: Literal["JOB", "INTERNSHIP"] | None = None
+    description: str | None = Field(default=None, min_length=10, max_length=10000)
+    requirements: str | None = Field(default=None, min_length=10, max_length=10000)
+    location: str | None = Field(default=None, max_length=160)
+    work_mode: Literal["remote", "hybrid", "on-site"] | None = None
+    required_skills: str | None = Field(default=None, max_length=2000)
+    required_experience: str | None = Field(default=None, max_length=500)
+    education_requirements: str | None = Field(default=None, max_length=1000)
+    salary_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    deadline: datetime | None = None
+
+    @field_validator(
+        "title",
+        "company",
+        "description",
+        "requirements",
+        "region",
+        "field",
+        "location",
+        "required_skills",
+        "required_experience",
+        "education_requirements",
+        mode="before",
+    )
+    @classmethod
+    def sanitize_offer_text(cls, value: str | None) -> str | None:
+        return sanitize_input_text(value)
+
+    @field_validator("deadline")
+    @classmethod
+    def normalize_deadline(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+    @model_validator(mode="after")
+    def validate_update(self) -> "OfferUpdate":
+        if not self.model_fields_set:
+            raise ValueError("At least one offer field must be provided")
+        if self.salary_min is not None and self.salary_max is not None and self.salary_min > self.salary_max:
+            raise ValueError("salary_min must be less than or equal to salary_max")
+        return self
 
 
 
@@ -222,8 +421,19 @@ class OfferOut(APIModel):
     type: str
     description: str
     requirements: str
+    location: str | None = None
+    work_mode: str | None = None
+    required_skills: str | None = None
+    required_experience: str | None = None
+    education_requirements: str | None = None
+    salary_min: int | None = None
+    salary_max: int | None = None
+    deadline: datetime | None = None
+    opportunity_status: str
     active: bool
     posted_at: datetime
+    closed_at: datetime | None = None
+    updated_at: datetime | None = None
     # Company scope + responsible recruiter (optional: backward compatible).
     company_id: uuid.UUID | None = None
     created_by: uuid.UUID | None = None
@@ -231,6 +441,10 @@ class OfferOut(APIModel):
     # Denormalized branding for candidate-facing cards/detail. Storage path
     # is resolved via GET /companies/{id}/logo — never a raw storage URL.
     company_logo_url: str | None = None
+
+
+class OfferListOut(APIModel):
+    offers: list[OfferOut]
 
 
 class CompanyLogoMetaOut(APIModel):
@@ -242,6 +456,131 @@ class CompanyLogoMetaOut(APIModel):
 
 class ResponsibleHrUpdate(APIModel):
     responsible_hr_id: uuid.UUID
+
+
+ApplicationStage = Literal[
+    "applied",
+    "under_review",
+    "shortlisted",
+    "assessment_required",
+    "assessment_completed",
+    "interview",
+    "accepted",
+    "rejected",
+]
+
+
+class ApplicationCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    opportunity_id: uuid.UUID
+    cover_letter: str | None = Field(default=None, max_length=5000)
+    # Compatibility-only. The backend deliberately ignores this storage key
+    # and snapshots the authenticated candidate's current owned CV asset.
+    cv_url: str | None = Field(default=None, max_length=2048)
+
+
+class ApplicationCreatedOut(APIModel):
+    id: uuid.UUID
+    status: ApplicationStage
+    stage_version: int
+    ai_job_id: uuid.UUID
+
+
+class ApplicationStatusUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ApplicationStage
+    expected_version: int = Field(ge=1)
+    interview_scheduled_at: datetime | None = None
+    interview_notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("interview_scheduled_at")
+    @classmethod
+    def normalize_interview_time(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+    @field_validator("interview_notes", mode="before")
+    @classmethod
+    def sanitize_interview_notes(cls, value: str | None) -> str | None:
+        return sanitize_input_text(value)
+
+
+class ApplicationStatusOut(APIModel):
+    id: uuid.UUID
+    status: ApplicationStage
+    stage_version: int
+    chat_enabled: bool
+    interview_scheduled_at: datetime | None = None
+    interview_notes: str | None = None
+    status_changed_at: datetime | None = None
+
+
+class ApplicationScreeningOut(APIModel):
+    id: uuid.UUID
+    ai_status: str
+
+
+class ApplicationCandidateOut(APIModel):
+    full_name: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
+    skills: str | None = None
+    headline: str | None = None
+    city: str | None = None
+
+
+class ApplicationProfileOut(APIModel):
+    headline: str | None = None
+    bio: str | None = None
+    field_of_study: str | None = None
+    university: str | None = None
+    study_level: str | None = None
+    skills: str | None = None
+    years_of_experience: int | None = None
+    city: str | None = None
+    linkedin_url: str | None = None
+    portfolio_url: str | None = None
+
+
+class ApplicationCVOut(APIModel):
+    filename: str
+    download_url: str
+
+
+class ApplicationOpportunityOut(APIModel):
+    id: uuid.UUID
+    title: str
+    company: str
+    company_id: uuid.UUID | None = None
+    company_logo_url: str | None = None
+
+
+class ApplicationOut(APIModel):
+    id: uuid.UUID
+    candidate_id: uuid.UUID | None = None
+    opportunity_id: uuid.UUID | None = None
+    company_id: uuid.UUID | None = None
+    status: str
+    stage_version: int = 1
+    chat_enabled: bool = False
+    cover_letter: str | None = None
+    ai_score: int | None = None
+    ai_report: str | None = None
+    ai_status: str | None = None
+    interview_scheduled_at: datetime | None = None
+    interview_notes: str | None = None
+    status_changed_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    candidate: ApplicationCandidateOut | None = None
+    profile: ApplicationProfileOut | None = None
+    cv: ApplicationCVOut | None = None
+    opportunity: ApplicationOpportunityOut | None = None
+
+
+class ApplicationListOut(APIModel):
+    applications: list[ApplicationOut]
 
 
 class RecommendationRequest(APIModel):
@@ -287,16 +626,37 @@ class AdminStatsOut(APIModel):
 
 
 class CompanyCreate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
     name: str = Field(min_length=2, max_length=120)
     region: str | None = Field(default=None, max_length=100)
     description: str | None = Field(default=None, max_length=1000)
-    logo_url: str | None = None
-    industry: str | None = None
-    location: str | None = None
-    website: str | None = None
-    company_size: str | None = None
-    contact_email: str | None = None
-    contact_phone: str | None = None
+    industry: str | None = Field(default=None, max_length=120)
+    location: str | None = Field(default=None, max_length=160)
+    website: str | None = Field(default=None, max_length=500)
+    company_size: str | None = Field(default=None, max_length=80)
+    contact_email: EmailStr | None = None
+    contact_phone: str | None = Field(default=None, max_length=30)
+
+
+class CompanyUpdate(APIModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    region: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+    industry: str | None = Field(default=None, max_length=120)
+    location: str | None = Field(default=None, max_length=160)
+    website: str | None = Field(default=None, max_length=500)
+    company_size: str | None = Field(default=None, max_length=80)
+    contact_email: EmailStr | None = None
+    contact_phone: str | None = Field(default=None, max_length=30)
+
+    @model_validator(mode="after")
+    def require_update_field(self) -> "CompanyUpdate":
+        if not self.model_fields_set:
+            raise ValueError("At least one company field must be provided")
+        return self
 
 
 class CompanyOut(APIModel):
@@ -312,12 +672,307 @@ class CompanyOut(APIModel):
     contact_email: str | None = None
     contact_phone: str | None = None
     status: str
+    subscription_plan: Literal["free", "pro", "enterprise"] = "free"
+    subscription_status: Literal["trialing", "active", "past_due", "canceled"] = "active"
+    subscription_expires_at: datetime | None = None
     owner_id: uuid.UUID | None = None
     created_at: datetime
     recruiter_count: int = 0
 
 
+class CompanyListOut(APIModel):
+    companies: list[CompanyOut]
+
+
+class CompanyMemberOut(APIModel):
+    id: uuid.UUID
+    full_name: str
+    email: str
+    avatar_url: str | None = None
+    company_role: str | None = None
+    is_approved: bool = False
+
+
+class CompanyMembersOut(APIModel):
+    members: list[CompanyMemberOut]
+    recruiters: list[CompanyMemberOut] | None = None
+
+
+class CompanyMemberRoleUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    company_role: Literal["ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]
+
+
+class CompanyMemberRoleOut(APIModel):
+    id: uuid.UUID
+    company_role: str
+
+
+class CompanySubscriptionOut(APIModel):
+    company_id: uuid.UUID
+    status: str
+    owner_id: uuid.UUID | None = None
+    plan: Literal["free", "pro", "enterprise"]
+    subscription_status: Literal["trialing", "active", "past_due", "canceled"]
+    expires_at: datetime | None = None
+    limits: dict[str, int]
+    usage: dict[str, int]
+
+
+class CompanySubscriptionUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan: Literal["free", "pro", "enterprise"]
+    subscription_status: Literal["trialing", "active", "past_due", "canceled"]
+    expires_at: datetime | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def normalize_expiry(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+
+class AssessmentCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    application_id: uuid.UUID
+    title: str = Field(min_length=2, max_length=160)
+    description: str = Field(min_length=10, max_length=10_000)
+    rubric: list[str] = Field(min_length=1, max_length=12)
+    max_score: int = Field(default=100, ge=1, le=100)
+    due_at: datetime | None = None
+
+    @field_validator("title", "description", mode="before")
+    @classmethod
+    def sanitize_assessment_text(cls, value: str) -> str:
+        return sanitize_input_text(value)
+
+    @field_validator("rubric", mode="before")
+    @classmethod
+    def sanitize_rubric(cls, values: list[str]) -> list[str]:
+        cleaned = [sanitize_input_text(value) for value in values]
+        if any(not value or len(value) > 500 for value in cleaned):
+            raise ValueError("Each rubric item must contain 1-500 characters")
+        return cleaned
+
+    @field_validator("due_at")
+    @classmethod
+    def normalize_assessment_due_at(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+
+class AssessmentSubmit(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    submission_text: str = Field(min_length=20, max_length=20_000)
+
+    @field_validator("submission_text", mode="before")
+    @classmethod
+    def sanitize_submission(cls, value: str) -> str:
+        return sanitize_input_text(value)
+
+
+class AssessmentReview(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    score: int = Field(ge=0, le=100)
+    feedback: str = Field(min_length=2, max_length=5_000)
+
+    @field_validator("feedback", mode="before")
+    @classmethod
+    def sanitize_feedback(cls, value: str) -> str:
+        return sanitize_input_text(value)
+
+
+class AssessmentOut(APIModel):
+    id: uuid.UUID
+    application_id: uuid.UUID
+    candidate_id: uuid.UUID
+    created_by: uuid.UUID | None = None
+    title: str
+    description: str | None = None
+    rubric: list[str]
+    max_score: int
+    due_at: datetime | None = None
+    status: str
+    grading_status: str
+    score: int | None = None
+    report: str | None = None
+    feedback: str | None = None
+    submitted_at: datetime | None = None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    ai_job_id: uuid.UUID | None = None
+
+
+class AssessmentListOut(APIModel):
+    assessments: list[AssessmentOut]
+
+
+class FriendOut(APIModel):
+    id: uuid.UUID
+    full_name: str
+    avatar_url: str | None = None
+    role: str
+    online: bool
+    last_seen: datetime | None = None
+
+
+class FriendListOut(APIModel):
+    friends: list[FriendOut]
+    total: int
+
+
+MissionLevel = Literal["beginner", "intermediate", "advanced"]
+
+
+class PracticeMissionCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(min_length=2, max_length=120)
+    level: MissionLevel
+    title: str = Field(min_length=2, max_length=160)
+    description: str = Field(min_length=10, max_length=10_000)
+    evidence_prompt: str = Field(min_length=10, max_length=5_000)
+    skills: list[str] = Field(min_length=1, max_length=12)
+
+    @field_validator("field", "title", "description", "evidence_prompt", mode="before")
+    @classmethod
+    def sanitize_mission_text(cls, value: str) -> str:
+        return sanitize_input_text(value)
+
+    @field_validator("skills", mode="before")
+    @classmethod
+    def sanitize_mission_skills(cls, values: list[str]) -> list[str]:
+        cleaned = [sanitize_input_text(value) for value in values]
+        if any(not value or len(value) > 80 for value in cleaned):
+            raise ValueError("Each skill must contain 1-80 characters")
+        return list(dict.fromkeys(cleaned))
+
+
+class MissionAttemptCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    evidence: str = Field(min_length=20, max_length=20_000)
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def sanitize_mission_evidence(cls, value: str) -> str:
+        return sanitize_input_text(value)
+
+
+class MissionAttemptReview(APIModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    status: Literal["validated", "rejected"]
+    score: int = Field(ge=0, le=100)
+    validated_skills: list[str] = Field(default_factory=list, max_length=12)
+    feedback: str = Field(min_length=2, max_length=5_000)
+
+    @field_validator("feedback", mode="before")
+    @classmethod
+    def sanitize_mission_feedback(cls, value: str) -> str:
+        return sanitize_input_text(value)
+
+    @field_validator("validated_skills", mode="before")
+    @classmethod
+    def sanitize_validated_skills(cls, values: list[str]) -> list[str]:
+        cleaned = [sanitize_input_text(value) for value in values]
+        if any(not value or len(value) > 80 for value in cleaned):
+            raise ValueError("Each skill must contain 1-80 characters")
+        return list(dict.fromkeys(cleaned))
+
+
+class MissionAttemptOut(APIModel):
+    id: uuid.UUID
+    mission_id: uuid.UUID
+    candidate_id: uuid.UUID
+    attempt_number: int
+    evidence: str
+    status: str
+    score: int | None = None
+    validated_skills: list[str]
+    feedback: str | None = None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PracticeMissionOut(APIModel):
+    id: uuid.UUID
+    field: str
+    level: str
+    title: str
+    description: str
+    evidence_prompt: str
+    skills: list[str]
+    active: bool
+    created_at: datetime
+    latest_attempt: MissionAttemptOut | None = None
+
+
+class PracticeMissionListOut(APIModel):
+    missions: list[PracticeMissionOut]
+
+
+class MissionProgressOut(APIModel):
+    completed: int
+    attempted: int
+    average_score: int | None = None
+    validated_skills: list[str]
+    attempts: list[MissionAttemptOut]
+
+
+NotificationCategory = Literal["application", "assessment", "interview", "message", "system"]
+
+
+class NotificationOut(APIModel):
+    id: uuid.UUID
+    category: NotificationCategory
+    title: str
+    body: str
+    action_url: str | None = None
+    resource_type: str | None = None
+    resource_id: uuid.UUID | None = None
+    read_at: datetime | None = None
+    created_at: datetime
+
+
+class NotificationListOut(APIModel):
+    notifications: list[NotificationOut]
+    total: int
+    unread: int
+    page: int
+    limit: int
+
+
+class NotificationUnreadOut(APIModel):
+    unread: int
+
+
+class NotificationPreferenceUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    application_updates: bool = True
+    assessment_updates: bool = True
+    interview_updates: bool = True
+    message_updates: bool = True
+
+
+class NotificationPreferenceOut(NotificationPreferenceUpdate):
+    user_id: uuid.UUID
+    updated_at: datetime | None = None
+
+
 class CandidateRequestCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
     company_id: uuid.UUID
     recruiter_id: uuid.UUID | None = None
     message: str | None = Field(default=None, max_length=1000)
@@ -334,6 +989,16 @@ class CandidateRequestOut(APIModel):
     candidate: UserOut | None = None
     company: CompanyOut | None = None
     recruiter: UserOut | None = None
+
+
+class CandidateRequestListOut(APIModel):
+    requests: list[CandidateRequestOut]
+
+
+class CandidateRequestStatusUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["accepted", "rejected"]
 
 
 class ChatMessageCreate(APIModel):

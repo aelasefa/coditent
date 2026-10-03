@@ -12,15 +12,6 @@ from pathlib import Path
 
 import pytest
 
-# --- Stub heavy modules before importing app code ---
-_g = types.ModuleType("google")
-_ga = types.ModuleType("google.generativeai")
-_ga.configure = lambda **kwargs: None
-_ga.GenerativeModel = lambda *a, **k: None
-_g.generativeai = _ga
-sys.modules.setdefault("google", _g)
-sys.modules.setdefault("google.generativeai", _ga)
-
 _obs = types.ModuleType("app.observability")
 
 
@@ -35,7 +26,12 @@ _obs.get_logger = lambda name="t": _Log()
 sys.modules["app.observability"] = _obs
 
 _cfg = types.ModuleType("app.config")
-_cfg.settings = types.SimpleNamespace(gemini_api_key="test", database_url="sqlite://")
+_cfg.settings = types.SimpleNamespace(
+    gemini_api_key="test",
+    gemini_model="gemini-3-flash-preview",
+    ai_provider_timeout_seconds=30,
+    database_url="sqlite://",
+)
 sys.modules["app.config"] = _cfg
 
 _db = types.ModuleType("app.db")
@@ -341,14 +337,11 @@ def test_empty_text_code():
 
 
 def test_ai_timeout_code(monkeypatch):
-    import time
+    async def slow_generate(*_args, **_kwargs):
+        await asyncio.sleep(5)
+        return "", None
 
-    class SlowModel:
-        def generate_content(self, *a, **k):
-            time.sleep(5)
-            return None
-
-    monkeypatch.setattr(ce_mod, "_get_model", lambda: SlowModel())
+    monkeypatch.setattr(ce_mod, "generate_text", slow_generate)
     with pytest.raises(AIExtractionError) as ei:
         asyncio.run(extract_profile_from_text("x" * 100, timeout_s=0.05))
     assert ei.value.code == "CV_AI_TIMEOUT"
@@ -359,15 +352,11 @@ def test_nonstop_finish_retries_then_coded(monkeypatch):
 
     calls = {"n": 0}
 
-    class CutModel:
-        def generate_content(self, *a, **k):
-            calls["n"] += 1
-            return SimpleNamespace(
-                text='{"skills": ["Python"]',
-                candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="MAX_TOKENS"))],
-            )
+    async def cut_generate(*_args, **_kwargs):
+        calls["n"] += 1
+        return '{"skills": ["Python"]', SimpleNamespace(name="MAX_TOKENS")
 
-    monkeypatch.setattr(ce_mod, "_get_model", lambda: CutModel())
+    monkeypatch.setattr(ce_mod, "generate_text", cut_generate)
     with pytest.raises(AIExtractionError) as ei:
         asyncio.run(extract_profile_from_text("x" * 100, timeout_s=5))
     assert ei.value.code == "CV_AI_ERROR"
@@ -377,14 +366,13 @@ def test_nonstop_finish_retries_then_coded(monkeypatch):
 def test_extract_success_path(monkeypatch):
     from types import SimpleNamespace
 
-    class GoodModel:
-        def generate_content(self, *a, **k):
-            return SimpleNamespace(
-                text='{"skills": ["Python", "SQL"], "city": "Fes", "study_level": "LICENCE"}',
-                candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="STOP"))],
-            )
+    async def good_generate(*_args, **_kwargs):
+        return (
+            '{"skills": ["Python", "SQL"], "city": "Fes", "study_level": "LICENCE"}',
+            SimpleNamespace(name="STOP"),
+        )
 
-    monkeypatch.setattr(ce_mod, "_get_model", lambda: GoodModel())
+    monkeypatch.setattr(ce_mod, "generate_text", good_generate)
     data, warnings, meta = asyncio.run(extract_profile_from_text("x" * 100))
     assert data.skills == ["Python", "SQL"]
     assert data.city == "Fes"

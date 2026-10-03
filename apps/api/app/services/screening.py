@@ -13,11 +13,9 @@ import json
 from typing import Any
 from uuid import UUID
 
-import google.generativeai as genai
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models import Application, CandidateProfile, Offer, User
 from app.observability import get_logger
 from app.services.cv_assets import (
@@ -26,12 +24,10 @@ from app.services.cv_assets import (
 )
 from app.services.cv_parser import extract_text
 from app.services.cv_storage import assert_owns_path, download_cv
+from app.services.ai_contracts import parse_screening_result, untrusted_prompt_data
+from app.services.gemini import generate_text
 
-genai.configure(api_key=settings.gemini_api_key)
-_model = genai.GenerativeModel("gemini-3-flash-preview")
 logger = get_logger("screening")
-
-GENERATION_TIMEOUT_SECONDS = 120
 
 
 def _profile_snapshot(profile: CandidateProfile | None, user: User | None) -> str:
@@ -111,7 +107,12 @@ def _parse_result(raw: str) -> dict[str, Any] | None:
     }
 
 
-async def screen_application(db: AsyncSession, application_id: UUID) -> dict[str, Any]:
+async def screen_application(
+    db: AsyncSession,
+    application_id: UUID,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
     """Run screening for one application. Raises on failure (caller records failed)."""
     result = await db.execute(select(Application).where(Application.id == application_id))
     app = result.scalar_one_or_none()
@@ -148,23 +149,27 @@ Return ONLY one valid JSON object, no other text. Keep the whole object compact:
 {{"score": 0-100, "summary": "1-2 sentences, max 300 characters", "strengths": ["..."], "gaps": ["..."]}}
 Base the score strictly on the evidence below. Do not invent qualifications.
 
-CANDIDATE:
-{_profile_snapshot(profile, user)}
-{f"CV EXCERPT:{chr(10)}{cv_text}" if cv_text else "No CV text available."}
-
-JOB: {offer.title} at {offer.company} ({offer.region}, {offer.field}, {offer.type.value if offer.type else "?"})
-DESCRIPTION: {(offer.description or "")[:1500]}
-REQUIREMENTS: {(offer.requirements or "")[:1500]}"""
+{untrusted_prompt_data({
+    "candidate": _profile_snapshot(profile, user),
+    "cv_excerpt": cv_text,
+    "offer": {
+        "title": offer.title,
+        "company": offer.company,
+        "region": offer.region,
+        "field": offer.field,
+        "type": offer.type.value if offer.type else None,
+        "description": offer.description,
+        "requirements": offer.requirements,
+    },
+})}"""
 
     logger.info("screening_started", application_id=str(application_id))
     try:
-        response = await asyncio.wait_for(
-            asyncio.to_thread(
-                _model.generate_content,
-                prompt,
-                generation_config={"temperature": 0.2, "max_output_tokens": 2000},
-            ),
-            timeout=GENERATION_TIMEOUT_SECONDS,
+        raw, _ = await generate_text(
+            prompt,
+            temperature=0.2,
+            max_output_tokens=2000,
+            response_mime_type="application/json",
         )
     except Exception as exc:
         logger.error(
@@ -174,10 +179,11 @@ REQUIREMENTS: {(offer.requirements or "")[:1500]}"""
         )
         raise ValueError("AI provider error") from exc
 
-    parsed = _parse_result(getattr(response, "text", "") or "")
-    if parsed is None:
+    try:
+        parsed = parse_screening_result(raw).model_dump()
+    except ValueError as exc:
         logger.error("screening_failed", reason="unparseable_response")
-        raise ValueError("AI returned an unusable result")
+        raise ValueError("AI returned an unusable result") from exc
 
     app.ai_score = parsed["score"]
     app.ai_report = json.dumps(
@@ -185,6 +191,9 @@ REQUIREMENTS: {(offer.requirements or "")[:1500]}"""
         ensure_ascii=False,
     )
     app.ai_status = "completed"
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     logger.info("screening_completed", application_id=str(application_id), score=parsed["score"])
     return parsed

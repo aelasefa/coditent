@@ -70,7 +70,17 @@ function PipelineContent() {
   }, [searchParams]);
 
   const stageMut = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => updateApplicationStatus(id, status),
+    mutationFn: ({
+      id,
+      status,
+      expectedVersion,
+      interview,
+    }: {
+      id: string;
+      status: string;
+      expectedVersion: number;
+      interview?: { scheduledAt: string; notes?: string };
+    }) => updateApplicationStatus(id, status, expectedVersion, interview),
     onSuccess: (res, vars) => {
       qc.invalidateQueries({ queryKey: ["applications"] });
       const chatNow = vars.status !== "applied" && vars.status !== "rejected";
@@ -249,8 +259,17 @@ function PipelineContent() {
               canMoveStage={canMoveStage}
               stagePending={stageMut.isPending}
               chatUnlocked={selectedUnlocked}
-              onStage={(st) => stageMut.mutate({ id: selected.id, status: st })}
-              onReject={() => stageMut.mutate({ id: selected.id, status: "rejected" })}
+              onStage={(st, interview) => stageMut.mutate({
+                id: selected.id,
+                status: st,
+                expectedVersion: selected.stage_version,
+                interview,
+              })}
+              onReject={() => stageMut.mutate({
+                id: selected.id,
+                status: "rejected",
+                expectedVersion: selected.stage_version,
+              })}
             />
           )}
         </Drawer>
@@ -266,4 +285,3 @@ export default function CompanyCandidatesPage() {
     </Suspense>
   );
 }
-

@@ -14,7 +14,7 @@ from app.health import router as health_router
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
-from app.routers import admin, applications, assessments, auth, audit, candidates, chat, companies, offers, invitations, recommendations, requests, two_factor
+from app.routers import account_recovery, admin, applications, assessments, auth, audit, candidates, chat, companies, friends, missions, notifications, offers, invitations, recommendations, requests, two_factor
 
 
 
@@ -41,6 +41,7 @@ app.add_middleware(
 app.middleware("http")(record_request_metrics)
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.include_router(account_recovery.router, prefix="/auth", tags=["Account Recovery"])
 app.include_router(admin.router, tags=["Admin"])
 app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 app.include_router(offers.router, prefix="/offers", tags=["Offers"])
@@ -53,6 +54,9 @@ app.include_router(assessments.router, prefix="/assessments", tags=["Assessments
 app.include_router(audit.router, prefix="/audit", tags=["Audit"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(two_factor.router, prefix="/auth/2fa", tags=["Two-Factor Authentication"])
+app.include_router(friends.router, prefix="/friends", tags=["Friends"])
+app.include_router(missions.router, prefix="/missions", tags=["Practice Missions"])
+app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(health_router, tags=["Health"])
 
 
@@ -62,11 +66,6 @@ async def on_startup():
     from app.core.vault import vault_client
     if vault_client.health_check():
         logger.info("hashicorp_vault_connected")
-        vault_client.write_secrets({
-            "JWT_SECRET": settings.secret_key,
-            "GEMINI_API_KEY": settings.gemini_api_key,
-            "SUPABASE_SERVICE_KEY": settings.supabase_service_key or "",
-        })
     else:
         logger.info("hashicorp_vault_offline_using_env_fallback")
 

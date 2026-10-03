@@ -1,8 +1,6 @@
-import asyncio
 import base64
 import hashlib
 import html as html_module
-import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -19,20 +17,29 @@ from app.core.audit import log_audit
 from app.core.permissions import VALID_COMPANY_ROLES, can
 from app.database import get_db
 from app.dependencies import get_current_user, require_company_admin, require_platform_admin
-from app.models import Company, User, UserRole
-from app.schemas import CompanyInviteAcceptRequest, EmployeeInviteAcceptRequest
+from app.models import Company, EmailDelivery, User, UserRole
+from app.schemas import (
+    CompanyInviteAcceptRequest,
+    CompanyInviteCreateRequest,
+    EmployeeInviteAcceptRequest,
+    EmployeeInviteCreateRequest,
+    EmployeeInviteExistingAcceptRequest,
+    EmployeeInviteResendRequest,
+    InvitationDeliveryOut,
+)
 from app.services.passwords import hash_password
+from app.services.entitlements import EntitlementDenied, require_capacity
+from app.services.email_outbox import (
+    EmailOutboxUnavailable,
+    deliver_email_job,
+    enqueue_email_delivery,
+)
 
 router = APIRouter()
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
-def _is_valid_email(email: str) -> bool:
-    return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email))
-
-# Keep role set consistent with frontend + permissions (OWNER not assignable via invite)
-EMPLOYEE_INVITE_ROLES = {"ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"}
 EMPLOYEE_INVITE_ART_CONTENT_ID = "coditent-employee-invite-art"
 EMPLOYEE_INVITE_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "employee-invite-email-art.jpg"
 
@@ -137,24 +144,6 @@ def _build_employee_invite_email(company_name: str, role: str, token: str, expir
     return subject, html
 
 
-def _send_employee_invite_email_safe(email: str, company_name: str, role: str, token: str, expires_at: datetime) -> None:
-    """Best-effort email — never fail invitation creation if email fails; log instead."""
-    try:
-        from app.services.email import send_email
-        subject, html = _build_employee_invite_email(company_name, role, token, expires_at)
-        send_email(email, subject, html, attachments=[employee_invite_art_attachment()])
-    except Exception as exc:
-        try:
-            from app.observability import get_logger
-            get_logger("invitations").warning(
-                "employee_invite_email_failed",
-                email=email,
-                exception_type=type(exc).__name__,
-            )
-        except Exception:
-            pass
-
-
 # ---------- Platform Admin -> Company ----------
 COMPANY_INVITE_EXPIRY_DAYS = 7
 COMPANY_INVITE_ART_CONTENT_ID = "coditent-company-invite-art"
@@ -256,26 +245,79 @@ def _company_invite_email(company_name: str, token: str, expires_at: datetime) -
     return subject, html
 
 
-def _send_company_invite_email(email: str, company_name: str, token: str, expires_at: datetime) -> None:
-    from app.services.email import send_email
+async def _queue_company_invite_email(
+    db: AsyncSession,
+    *,
+    invitation_id: UUID,
+    email: str,
+    company_name: str,
+    token: str,
+    expires_at: datetime,
+) -> EmailDelivery:
     subject, html = _company_invite_email(company_name, token, expires_at)
-    send_email(email, subject, html, attachments=[company_invite_art_attachment()])
+    return await enqueue_email_delivery(
+        db,
+        kind="company_invitation",
+        dedupe_key=f"company-invitation:{invitation_id}",
+        resource_type="company_invitation",
+        resource_id=invitation_id,
+        to_email=email,
+        subject=subject,
+        html=html,
+        attachments=[company_invite_art_attachment()],
+    )
 
 
-@router.post("/company/invite", response_model=dict)
+async def _queue_employee_invite_email(
+    db: AsyncSession,
+    *,
+    invitation_id: UUID,
+    email: str,
+    company_name: str,
+    role: str,
+    token: str,
+    expires_at: datetime,
+) -> EmailDelivery:
+    subject, html = _build_employee_invite_email(company_name, role, token, expires_at)
+    return await enqueue_email_delivery(
+        db,
+        kind="employee_invitation",
+        dedupe_key=f"employee-invitation:{invitation_id}",
+        resource_type="employee_invitation",
+        resource_id=invitation_id,
+        to_email=email,
+        subject=subject,
+        html=html,
+        attachments=[employee_invite_art_attachment()],
+    )
+
+
+async def _attempt_queued_delivery(
+    db: AsyncSession,
+    delivery: EmailDelivery | None,
+) -> tuple[bool, str, str | None]:
+    if delivery is None:
+        return False, "failed", (
+            "Email delivery is not configured. Copy the invitation link and share it securely."
+        )
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    if delivery_status == "failed":
+        return False, delivery_status, (
+            "The email provider could not deliver this invitation. Copy the invitation link and share it securely."
+        )
+    return delivery_status == "sent", delivery_status, None
+
+
+@router.post("/company/invite", response_model=InvitationDeliveryOut)
 async def invite_company(
-    data: dict,
+    data: CompanyInviteCreateRequest,
     current_user: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    email = data.get("email", "").strip().lower()
-    company_name = data.get("company_name", "").strip()
-    contact_name = str(data.get("contact_name", "") or "").strip() or None
-    contact_role = str(data.get("contact_role", "") or "").strip() or None
-    if not email or not company_name:
-        raise HTTPException(status_code=400, detail="email and company_name required")
-    if not _is_valid_email(email):
-        raise HTTPException(status_code=400, detail="Invalid email")
+    email = str(data.email).strip().lower()
+    company_name = data.company_name.strip()
+    contact_name = data.contact_name
+    contact_role = data.contact_role
     # Prevent accidental duplicates: one live pending invite per email
     dup = await db.execute(
         text("SELECT id, expires_at FROM company_invitations WHERE email=:email AND status='pending'"),
@@ -289,31 +331,39 @@ async def invite_company(
     token = secrets.token_urlsafe(32)
     token_hash = _hash(token)
     expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=COMPANY_INVITE_EXPIRY_DAYS)
-    inv_id = str(uuid4())
+    invitation_uuid = uuid4()
+    inv_id = str(invitation_uuid)
     await db.execute(
         text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
         {"id": inv_id, "email": email, "name": company_name, "cname": contact_name, "crole": contact_role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
     )
+    delivery: EmailDelivery | None = None
+    delivery_configuration_error = False
+    try:
+        delivery = await _queue_company_invite_email(
+            db,
+            invitation_id=invitation_uuid,
+            email=email,
+            company_name=company_name,
+            token=token,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
+        delivery_configuration_error = True
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_CREATED", actor=current_user, resource_type="company_invitation", details=email)
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
-    email_sent = True
-    email_error: str | None = None
-    try:
-        await asyncio.to_thread(_send_company_invite_email, email, company_name, token, expires_at)
-    except Exception as exc:
-        email_sent = False
-        email_error = "The email provider could not deliver this invitation. Copy the invitation link and share it securely."
-        try:
-            from app.observability import get_logger
-            get_logger("invitations").warning(
-                "company_invite_email_failed",
-                email=email,
-                exception_type=type(exc).__name__,
-            )
-        except Exception:
-            pass
-    out: dict = {"detail": "invited", "invitation_id": inv_id, "invitation_url": invite_url, "email_sent": email_sent}
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    if delivery_configuration_error:
+        delivery_status = "failed"
+    out: dict = {
+        "detail": "invited",
+        "invitation_id": inv_id,
+        "invitation_url": invite_url,
+        "email_sent": email_sent,
+        "delivery_id": delivery.id if delivery else None,
+        "delivery_status": delivery_status,
+    }
     if email_error:
         out["email_error"] = email_error
     return out
@@ -323,7 +373,7 @@ async def list_company_invitations(
     current_user: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    res = await db.execute(text("SELECT ci.id, ci.email, ci.company_name, ci.contact_name, ci.contact_role, ci.status, ci.expires_at, ci.created_at, ci.accepted_at, ci.revoked_at, ci.company_id, u.email AS invited_by_email FROM company_invitations ci LEFT JOIN users u ON u.id = ci.invited_by ORDER BY ci.created_at DESC"))
+    res = await db.execute(text("SELECT ci.id, ci.email, ci.company_name, ci.contact_name, ci.contact_role, ci.status, ci.expires_at, ci.created_at, ci.accepted_at, ci.revoked_at, ci.company_id, u.email AS invited_by_email, (SELECT ed.status FROM email_deliveries ed WHERE ed.resource_type='company_invitation' AND ed.resource_id=ci.id ORDER BY ed.created_at DESC LIMIT 1) AS email_delivery_status FROM company_invitations ci LEFT JOIN users u ON u.id = ci.invited_by ORDER BY ci.created_at DESC"))
     rows = [dict(r) for r in res.mappings().all()]
     return {"invitations": rows}
 
@@ -333,7 +383,7 @@ async def get_company_invitation(
     current_user: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    res = await db.execute(text("SELECT ci.id, ci.email, ci.company_name, ci.contact_name, ci.contact_role, ci.status, ci.expires_at, ci.created_at, ci.accepted_at, ci.revoked_at, ci.company_id, u.email AS invited_by_email FROM company_invitations ci LEFT JOIN users u ON u.id = ci.invited_by WHERE ci.id=:id"), {"id": str(invitation_id)})
+    res = await db.execute(text("SELECT ci.id, ci.email, ci.company_name, ci.contact_name, ci.contact_role, ci.status, ci.expires_at, ci.created_at, ci.accepted_at, ci.revoked_at, ci.company_id, u.email AS invited_by_email, (SELECT ed.status FROM email_deliveries ed WHERE ed.resource_type='company_invitation' AND ed.resource_id=ci.id ORDER BY ed.created_at DESC LIMIT 1) AS email_delivery_status FROM company_invitations ci LEFT JOIN users u ON u.id = ci.invited_by WHERE ci.id=:id"), {"id": str(invitation_id)})
     row = res.mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Invitation not found")
@@ -356,7 +406,7 @@ async def revoke_company_invitation(
     await log_audit(db, action="COMPANY_INVITATION_REVOKED", actor=current_user, resource_type="company_invitation", resource_id=invitation_id)
     return {"detail": "revoked"}
 
-@router.post("/company/invitations/{invitation_id}/resend", response_model=dict)
+@router.post("/company/invitations/{invitation_id}/resend", response_model=InvitationDeliveryOut)
 async def resend_company_invitation(
     invitation_id: UUID,
     current_user: Annotated[User, Depends(require_platform_admin)],
@@ -371,35 +421,37 @@ async def resend_company_invitation(
     await db.execute(text("UPDATE company_invitations SET status='revoked', revoked_at=:now WHERE id=:id"), {"now": datetime.utcnow(), "id": str(invitation_id)})
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=COMPANY_INVITE_EXPIRY_DAYS)
-    new_id = str(uuid4())
+    new_uuid = uuid4()
+    new_id = str(new_uuid)
     await db.execute(
         text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
         {"id": new_id, "email": row["email"], "name": row["company_name"], "cname": row["contact_name"], "crole": row["contact_role"], "hash": _hash(token), "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
     )
+    delivery: EmailDelivery | None = None
+    try:
+        delivery = await _queue_company_invite_email(
+            db,
+            invitation_id=new_uuid,
+            email=row["email"],
+            company_name=row["company_name"],
+            token=token,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
+        pass
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_RESENT", actor=current_user, resource_type="company_invitation", resource_id=UUID(new_id))
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
-    email_sent = True
-    try:
-        await asyncio.to_thread(
-            _send_company_invite_email,
-            row["email"],
-            row["company_name"],
-            token,
-            expires_at,
-        )
-    except Exception as exc:
-        email_sent = False
-        try:
-            from app.observability import get_logger
-            get_logger("invitations").warning(
-                "company_invite_email_failed",
-                email=row["email"],
-                exception_type=type(exc).__name__,
-            )
-        except Exception:
-            pass
-    return {"detail": "resent", "invitation_id": new_id, "invitation_url": invite_url, "email_sent": email_sent}
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    return {
+        "detail": "resent",
+        "invitation_id": new_id,
+        "invitation_url": invite_url,
+        "email_sent": email_sent,
+        "email_error": email_error,
+        "delivery_id": delivery.id if delivery else None,
+        "delivery_status": delivery_status,
+    }
 
 @router.get("/company-invitations/validate", response_model=dict)
 async def validate_company_invitation(
@@ -447,8 +499,12 @@ async def accept_company_invite(
     db.add(company)
     await db.flush()
     user = User(email=row["email"], password_hash=hash_password(data.password), role=UserRole.COMPANY_USER, is_approved=True, full_name=data.full_name, company_id=company.id, company_role="OWNER")
-    company.owner_id = user.id
     db.add(user)
+    # SQLAlchemy's UUID default is assigned during flush, not necessarily when
+    # the object is constructed. Flush before linking the company owner so the
+    # accepted invitation can never create a company with a null owner.
+    await db.flush()
+    company.owner_id = user.id
     await db.execute(text("UPDATE company_invitations SET status='accepted', accepted_at=:now, company_id=:cid WHERE id=:id"), {"now": datetime.utcnow(), "cid": str(company.id), "id": row["id"]})
     await db.commit()
     await log_audit(db, action="COMPANY_CREATED", actor=user, company_id=company.id, resource_type="company", resource_id=company.id)
@@ -456,22 +512,23 @@ async def accept_company_invite(
 
 
 # ---------- Company OWNER/ADMIN -> Employee ----------
-@router.post("/employee/invite", response_model=dict)
+@router.post("/employee/invite", response_model=InvitationDeliveryOut)
 async def invite_employee(
-    data: dict,
+    data: EmployeeInviteCreateRequest,
     current_user: Annotated[User, Depends(require_company_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    email = data.get("email", "").strip().lower()
-    role = data.get("role", "").strip().upper()
-    if not email or not _is_valid_email(email):
-        raise HTTPException(status_code=400, detail="Invalid email")
-    if role not in EMPLOYEE_INVITE_ROLES:
-        raise HTTPException(status_code=400, detail="Invalid role")
-    if role == "OWNER":
-        raise HTTPException(status_code=400, detail="Cannot assign OWNER via invitation")
+    email = str(data.email).strip().lower()
+    role = data.role
     if not can(current_user.company_role, "invite_employees"):
         raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        await require_capacity(db, current_user.company_id, "members")
+    except EntitlementDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     # Prevent self-invite
     if email == current_user.email.lower():
         raise HTTPException(status_code=400, detail="Cannot invite yourself")
@@ -489,7 +546,6 @@ async def invite_employee(
             raise HTTPException(status_code=400, detail="Active invitation already exists for this email")
         else:
             await db.execute(text("UPDATE employee_invitations SET status='expired' WHERE id=:id"), {"id": dup_row["id"]})
-            await db.commit()
     token = secrets.token_urlsafe(32)
     token_hash = _hash(token)
     expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=72)
@@ -497,28 +553,45 @@ async def invite_employee(
     comp_res = await db.execute(select(Company).where(Company.id == current_user.company_id))
     company = comp_res.scalar_one_or_none()
     company_name = company.name if company else "Your company"
+    invitation_uuid = uuid4()
+    invitation_id = str(invitation_uuid)
     await db.execute(
         text("INSERT INTO employee_invitations (id, company_id, email, role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :cid, :email, :role, :hash, 'pending', :by, :exp, :now)"),
-        {"id": str(uuid4()), "cid": str(current_user.company_id), "email": email, "role": role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
+        {"id": invitation_id, "cid": str(current_user.company_id), "email": email, "role": role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
     )
+    delivery: EmailDelivery | None = None
+    try:
+        delivery = await _queue_employee_invite_email(
+            db,
+            invitation_id=invitation_uuid,
+            email=email,
+            company_name=company_name,
+            role=role,
+            token=token,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
+        pass
     await db.commit()
     await log_audit(db, action="EMPLOYEE_INVITED", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", details=f"{email}:{role}")
-    await asyncio.to_thread(
-        _send_employee_invite_email_safe,
-        email,
-        company_name,
-        role,
-        token,
-        expires_at,
-    )
-    return {"detail": "invited"}
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    invitation_url = f"{settings.frontend_url.rstrip('/')}/invite/employee?token={token}"
+    return {
+        "detail": "invited",
+        "invitation_id": invitation_id,
+        "invitation_url": invitation_url,
+        "email_sent": email_sent,
+        "email_error": email_error,
+        "delivery_id": delivery.id if delivery else None,
+        "delivery_status": delivery_status,
+    }
 
 @router.get("/employee/invitations", response_model=dict)
 async def list_employee_invitations(
     current_user: Annotated[User, Depends(require_company_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    res = await db.execute(text("SELECT id, email, role, status, expires_at, created_at, accepted_at FROM employee_invitations WHERE company_id=:cid ORDER BY created_at DESC"), {"cid": str(current_user.company_id)})
+    res = await db.execute(text("SELECT ei.id, ei.email, ei.role, ei.status, ei.expires_at, ei.created_at, ei.accepted_at, (SELECT ed.status FROM email_deliveries ed WHERE ed.resource_type='employee_invitation' AND ed.resource_id=ei.id ORDER BY ed.created_at DESC LIMIT 1) AS email_delivery_status FROM employee_invitations ei WHERE ei.company_id=:cid ORDER BY ei.created_at DESC"), {"cid": str(current_user.company_id)})
     rows = [dict(r) for r in res.mappings().all()]
     return {"invitations": rows}
 
@@ -565,20 +638,14 @@ async def revoke_employee_invitation(
     await log_audit(db, action="EMPLOYEE_INVITATION_REVOKED", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", resource_id=invitation_id)
     return {"detail": "revoked"}
 
-@router.post("/employee/resend", response_model=dict)
+@router.post("/employee/resend", response_model=InvitationDeliveryOut)
 async def resend_employee_invitation(
-    data: dict,
+    data: EmployeeInviteResendRequest,
     current_user: Annotated[User, Depends(require_company_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Invalidate old pending token and issue new one — resend email."""
-    invitation_id = data.get("invitation_id") or data.get("id")
-    if not invitation_id:
-        raise HTTPException(status_code=400, detail="invitation_id required")
-    try:
-        inv_uuid = UUID(str(invitation_id))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid invitation_id")
+    inv_uuid = data.invitation_id
     res = await db.execute(text("SELECT * FROM employee_invitations WHERE id=:id FOR UPDATE"), {"id": str(inv_uuid)})
     row = res.mappings().first()
     if not row:
@@ -593,26 +660,42 @@ async def resend_employee_invitation(
     new_token = secrets.token_urlsafe(32)
     new_hash = _hash(new_token)
     expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=72)
-    new_id = str(uuid4())
+    new_uuid = uuid4()
+    new_id = str(new_uuid)
     await db.execute(
         text("INSERT INTO employee_invitations (id, company_id, email, role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :cid, :email, :role, :hash, 'pending', :by, :exp, :now)"),
         {"id": new_id, "cid": str(row["company_id"]), "email": row["email"], "role": row["role"], "hash": new_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
     )
-    await db.commit()
     # Fetch company name
     comp = await db.execute(select(Company).where(Company.id == row["company_id"]))
     company = comp.scalar_one_or_none()
     company_name = company.name if company else "Your company"
-    await asyncio.to_thread(
-        _send_employee_invite_email_safe,
-        row["email"],
-        company_name,
-        row["role"],
-        new_token,
-        expires_at,
-    )
+    delivery: EmailDelivery | None = None
+    try:
+        delivery = await _queue_employee_invite_email(
+            db,
+            invitation_id=new_uuid,
+            email=row["email"],
+            company_name=company_name,
+            role=row["role"],
+            token=new_token,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
+        pass
+    await db.commit()
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
     await log_audit(db, action="EMPLOYEE_INVITATION_RESENT", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", resource_id=UUID(new_id), details=f"{row['email']}:{row['role']}")
-    return {"detail": "resent", "invitation_id": new_id}
+    invitation_url = f"{settings.frontend_url.rstrip('/')}/invite/employee?token={new_token}"
+    return {
+        "detail": "resent",
+        "invitation_id": new_id,
+        "invitation_url": invitation_url,
+        "email_sent": email_sent,
+        "email_error": email_error,
+        "delivery_id": delivery.id if delivery else None,
+        "delivery_status": delivery_status,
+    }
 
 @router.post("/employee/accept", response_model=dict)
 async def accept_employee_invite(
@@ -643,14 +726,12 @@ async def accept_employee_invite(
 
 @router.post("/employee/accept-existing", response_model=dict)
 async def accept_employee_existing(
-    data: dict,
+    data: EmployeeInviteExistingAcceptRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Existing-user flow: authenticated user accepts invite bound to their email."""
-    token = data.get("token", "")
-    if not token:
-        raise HTTPException(status_code=400, detail="token required")
+    token = data.token
     token_hash = _hash(token)
     res = await db.execute(text("SELECT * FROM employee_invitations WHERE token_hash=:h FOR UPDATE"), {"h": token_hash})
     row = res.mappings().first()

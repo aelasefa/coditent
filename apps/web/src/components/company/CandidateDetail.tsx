@@ -12,6 +12,17 @@ import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
 
+const NEXT_STAGES: Record<string, string[]> = {
+  applied: ["under_review", "rejected"],
+  under_review: ["shortlisted", "assessment_required", "interview", "rejected"],
+  shortlisted: ["assessment_required", "interview", "rejected"],
+  assessment_required: ["assessment_completed", "rejected"],
+  assessment_completed: ["interview", "accepted", "rejected"],
+  interview: ["accepted", "rejected"],
+  accepted: [],
+  rejected: [],
+};
+
 function parseScreeningReport(report?: string | null): { summary: string; strengths: string[]; gaps: string[] } | null {
   if (!report) return null;
   try {
@@ -50,10 +61,15 @@ export function CandidateDetail({
   canMoveStage: boolean;
   stagePending: boolean;
   chatUnlocked: boolean;
-  onStage: (status: string) => void;
+  onStage: (
+    status: string,
+    interview?: { scheduledAt: string; notes?: string }
+  ) => void;
   onReject: () => void;
 }) {
   const [rejectConfirm, setRejectConfirm] = useState(false);
+  const [interviewAt, setInterviewAt] = useState("");
+  const [interviewNotes, setInterviewNotes] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const screening = parseScreeningReport(app.ai_report);
@@ -84,6 +100,10 @@ export function CandidateDetail({
     ? `${getApiBaseUrl()}${cvDownloadPath.startsWith("/") ? cvDownloadPath : `/${cvDownloadPath}`}`
     : null;
   const cvFilename = app.cv?.filename ?? null;
+  const nextStages = NEXT_STAGES[app.status] ?? [];
+  const nonInterviewStages = nextStages.filter(
+    (stage) => stage !== "interview" && stage !== "rejected"
+  );
 
   return (
     <div>
@@ -103,8 +123,9 @@ export function CandidateDetail({
       </div>
 
       {canMoveStage && (
-        <div className="mt-4 flex flex-wrap gap-2" aria-label="Stage actions">
-          {["under_review", "shortlisted", "interview", "accepted"].map((st) => (
+        <div className="mt-4 space-y-3" aria-label="Stage actions">
+          <div className="flex flex-wrap gap-2">
+          {nonInterviewStages.map((st) => (
             <Button
               key={st}
               size="sm"
@@ -116,6 +137,44 @@ export function CandidateDetail({
               {st.replace(/_/g, " ")}
             </Button>
           ))}
+          </div>
+          {nextStages.includes("interview") ? (
+            <div className="rounded-xl border border-border-subtle bg-surface-secondary/30 p-3">
+              <p className="text-xs font-semibold text-foreground">Schedule interview</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <input
+                  type="datetime-local"
+                  value={interviewAt}
+                  onChange={(event) => setInterviewAt(event.target.value)}
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  aria-label="Interview date and time"
+                />
+                <input
+                  type="text"
+                  maxLength={2000}
+                  value={interviewNotes}
+                  onChange={(event) => setInterviewNotes(event.target.value)}
+                  placeholder="Location or meeting details (optional)"
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  aria-label="Interview notes"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                disabled={stagePending || !interviewAt}
+                loading={stagePending}
+                onClick={() => onStage("interview", {
+                  scheduledAt: new Date(interviewAt).toISOString(),
+                  notes: interviewNotes,
+                })}
+              >
+                Schedule interview
+              </Button>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
           {rejectConfirm ? (
             <span className="inline-flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-background px-2 py-1">
               <span className="text-xs font-medium text-danger">Reject candidate?</span>
@@ -127,12 +186,13 @@ export function CandidateDetail({
               </Button>
             </span>
           ) : (
-            app.status !== "rejected" && (
+            nextStages.includes("rejected") && (
               <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(true)}>
                 Reject
               </Button>
             )
           )}
+          </div>
         </div>
       )}
 
@@ -148,6 +208,7 @@ export function CandidateDetail({
                     ["Stage", app.status.replace(/_/g, " ")],
                     ["Applied", dateTime(app.created_at)],
                     ["Last update", dateTime(app.updated_at)],
+                    ["Interview", dateTime(app.interview_scheduled_at)],
                     ["Email", c?.email ?? "Not shared"],
                     ["Job", jobTitle],
                     ["Chat", chatUnlocked ? "Available" : "Locked until next stage"],

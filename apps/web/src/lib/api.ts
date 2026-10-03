@@ -5,6 +5,7 @@ import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type {
   AdminActivity,
+  AdminMutationResult,
   AdminStats,
   LoginResponse,
   Offer,
@@ -41,7 +42,7 @@ const skipAuthRedirectConfig = {
   skipAuthRedirect: true,
 } as AxiosRequestConfig & { skipAuthRedirect: boolean };
 
-const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/recruiter", "/admin"];
+const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/company", "/chat", "/recruiter", "/admin"];
 
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login") {
@@ -68,6 +69,14 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    const method = (config.method ?? "get").toLowerCase();
+    if (!["get", "head", "options"].includes(method)) {
+      const csrf = document.cookie
+        .split("; ")
+        .find((entry) => entry.startsWith("coditent_csrf="))
+        ?.slice("coditent_csrf=".length);
+      if (csrf) config.headers["X-CSRF-Token"] = decodeURIComponent(csrf);
     }
   }
 
@@ -145,6 +154,28 @@ export async function login(payload: {
   return data;
 }
 
+export async function requestPasswordRecovery(email: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>("/auth/recovery/request", { email });
+  return data;
+}
+
+export async function confirmPasswordRecovery(payload: {
+  token: string;
+  new_password: string;
+}): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>("/auth/recovery/confirm", payload);
+  return data;
+}
+
+export async function logoutSession(): Promise<void> {
+  try {
+    await api.post("/auth/logout");
+  } finally {
+    removeToken();
+    removeTrustedDevice();
+  }
+}
+
 export async function adminLogin(payload: {
   email: string;
   password: string;
@@ -197,9 +228,23 @@ export async function getMe(): Promise<User> {
   return data;
 }
 
-export async function updateAvatar(avatarUrl: string): Promise<User> {
-  const { data } = await api.put<User>("/auth/me/avatar", { avatar_url: avatarUrl });
+export async function uploadAvatar(file: File, onProgress?: (percent: number) => void): Promise<User> {
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+  const { data } = await api.post<User>("/auth/me/avatar", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (event) => {
+      if (onProgress && event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+    },
+  });
   return data;
+}
+
+export function resolveApiAssetUrl(src?: string | null): string | null {
+  if (!src) return null;
+  if (/^(https?:|data:|blob:)/i.test(src)) return src;
+  const base = getApiBaseUrl().replace(/\/$/, "");
+  return `${base}${src.startsWith("/") ? "" : "/"}${src}`;
 }
 
 export async function updateAccountName(fullName: string): Promise<User> {
@@ -258,6 +303,30 @@ export async function updateProfile(payload: Partial<Profile>): Promise<Profile>
   return data;
 }
 
+export type ProfileAIPayload = {
+  skills: string[];
+  field_of_study?: string | null;
+  headline?: string | null;
+  experience?: string | null;
+  education?: string | null;
+  interests?: string | null;
+  career_goals?: string | null;
+};
+
+export async function generateProfileHeadline(
+  payload: ProfileAIPayload,
+): Promise<{ headline: string }> {
+  const { data } = await api.post("/candidates/ai/headline", payload, { timeout: 35_000 });
+  return data;
+}
+
+export async function generateProfileBio(
+  payload: ProfileAIPayload,
+): Promise<{ success: boolean; bio: string }> {
+  const { data } = await api.post("/candidates/ai/bio", payload, { timeout: 35_000 });
+  return data;
+}
+
 export async function uploadCV(
   file: File,
   onProgress?: (percent: number) => void
@@ -306,6 +375,15 @@ export async function createOffer(payload: {
   type: "JOB" | "INTERNSHIP";
   description: string;
   requirements: string;
+  location?: string | null;
+  work_mode?: "remote" | "hybrid" | "on-site" | null;
+  required_skills?: string | null;
+  required_experience?: string | null;
+  education_requirements?: string | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  deadline?: string | null;
+  opportunity_status?: "draft" | "active";
 }): Promise<Offer> {
   const { data } = await api.post<Offer>("/offers", payload);
   return data;
@@ -392,6 +470,39 @@ export async function getAdminStats(): Promise<AdminStats> {
 export async function getAdminUsers(): Promise<User[]> {
   const { data } = await api.get<{ users: User[] }>("/admin/users");
   return data.users;
+}
+
+export async function createAdminUser(payload: {
+  email: string;
+  password: string;
+  full_name: string;
+  role: "CANDIDATE";
+}): Promise<User> {
+  const { data } = await api.post<User>("/admin/users", payload);
+  return data;
+}
+
+export async function updateAdminUser(
+  userId: string,
+  payload: { email?: string; full_name?: string; is_active?: boolean }
+): Promise<User> {
+  const { data } = await api.patch<User>(`/admin/users/${userId}`, payload);
+  return data;
+}
+
+export async function deactivateAdminUser(userId: string): Promise<AdminMutationResult> {
+  const { data } = await api.delete<AdminMutationResult>(`/admin/users/${userId}`);
+  return data;
+}
+
+export async function getAdminCompanies(): Promise<import("@/lib/types").Company[]> {
+  const { data } = await api.get<{ companies: import("@/lib/types").Company[] }>("/admin/companies");
+  return data.companies;
+}
+
+export async function archiveAdminCompany(companyId: string): Promise<AdminMutationResult> {
+  const { data } = await api.delete<AdminMutationResult>(`/admin/companies/${companyId}`);
+  return data;
 }
 
 export async function getAdminOffers(): Promise<Offer[]> {
@@ -498,6 +609,8 @@ export async function inviteCompany(payload: CompanyInvitationPayload): Promise<
   invitation_url: string;
   email_sent: boolean;
   email_error?: string;
+  delivery_id?: string | null;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
 }> {
   const { data } = await api.post("/invites/company/invite", payload);
   return data;
@@ -515,6 +628,9 @@ export async function resendCompanyInvitation(id: string): Promise<{
   invitation_id: string;
   invitation_url: string;
   email_sent: boolean;
+  email_error?: string | null;
+  delivery_id?: string | null;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
 }> {
   const { data } = await api.post(`/invites/company/invitations/${id}/resend`);
   return data;
@@ -540,11 +656,21 @@ export async function acceptCompanyInvite(payload: { token: string; password: st
   const { data } = await api.post("/invites/company/accept", payload);
   return data;
 }
-export async function inviteEmployee(payload: { email: string; role: string }): Promise<{ detail: string }> {
+export interface EmployeeInvitationDelivery {
+  detail: string;
+  invitation_id: string;
+  invitation_url: string;
+  email_sent: boolean;
+  email_error?: string | null;
+  delivery_id?: string | null;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
+}
+
+export async function inviteEmployee(payload: { email: string; role: string }): Promise<EmployeeInvitationDelivery> {
   const { data } = await api.post("/invites/employee/invite", payload);
   return data;
 }
-export async function listEmployeeInvitations(): Promise<{ invitations: { id: string; email: string; role: string; status: string; expires_at: string }[] }> {
+export async function listEmployeeInvitations(): Promise<{ invitations: import("@/lib/types").EmployeeInvitation[] }> {
   const { data } = await api.get("/invites/employee/invitations");
   return data;
 }
@@ -564,16 +690,88 @@ export async function validateEmployeeInvite(token: string): Promise<{ email: st
   const { data } = await api.get("/invites/employee/validate", { params: { token } });
   return data;
 }
-export async function resendEmployeeInvite(invitation_id: string): Promise<{ detail: string; invitation_id: string }> {
+export async function resendEmployeeInvite(invitation_id: string): Promise<EmployeeInvitationDelivery> {
   const { data } = await api.post("/invites/employee/resend", { invitation_id });
+  return data;
+}
+
+export async function listFriends(sort: "name" | "recent" = "name"): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends", { params: { sort, limit: 100, offset: 0 } });
+  return data;
+}
+
+export async function searchPeople(query: string): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends/search", { params: { q: query } });
+  return data;
+}
+
+export async function addFriend(friendId: string): Promise<import("@/lib/types").FriendItem> {
+  const { data } = await api.post(`/friends/${friendId}`);
+  return data;
+}
+
+export async function removeFriend(friendId: string): Promise<void> {
+  await api.delete(`/friends/${friendId}`);
+}
+
+export async function sendPresenceHeartbeat(): Promise<void> {
+  await api.post("/friends/presence/heartbeat");
+}
+
+export async function listMissions(filters?: { field?: string; level?: string }): Promise<import("@/lib/types").PracticeMission[]> {
+  const { data } = await api.get<{ missions: import("@/lib/types").PracticeMission[] }>("/missions", { params: filters });
+  return data.missions;
+}
+
+export async function getMissionProgress(): Promise<import("@/lib/types").MissionProgress> {
+  const { data } = await api.get<import("@/lib/types").MissionProgress>("/missions/progress/me");
+  return data;
+}
+
+export async function submitMissionAttempt(missionId: string, evidence: string): Promise<import("@/lib/types").MissionAttempt> {
+  const { data } = await api.post<import("@/lib/types").MissionAttempt>(`/missions/${missionId}/attempts`, { evidence });
   return data;
 }
 export async function getApplications(): Promise<{ applications: { id: string; status: string }[] }> {
   const { data } = await api.get("/applications");
   return data;
 }
-export async function getAssessments(): Promise<{ assessments: { id: string; status: string }[] }> {
-  const { data } = await api.get("/assessments");
+export async function getAssessments(): Promise<{ assessments: import("@/lib/types").AssessmentItem[] }> {
+  const { data } = await api.get<{ assessments: import("@/lib/types").AssessmentItem[] }>("/assessments");
+  return data;
+}
+
+export async function createAssessment(payload: {
+  application_id: string;
+  title: string;
+  description: string;
+  rubric: string[];
+  max_score?: number;
+  due_at?: string | null;
+}): Promise<import("@/lib/types").AssessmentItem> {
+  const { data } = await api.post<import("@/lib/types").AssessmentItem>("/assessments", payload);
+  return data;
+}
+
+export async function submitAssessment(
+  id: string,
+  submissionText: string
+): Promise<import("@/lib/types").AssessmentItem> {
+  const { data } = await api.post<import("@/lib/types").AssessmentItem>(
+    `/assessments/${id}/submit`,
+    { submission_text: submissionText }
+  );
+  return data;
+}
+
+export async function reviewAssessment(
+  id: string,
+  payload: { expected_version: number; score: number; feedback: string }
+): Promise<import("@/lib/types").AssessmentItem> {
+  const { data } = await api.patch<import("@/lib/types").AssessmentItem>(
+    `/assessments/${id}/review`,
+    payload
+  );
   return data;
 }
 export async function getAuditLogs(): Promise<{ logs: { id: string; action: string; details: string | null; created_at: string }[] }> {
@@ -595,8 +793,23 @@ export async function updateCompany(
 
 export async function getCompanySubscription(
   companyId: string
-): Promise<{ company_id: string; status: string; owner_id: string | null }> {
-  const { data } = await api.get(`/companies/${companyId}/subscription`);
+): Promise<import("@/lib/types").CompanySubscription> {
+  const { data } = await api.get<import("@/lib/types").CompanySubscription>(`/companies/${companyId}/subscription`);
+  return data;
+}
+
+export async function updateAdminCompanySubscription(
+  companyId: string,
+  payload: {
+    plan: "free" | "pro" | "enterprise";
+    subscription_status: "trialing" | "active" | "past_due" | "canceled";
+    expires_at?: string | null;
+  }
+): Promise<import("@/lib/types").CompanySubscription> {
+  const { data } = await api.patch<import("@/lib/types").CompanySubscription>(
+    `/admin/companies/${companyId}/subscription`,
+    payload
+  );
   return data;
 }
 
@@ -657,9 +870,20 @@ export async function getApplication(id: string): Promise<import("@/lib/types").
 
 export async function updateApplicationStatus(
   id: string,
-  status: string
-): Promise<{ id: string; status: string }> {
-  const { data } = await api.patch(`/applications/${id}`, { status });
+  status: string,
+  expectedVersion: number,
+  interview?: { scheduledAt: string; notes?: string }
+): Promise<{ id: string; status: string; stage_version: number; chat_enabled: boolean }> {
+  const { data } = await api.patch(`/applications/${id}`, {
+    status,
+    expected_version: expectedVersion,
+    ...(interview
+      ? {
+          interview_scheduled_at: interview.scheduledAt,
+          interview_notes: interview.notes || null,
+        }
+      : {}),
+  });
   return data;
 }
 
@@ -747,4 +971,40 @@ export function getRecruitmentWsUrl(applicationId: string, ticket: string): stri
     ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
     : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
   return `${wsBase}/chat/recruitment/${applicationId}/ws?ticket=${encodeURIComponent(ticket)}`;
+}
+
+export async function listNotifications(page = 1, unreadOnly = false): Promise<import("@/lib/types").NotificationPage> {
+  const { data } = await api.get<import("@/lib/types").NotificationPage>("/notifications", {
+    params: { page, limit: 25, unread_only: unreadOnly },
+  });
+  return data;
+}
+
+export async function getNotificationUnreadCount(): Promise<number> {
+  const { data } = await api.get<{ unread: number }>("/notifications/unread");
+  return data.unread;
+}
+
+export async function markNotificationRead(id: string): Promise<import("@/lib/types").ProductNotification> {
+  const { data } = await api.patch<import("@/lib/types").ProductNotification>(`/notifications/${id}/read`);
+  return data;
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await api.post("/notifications/read-all");
+}
+
+export async function getNotificationPreferences(): Promise<import("@/lib/types").NotificationPreferences> {
+  const { data } = await api.get<import("@/lib/types").NotificationPreferences>("/notifications/preferences/me");
+  return data;
+}
+
+export async function updateNotificationPreferences(
+  preferences: Omit<import("@/lib/types").NotificationPreferences, "user_id" | "updated_at">,
+): Promise<import("@/lib/types").NotificationPreferences> {
+  const { data } = await api.put<import("@/lib/types").NotificationPreferences>(
+    "/notifications/preferences/me",
+    preferences,
+  );
+  return data;
 }

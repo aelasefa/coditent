@@ -19,8 +19,12 @@ from app.services.authentication import (
     ensure_access_session_active,
     ensure_mfa_challenge_active,
     factor_fingerprint,
+    ensure_credential_matches_account,
 )
 from app.services.two_factor import (
+    consume_second_factor,
+    decrypt_totp_secret,
+    encrypt_totp_secret,
     generate_backup_codes,
     generate_totp_secret,
     hash_backup_code,
@@ -143,7 +147,10 @@ def _user(*, two_factor: bool = True, approved: bool = True) -> User:
         role=UserRole.CANDIDATE,
         is_approved=approved,
         is_2fa_enabled=two_factor,
-        totp_secret="JBSWY3DPEHPK3PXP" if two_factor else None,
+        totp_secret_encrypted=(
+            encrypt_totp_secret("JBSWY3DPEHPK3PXP") if two_factor else None
+        ),
+        auth_version=0,
     )
 
 
@@ -196,6 +203,17 @@ def test_revoked_access_session_is_rejected(monkeypatch):
         asyncio.run(ensure_access_session_active(payload))
 
 
+def test_auth_version_invalidates_preexisting_credentials():
+    user = _user(two_factor=False)
+    token = create_access_token({"sub": str(user.id), "auth_version": 0})
+    payload = verify_access_token(token)
+    ensure_credential_matches_account(payload, user)
+
+    user.auth_version = 1
+    with pytest.raises(AuthenticationRejected, match="invalidated"):
+        ensure_credential_matches_account(payload, user)
+
+
 def test_inactive_account_cannot_complete_authentication(monkeypatch):
     monkeypatch.setattr(authentication, "get_async_redis", lambda: FakeRedis())
     with pytest.raises(AuthenticationRejected, match="not active"):
@@ -208,6 +226,21 @@ def test_totp_accepts_current_code_and_rejects_bad_code():
     secret = generate_totp_secret()
     assert verify_totp_code(secret, pyotp.TOTP(secret).now()) is True
     assert verify_totp_code(secret, "000000") is False
+
+
+def test_totp_secret_is_encrypted_and_same_timestep_cannot_be_replayed():
+    import pyotp
+
+    secret = generate_totp_secret()
+    encrypted = encrypt_totp_secret(secret)
+    assert secret not in encrypted
+    assert decrypt_totp_secret(encrypted) == secret
+
+    user = _user(two_factor=True)
+    user.totp_secret_encrypted = encrypted
+    code = pyotp.TOTP(secret).now()
+    assert consume_second_factor(user, code) == "totp"
+    assert consume_second_factor(user, code) is None
 
 
 def test_backup_code_is_single_use():

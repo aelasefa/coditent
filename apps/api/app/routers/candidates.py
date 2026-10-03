@@ -1,12 +1,13 @@
 import asyncio
 import json
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import uuid as uuid_lib
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,7 @@ from app.schemas import (
     ProfileUpdate,
 )
 from app.services.cv_extraction import AIExtractionError, extract_profile_from_text
+from app.services.ai_controls import AIAdmissionError, AIControlUnavailable, ai_capacity
 from app.services.cv_assets import (
     CVAssetOwnershipError,
     garbage_collect_cv_asset,
@@ -45,6 +47,7 @@ from app.services.cv_storage import (
     upload_cv,
 )
 from app.services.upload_limits import UploadTooLargeError, read_upload_limited
+from app.services.profile_ai import generate_profile_bio, generate_profile_headline
 
 router = APIRouter()
 logger = get_logger("candidates")
@@ -79,15 +82,56 @@ MATCH_PROFILE_FIELDS = {
 }
 
 
+class ProfileAIRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    skills: list[str] = Field(min_length=1, max_length=30)
+    field_of_study: str | None = Field(default=None, max_length=120)
+    headline: str | None = Field(default=None, max_length=120)
+    experience: str | None = Field(default=None, max_length=1_000)
+    education: str | None = Field(default=None, max_length=1_000)
+    interests: str | None = Field(default=None, max_length=500)
+    career_goals: str | None = Field(default=None, max_length=500)
+
+    @field_validator("skills")
+    @classmethod
+    def normalize_skills_for_ai(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values if value.strip()]
+        if not cleaned or any(len(value) > 80 for value in cleaned):
+            raise ValueError("skills must contain 1-30 values of at most 80 characters")
+        return cleaned
+
+
+def _raise_ai_admission(exc: AIAdmissionError) -> NoReturn:
+    if isinstance(exc, AIControlUnavailable):
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        message = "AI controls are temporarily unavailable"
+    else:
+        status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        message = "AI usage limit reached; retry later"
+    raise HTTPException(
+        status_code=status_code,
+        detail={"code": exc.code, "message": message},
+        headers={"Retry-After": str(exc.retry_after)},
+    ) from exc
+
+
 async def _clear_recommendation_cache(user_id) -> None:
     """Best-effort removal of legacy bulk results for this candidate only."""
     try:
         from app.cache import get_async_redis
 
         client = get_async_redis()
-        keys = await client.keys(f"recommendations:{user_id}:*")
-        if keys:
-            await client.delete(*keys)
+        batch: list[str | bytes] = []
+        async for key in client.scan_iter(
+            match=f"recommendations:{user_id}:*", count=100
+        ):
+            batch.append(key)
+            if len(batch) == 100:
+                await client.delete(*batch)
+                batch.clear()
+        if batch:
+            await client.delete(*batch)
     except Exception:
         logger.warning("recommendation_cache_invalidation_failed", candidate_id=str(user_id))
 
@@ -233,6 +277,44 @@ async def update_profile(
     if match_profile_changed:
         await _clear_recommendation_cache(current_user.id)
     return ProfileOut.model_validate(profile)
+
+
+@router.post("/ai/headline", response_model=dict[str, str])
+async def generate_candidate_headline(
+    data: ProfileAIRequest,
+    current_user: Annotated[User, Depends(require_candidate_account)],
+) -> dict[str, str]:
+    try:
+        async with ai_capacity("profile_headline", user_id=current_user.id):
+            headline = await generate_profile_headline(data.model_dump())
+    except AIAdmissionError as exc:
+        _raise_ai_admission(exc)
+    except Exception as exc:
+        logger.error("profile_headline_failed", exception_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Headline generation failed",
+        ) from exc
+    return {"headline": headline}
+
+
+@router.post("/ai/bio", response_model=dict[str, str | bool])
+async def generate_candidate_bio(
+    data: ProfileAIRequest,
+    current_user: Annotated[User, Depends(require_candidate_account)],
+) -> dict[str, str | bool]:
+    try:
+        async with ai_capacity("profile_bio", user_id=current_user.id):
+            bio = await generate_profile_bio(data.model_dump())
+    except AIAdmissionError as exc:
+        _raise_ai_admission(exc)
+    except Exception as exc:
+        logger.error("profile_bio_failed", exception_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Bio generation failed",
+        ) from exc
+    return {"success": True, "bio": bio}
 
 
 @router.post("/cv", response_model=CVMetaOut, status_code=status.HTTP_201_CREATED)
@@ -456,7 +538,20 @@ async def parse_candidate_cv(
 
     logger.info("cv_parse_text", text_chars=len(text), pages=pages if pages is not None else -1)
     try:
-        extracted, warnings, ai_meta = await extract_profile_from_text(text)
+        async with ai_capacity("cv_extract", user_id=current_user.id):
+            extracted, warnings, ai_meta = await extract_profile_from_text(text)
+    except AIControlUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": exc.code, "message": "AI controls are temporarily unavailable"},
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    except AIAdmissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": exc.code, "message": "AI usage limit reached; retry later"},
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
     except AIExtractionError as exc:
         status_code = (
             status.HTTP_504_GATEWAY_TIMEOUT

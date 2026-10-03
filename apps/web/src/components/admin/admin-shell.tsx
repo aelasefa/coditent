@@ -9,7 +9,7 @@ import { Logo } from "@/components/ui/logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Sheet } from "@/components/ui/sheet";
 import { PageContainer } from "@/components/shell/page-container";
-import { getMe } from "@/lib/api";
+import { getMe, logoutSession } from "@/lib/api";
 import {
   FiActivity,
   FiGrid,
@@ -28,10 +28,9 @@ const NAV = [
   { label: "Settings", href: "/admin/settings", icon: FiSettings },
 ];
 
-function logout() {
+async function logout() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("coditent_token");
-    document.cookie = "coditent_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    await logoutSession().catch(() => undefined);
     window.location.href = "/admin/login";
   }
 }

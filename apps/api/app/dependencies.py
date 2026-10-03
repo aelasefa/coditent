@@ -1,7 +1,8 @@
 import uuid
+import secrets
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, Query, status
+from fastapi import Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from app.services.authentication import (
     AuthenticationStoreUnavailable,
     ensure_access_session_active,
     ensure_account_can_authenticate,
+    ensure_credential_matches_account,
 )
 from app.utils.jwt import verify_access_token
 
@@ -24,6 +26,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_access_payload(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
     access_token_cookie: Annotated[str | None, Cookie(alias=settings.access_token_cookie_name)] = None,
 ) -> dict:
@@ -32,6 +35,20 @@ async def get_current_access_payload(
         token = credentials.credentials.strip()
     elif access_token_cookie:
         token = access_token_cookie.strip()
+        if request.method.upper() not in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+            origin = (request.headers.get("origin") or "").rstrip("/")
+            csrf_cookie = request.cookies.get(settings.csrf_cookie_name) or ""
+            csrf_header = request.headers.get("x-csrf-token") or ""
+            if (
+                origin not in settings.allowed_cors_origins
+                or not csrf_cookie
+                or not csrf_header
+                or not secrets.compare_digest(csrf_cookie, csrf_header)
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="CSRF validation failed",
+                )
 
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
@@ -65,6 +82,7 @@ async def get_current_user(
 
     try:
         ensure_account_can_authenticate(user)
+        ensure_credential_matches_account(payload, user)
     except AuthenticationRejected as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

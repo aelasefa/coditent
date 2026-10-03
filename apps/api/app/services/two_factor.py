@@ -3,10 +3,46 @@ import hashlib
 import io
 import json
 import secrets
+import time
 from typing import List, Tuple, Optional
 
 import pyotp
 import qrcode
+from cryptography.fernet import Fernet, InvalidToken
+
+from app.config import settings
+from app.models import User
+
+
+class TotpSecretUnavailable(RuntimeError):
+    """Raised when encrypted factor material cannot be safely accessed."""
+
+
+def _totp_cipher() -> Fernet:
+    configured_key = (settings.totp_encryption_key or "").strip()
+    if not configured_key:
+        raise TotpSecretUnavailable("TOTP encryption key is not configured")
+    try:
+        return Fernet(configured_key.encode("ascii"))
+    except (ValueError, UnicodeEncodeError) as exc:
+        raise TotpSecretUnavailable("TOTP encryption key is invalid") from exc
+
+
+def encrypt_totp_secret(secret: str) -> str:
+    if not secret:
+        raise ValueError("TOTP secret is required")
+    return "v1:" + _totp_cipher().encrypt(secret.encode("utf-8")).decode("ascii")
+
+
+def decrypt_totp_secret(encrypted_secret: str | None) -> str | None:
+    if not encrypted_secret:
+        return None
+    if not encrypted_secret.startswith("v1:"):
+        raise TotpSecretUnavailable("Unsupported encrypted TOTP secret version")
+    try:
+        return _totp_cipher().decrypt(encrypted_secret[3:].encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeError) as exc:
+        raise TotpSecretUnavailable("Unable to decrypt TOTP secret") from exc
 
 
 def generate_totp_secret() -> str:
@@ -38,12 +74,50 @@ def generate_qr_code_base64(uri: str) -> str:
     return f"data:image/png;base64,{b64_str}"
 
 
-def verify_totp_code(secret: str, code: str) -> bool:
-    """Verify a 6-digit TOTP code against the secret key (valid_window=1 allows +-30s clock drift)."""
+def matching_totp_step(secret: str, code: str, *, at_time: int | None = None) -> int | None:
+    """Return the accepted RFC 6238 timestep, including the +/- one-step drift window."""
     if not secret or not code:
-        return False
+        return None
+    normalized_code = code.strip()
+    if len(normalized_code) != 6 or not normalized_code.isdigit():
+        return None
     totp = pyotp.TOTP(secret)
-    return totp.verify(code.strip(), valid_window=1)
+    current_step = int(at_time if at_time is not None else time.time()) // totp.interval
+    for step in (current_step - 1, current_step, current_step + 1):
+        if secrets.compare_digest(totp.at(step * totp.interval), normalized_code):
+            return step
+    return None
+
+
+def verify_totp_code(secret: str, code: str) -> bool:
+    """Compatibility predicate; state-changing routes use consume_second_factor."""
+    return matching_totp_step(secret, code) is not None
+
+
+def consume_second_factor(user: User, candidate_code: str) -> str | None:
+    """Consume a TOTP timestep or recovery code on an already row-locked user.
+
+    The caller must commit in the same transaction before releasing the row
+    lock. This makes both TOTP replay tracking and recovery-code consumption
+    deterministic under concurrent requests.
+    """
+    secret = decrypt_totp_secret(user.totp_secret_encrypted)
+    if secret:
+        step = matching_totp_step(secret, candidate_code)
+        if step is not None:
+            last_step = user.totp_last_used_step
+            if last_step is not None and step <= last_step:
+                return None
+            user.totp_last_used_step = step
+            return "totp"
+
+    backup_valid, remaining = verify_and_consume_backup_code(
+        user.backup_codes, candidate_code
+    )
+    if backup_valid:
+        user.backup_codes = remaining
+        return "recovery"
+    return None
 
 
 def hash_backup_code(code: str) -> str:

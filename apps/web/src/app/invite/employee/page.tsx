@@ -2,7 +2,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { validateEmployeeInvite, acceptEmployeeInvite, acceptEmployeeInviteExisting, getMe } from "@/lib/api";
+import { validateEmployeeInvite, acceptEmployeeInvite, acceptEmployeeInviteExisting, getMe, logoutSession } from "@/lib/api";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,7 +167,7 @@ function EmployeeInviteInner() {
       {isLoggedInAsOther && (
         <p role="alert" className="mt-3 rounded-xl border border-warning/30 bg-warning-background p-3 text-[13px]">
           Logged in as <strong>{me?.email}</strong>, invite is for <strong>{invite.email}</strong>.{" "}
-          <button type="button" onClick={() => { localStorage.removeItem("coditent_token"); location.reload(); }} className="font-semibold underline">
+          <button type="button" onClick={() => { void logoutSession().finally(() => location.reload()); }} className="font-semibold underline">
             Log out
           </button>{" "}
           and retry.

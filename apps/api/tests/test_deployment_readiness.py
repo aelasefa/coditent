@@ -109,6 +109,8 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "urlopen('http://localhost:8001/ready'" in compose
     assert 'test: ["CMD", "redis-cli", "ping"]' in compose
     assert "worker_heartbeat_is_fresh_sync" in compose
+    assert "dispatcher_heartbeat_is_fresh_sync" in compose
+    assert "python -m app.ai_dispatcher" in compose
     assert compose.count("condition: service_healthy") >= 4
     assert "app.include_router(health_router" in main
 

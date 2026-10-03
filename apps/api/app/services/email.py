@@ -24,6 +24,7 @@ def send_email(
     html: str,
     text: str | None = None,
     attachments: list[dict[str, str]] | None = None,
+    idempotency_key: str | None = None,
 ) -> dict:
     """Send an email through Resend API using backend secret key from env."""
     if not settings.resend_api_key:
@@ -41,16 +42,19 @@ def send_email(
     if attachments:
         payload["attachments"] = attachments
 
+    headers = {
+        "Authorization": f"Bearer {settings.resend_api_key}",
+        "Content-Type": "application/json",
+        # Resend sits behind bot protection that blocks default
+        # library user-agents (HTTP 403 error 1010). Identify the app.
+        "User-Agent": "CODITENT/1.0",
+    }
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
     req = request.Request(
         RESEND_SEND_EMAIL_URL,
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.resend_api_key}",
-            "Content-Type": "application/json",
-            # Resend sits behind bot protection that blocks default
-            # library user-agents (HTTP 403 error 1010). Identify the app.
-            "User-Agent": "CODITENT/1.0",
-        },
+        headers=headers,
         method="POST",
     )
 

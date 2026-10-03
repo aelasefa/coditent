@@ -13,6 +13,7 @@ def _settings(**overrides: object) -> Settings:
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql+asyncpg://runtime.invalid/app",
         "JWT_SECRET": "a-runtime-generated-signing-key-with-32-bytes",
+        "TOTP_ENCRYPTION_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "GEMINI_API_KEY": "provider-key-injected-at-runtime",
         "FRONTEND_URL": "https://app.example.invalid",
         "CORS_ORIGINS": "https://app.example.invalid",
@@ -53,6 +54,13 @@ def test_production_does_not_add_development_cors_origins() -> None:
         "https://app.example.invalid",
         "https://admin.example.invalid",
     ]
+
+
+def test_production_requires_valid_totp_encryption_key() -> None:
+    with pytest.raises(ValidationError):
+        _settings(TOTP_ENCRYPTION_KEY="not-a-fernet-key")
+    with pytest.raises(ValidationError):
+        _settings(TOTP_ENCRYPTION_KEY=None)
 
 
 def test_development_retains_explicit_local_origins() -> None:

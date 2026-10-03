@@ -19,6 +19,7 @@ from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
 from app.services import authentication, oauth_service
 from app.services.authentication import complete_authentication
 from app.services.oauth_service import OAuthIdentity
+from app.services.two_factor import encrypt_totp_secret
 
 
 class FakeRedis:
@@ -100,6 +101,86 @@ def test_oauth_state_binds_origin_and_attempt(monkeypatch):
     )
     with pytest.raises(HTTPException):
         oauth_service.verify_oauth_state(state, "linkedin")
+
+
+def test_oauth_attempt_is_browser_bound_single_use_and_uses_pkce(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(oauth_service.settings, "frontend_url", "http://localhost:3001")
+
+    attempt = asyncio.run(
+        oauth_service.create_oauth_attempt(
+            "google", "http://localhost:3001", "attempt-123", None
+        )
+    )
+    provider = oauth_service.OAuthProvider(
+        name="google",
+        client_id="client-id",
+        client_secret="client-secret",
+        authorization_url="https://accounts.example/authorize",
+        token_url="https://accounts.example/token",
+        userinfo_url="https://accounts.example/userinfo",
+        scopes=("openid", "email"),
+        issuer="https://accounts.example",
+    )
+    authorization_url = oauth_service.build_oauth_authorize_url(
+        provider,
+        "https://app.example/callback",
+        attempt.state,
+        code_verifier=attempt.code_verifier,
+        nonce=attempt.nonce,
+    )
+    params = parse_qs(urlparse(authorization_url).query)
+    assert params["code_challenge_method"] == ["S256"]
+    assert params["code_challenge"]
+    assert params["nonce"] == [attempt.nonce]
+
+    with pytest.raises(HTTPException, match="invalid_sso_state"):
+        asyncio.run(
+            oauth_service.consume_oauth_attempt(attempt.state, "google", "wrong-browser")
+        )
+    consumed = asyncio.run(
+        oauth_service.consume_oauth_attempt(
+            attempt.state, "google", attempt.browser_id
+        )
+    )
+    assert consumed.code_verifier == attempt.code_verifier
+    with pytest.raises(HTTPException, match="invalid_sso_state"):
+        asyncio.run(
+            oauth_service.consume_oauth_attempt(
+                attempt.state, "google", attempt.browser_id
+            )
+        )
+
+
+def test_oauth_identity_requires_verified_email_stable_subject_and_known_issuer():
+    provider = oauth_service.OAuthProvider(
+        name="google",
+        client_id="client-id",
+        client_secret="client-secret",
+        authorization_url="https://accounts.google.com/authorize",
+        token_url="https://accounts.google.com/token",
+        userinfo_url="https://accounts.google.com/userinfo",
+        scopes=("openid", "email"),
+        issuer="https://accounts.google.com",
+    )
+    base = {
+        "email": "candidate@example.com",
+        "email_verified": True,
+        "sub": "stable-provider-subject",
+        "iss": "https://accounts.google.com",
+    }
+    identity = oauth_service._parse_identity_payload(provider, base)
+    assert identity.oauth_id == "stable-provider-subject"
+    assert identity.email_verified is True
+
+    for invalid in (
+        {**base, "email_verified": False},
+        {**base, "sub": ""},
+        {**base, "iss": "https://evil.example"},
+    ):
+        with pytest.raises(HTTPException):
+            oauth_service._parse_identity_payload(provider, invalid)
 
 
 def test_handoff_is_single_use(monkeypatch):
@@ -190,7 +271,8 @@ def test_oauth_handoff_exchange_cannot_bypass_existing_local_mfa(monkeypatch):
         is_approved=True,
         full_name="Existing MFA",
         is_2fa_enabled=True,
-        totp_secret="JBSWY3DPEHPK3PXP",
+        totp_secret_encrypted=encrypt_totp_secret("JBSWY3DPEHPK3PXP"),
+        auth_version=0,
     )
 
     completion = asyncio.run(complete_authentication(user))

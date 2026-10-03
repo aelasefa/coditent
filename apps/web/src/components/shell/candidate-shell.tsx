@@ -3,16 +3,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { getMe } from "@/lib/api";
+import { getMe, logoutSession } from "@/lib/api";
 import { candidateOnboardingQuery } from "@/lib/candidate-onboarding";
 import { PageContainer } from "./page-container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CandidateTopShell } from "./candidate-top-shell";
 
-function logout() {
+async function logout() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("coditent_token");
-    document.cookie = "coditent_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    await logoutSession().catch(() => undefined);
     window.location.href = "/login";
   }
 }

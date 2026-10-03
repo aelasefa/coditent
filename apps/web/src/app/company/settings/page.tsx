@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
@@ -215,22 +216,27 @@ export default function SettingsPage() {
                       <Button size="sm" variant="outline" onClick={() => subQ.refetch()} className="mt-3">Retry</Button>
                     </div>
                   ) : (
-                    <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Status</dt>
-                        <dd className="font-semibold text-foreground">{String((subQ.data as { status?: string }).status ?? "Unknown")}</dd>
+                        <dt className="text-xs text-muted-foreground">Plan</dt>
+                        <dd className="font-semibold capitalize text-foreground">{subQ.data.plan}</dd>
                       </div>
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Company</dt>
-                        <dd className="font-semibold text-foreground">{company?.name ?? "—"}</dd>
+                        <dt className="text-xs text-muted-foreground">Subscription</dt>
+                        <dd className="font-semibold capitalize text-foreground">{subQ.data.subscription_status.replace("_", " ")}</dd>
                       </div>
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Account</dt>
-                        <dd className="truncate font-semibold text-foreground">{me?.email ?? "—"}</dd>
+                        <dt className="text-xs text-muted-foreground">Active offers</dt>
+                        <dd className="font-semibold text-foreground">{subQ.data.usage.active_offers} / {subQ.data.limits.active_offers}</dd>
+                      </div>
+                      <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
+                        <dt className="text-xs text-muted-foreground">Member seats</dt>
+                        <dd className="font-semibold text-foreground">{subQ.data.usage.reserved_members} / {subQ.data.limits.members}</dd>
+                        {subQ.data.usage.pending_invitations > 0 && <p className="text-[11px] text-muted-foreground">Includes {subQ.data.usage.pending_invitations} pending invite(s)</p>}
                       </div>
                     </dl>
                   )}
-                  <p className="mt-3 text-xs text-muted-foreground">Plan changes are handled outside this panel. Only Owner manages subscription per platform policy.</p>
+                  <p className="mt-3 text-xs text-muted-foreground">Limits are enforced by the backend under concurrent offer and invitation requests. Plan assignments are managed by a platform administrator; no payment is charged in this development adapter.</p>
                 </div>
               ),
             },
@@ -265,7 +271,8 @@ export default function SettingsPage() {
                       </button>
                     ))}
                   </div>
-                  <p className="mt-4 text-[13px] text-muted-foreground">Notification preferences are not configurable yet. No alert settings are stored.</p>
+                  <p className="mt-4 text-[13px] text-muted-foreground">Choose which hiring events create alerts from the notification center.</p>
+                  <Link href="/company/notifications" className="mt-2 inline-flex text-sm font-semibold text-primary hover:underline">Manage notifications</Link>
                 </div>
               ),
             },

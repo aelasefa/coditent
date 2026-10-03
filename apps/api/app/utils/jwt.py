@@ -57,6 +57,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     """Create an access-only JWT with a unique, revocable session id."""
     claims = dict(data)
     subject = claims.pop("sub", None)
+    claims.setdefault("auth_version", 0)
     return _new_token(
         subject=str(subject or ""),
         purpose=ACCESS_TOKEN_PURPOSE,
@@ -65,11 +66,17 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     )
 
 
-def create_mfa_token(subject: str, *, expires_delta: timedelta = timedelta(minutes=5)) -> str:
+def create_mfa_token(
+    subject: str,
+    *,
+    auth_version: int = 0,
+    expires_delta: timedelta = timedelta(minutes=5),
+) -> str:
     return _new_token(
         subject=subject,
         purpose=MFA_TOKEN_PURPOSE,
         expires_delta=expires_delta,
+        claims={"auth_version": auth_version},
     )
 
 
@@ -78,12 +85,13 @@ def create_trusted_device_token(
     *,
     factor: str,
     expires_delta: timedelta,
+    auth_version: int = 0,
 ) -> str:
     return _new_token(
         subject=subject,
         purpose=TRUSTED_DEVICE_PURPOSE,
         expires_delta=expires_delta,
-        claims={"factor": factor},
+        claims={"factor": factor, "auth_version": auth_version},
     )
 
 
@@ -126,6 +134,10 @@ def verify_token(token: str, *, expected_purpose: str | None = None) -> dict:
             raise ValueError("Invalid access session") from exc
     elif "sid" in payload:
         raise ValueError("Invalid token claims")
+
+    auth_version = payload.get("auth_version")
+    if isinstance(auth_version, bool) or not isinstance(auth_version, int) or auth_version < 0:
+        raise ValueError("Invalid account version")
 
     return payload
 

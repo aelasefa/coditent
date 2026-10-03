@@ -9,6 +9,7 @@ import pytest
 from passlib.hash import bcrypt
 from pydantic import ValidationError
 from starlette.requests import Request
+from starlette.responses import Response
 
 from app.models import User, UserRole
 from app.schemas import (
@@ -192,6 +193,9 @@ class _UserResult:
     def scalar_one_or_none(self) -> User:
         return self.user
 
+    def scalar_one(self) -> User:
+        return self.user
+
 
 class _LoginDatabase:
     def __init__(self, user: User) -> None:
@@ -217,6 +221,7 @@ async def test_successful_login_persists_the_legacy_bcrypt_upgrade() -> None:
         password_hash=bcrypt.using(rounds=4).hash(password),
         role=UserRole.CANDIDATE,
         is_approved=True,
+        is_active=True,
         is_2fa_enabled=False,
         full_name="Legacy User",
     )
@@ -234,6 +239,7 @@ async def test_successful_login_persists_the_legacy_bcrypt_upgrade() -> None:
     response = await unwrap(login)(
         LoginRequest(email=user.email, password=password),
         request,
+        Response(),
         database,  # type: ignore[arg-type]
     )
 
@@ -253,7 +259,9 @@ async def test_password_change_uses_the_shared_argon2id_hasher() -> None:
         password_hash=hash_password("CurrentPass123!"),
         role=UserRole.CANDIDATE,
         is_approved=True,
+        is_active=True,
         is_2fa_enabled=False,
+        auth_version=0,
         full_name="Candidate User",
     )
     database = _LoginDatabase(user)
@@ -272,6 +280,7 @@ async def test_password_change_uses_the_shared_argon2id_hasher() -> None:
                 "client": ("127.0.0.1", 43002),
             }
         ),
+        Response(),
         user,
         database,  # type: ignore[arg-type]
     )

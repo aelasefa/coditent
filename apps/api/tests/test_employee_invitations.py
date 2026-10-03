@@ -3,6 +3,7 @@ Run: DATABASE_URL=... JWT_SECRET=... GEMINI_API_KEY=... python -m pytest apps/ap
 """
 import base64
 import hashlib
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -16,7 +17,7 @@ from app.database import AsyncSessionLocal, engine
 from app.models import User
 from app.routers import invitations
 
-BASE = "http://localhost:8001"
+BASE = os.getenv("API_TEST_BASE_URL", "http://localhost:8001")
 
 
 def test_employee_invite_email_uses_new_theme_and_escapes_dynamic_values():

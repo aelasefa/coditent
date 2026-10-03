@@ -39,7 +39,7 @@ pending those files.
 | S10 | AUDITING | TBD | Authenticated and budgeted AI routes | TBD | Provider quota/billing verification |
 | S11 | AUDITING | TBD | Safe OAuth identity linking/state/PKCE/nonce | TBD | Provider configuration verification |
 | S12 | AUDITING | TBD | Sessions/logout/revocation/CSRF | TBD | None expected |
-| S13 | AUDITING | TBD | Bounded uploads/parsing and async blocking work | TBD | Sandbox resource tests |
+| S13 | AUDITING | CV/logo upload routes, parser/storage/screening services, `apps/api/app/services/upload_limits.py` | Uploads now stop at MAX+1 while reading, route-level signature/container checks reject spoofed files, DOCX ZIP expansion/entry/ratio and PDF page limits are bounded, image dimensions/pixels are bounded, extraction text/time limits are applied, and document/storage work runs off the event loop. Blocking email calls are the remaining repository item in this finding. | CV upload 36 passed; logo 16 passed; route bounds 5 passed; upload reader 2 passed | Stronger process-level parser sandbox remains a deployment hardening option |
 | S14 | FIXED_VERIFIED | `apps/api/app/observability.py`, `apps/api/tests/test_observability.py` | Metrics now use resolved route templates (or one `<unmatched>` bucket), normalize methods, and record failures in `finally`; request logs share the same bounded labels. | `test_route_labels_use_templates_and_bound_unmatched_paths`; `test_metrics_record_failures_under_the_route_template` | None |
 | S15 | EXTERNAL_PENDING | `apps/api/app/observability.py`, `apps/api/app/main.py`, `apps/api/app/tasks.py`, AI/screening/email/invitation services, `docker-compose.yml`, `apps/api/start_api.sh`, `nginx/nginx.conf` | Recursive structured-log redaction covers credentials, tokens, cookies, OTPs, emails, CV text, connection passwords, JWTs, and secret query parameters. Raw provider/exception/model text was removed from logs, job state, and invitation responses; 500s expose only a correlation ID. Uvicorn raw access logs are disabled at both launch points and Nginx excludes query/referrer data. | `test_structured_and_free_form_secrets_are_redacted`; metrics tests; match-scoring no-secret fallback regression — 16 focused tests passed; runtime random token URL logged only as `<unmatched>` | Production log-retention, sink access controls, and deletion verification |
 | S16 | AUDITING | TBD | Central password policy, Argon2id, encrypted MFA | TBD | Protected encryption key provisioning |
@@ -50,7 +50,7 @@ pending those files.
 
 | ID | Status | Affected files | Fix/evidence | Regression test | External dependency |
 |---|---|---|---|---|---|
-| B01 | AUDITING | TBD | Recommendation pagination/idempotency/fresh offers | TBD | None expected |
+| B01 | FIXED_VERIFIED | `apps/api/app/services/match_scoring.py`, `apps/api/app/services/recommendation_jobs.py`, `apps/api/app/routers/recommendations.py`, schemas/models, `apps/web/src/lib/api.ts` | GET is now read-only and returns stable pagination metadata. Explicit POST initialization inserts all active offers with `ON CONFLICT DO NOTHING`; single-offer creation and scored-result writes are also conflict-safe. Frontend initializes explicitly and follows every 50-row page, so matches beyond 20 and newly published offers remain discoverable. Only real candidate accounts can access the flow. | `test_initialization_and_all_offsets_cover_more_than_twenty_matches`; `test_concurrent_initializers_are_conflict_safe`; full offline match suite — 15 passed; frontend typecheck and OpenAPI contract passed | None |
 | B02 | AUDITING | TBD | `CompanyOut` serialization and owner assignment | TBD | Ambiguous legacy owner rows require operator review |
 | B03 | AUDITING | TBD | Current company membership/legacy request flow | TBD | Product decision if legacy flow is retired |
 | B04 | AUDITING | TBD | Offer close/delete retention and application conflicts | TBD | Retention-policy approval |
@@ -63,7 +63,7 @@ pending those files.
 | B11 | AUDITING | TBD | Liveness/readiness/deploy verification | TBD | Production smoke verification |
 | B12 | AUDITING | TBD | Ansible dependencies/backup/restore/rollback | TBD | Authorized restore target |
 | B13 | AUDITING | TBD | Admin data queries, Redis invalidation, repo/test hygiene | TBD | None expected |
-| B14 | AUDITING | TBD | Correct `CV_NO_TEXT` exception ordering | TBD | None expected |
+| B14 | FIXED_VERIFIED | `apps/api/app/routers/candidates.py`, `apps/api/tests/test_upload_routes.py` | `NoExtractableTextError` is caught before its `ValueError` base class and returns the documented `422` / `CV_NO_TEXT` response. | `test_no_text_cv_route_returns_documented_422` | None |
 
 ## Product and school workstreams
 
@@ -87,3 +87,5 @@ their skip counts and are never treated as verification of the skipped behavior.
 - 2026-10-01: `docker compose exec -T api python -m pytest tests/test_email_otp.py -q -k 'reregister_rotates or concurrent_registration_attempts'` -> `2 passed, 18 deselected`.
 - 2026-10-01: `apps/web/node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json` -> passed.
 - 2026-10-01: `docker compose exec -T api python -m pytest tests/test_observability.py tests/test_match_scoring.py -q` -> `16 passed` (65 deprecation warnings; zero skips). `aiosqlite` was installed ephemerally in the running test container because it was absent from the image.
+- 2026-10-01: `docker compose exec -T api python -m pytest tests/test_match_scoring.py -q` -> `15 passed` (126 deprecation warnings; zero skips), including 27-row pagination, a newly published offer, repeat initialization, and two concurrent initializers. Frontend `tsc --noEmit` and the live OpenAPI recommendation contract passed.
+- 2026-10-01: host isolated upload/parser suites -> CV `36 passed`, logo `16 passed`, route bounds `5 passed` (3 deprecation warnings), bounded reader `2 passed`; compileall and diff-check passed.

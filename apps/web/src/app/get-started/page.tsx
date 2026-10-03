@@ -11,9 +11,9 @@ import {
   completeCandidateOnboarding,
   getCandidateOnboarding,
   getMe,
+  logoutSession,
   saveCandidateOnboardingStep,
 } from "@/lib/api";
-import { removeToken } from "@/lib/auth";
 import { categories } from "@/lib/categories";
 import type { OnboardingState } from "@/lib/types";
 import styles from "./get-started.module.css";
@@ -182,8 +182,8 @@ export default function GetStartedPage() {
     }
   }
 
-  function logout() {
-    removeToken();
+  async function logout() {
+    await logoutSession().catch(() => undefined);
     router.push("/login");
   }
 

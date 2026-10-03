@@ -1,6 +1,7 @@
 from typing import Literal
 from urllib.parse import urlsplit
 
+from cryptography.fernet import Fernet
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -33,14 +34,26 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     gemini_api_key: str
+    gemini_model: str = Field(default="gemini-3-flash-preview", min_length=3, max_length=100)
     resend_api_key: str | None = None
     resend_from_email: str | None = None
     resend_from_name: str = "CODITENT"
+    # Raw recipients, OTPs, and invitation URLs are encrypted before entering
+    # the durable email outbox. Keep this independent from JWT/TOTP keys.
+    email_outbox_encryption_key: str | None = None
+    email_delivery_max_attempts: int = Field(default=5, ge=1, le=10)
+    email_delivery_lease_seconds: int = Field(default=60, ge=15, le=300)
     access_token_cookie_name: str = "access_token"
+    csrf_cookie_name: str = "coditent_csrf"
+    oauth_browser_cookie_name: str = "oauth_browser"
     access_token_cookie_secure: bool = True
     access_token_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     trusted_device_cookie_name: str = "trusted_device"
     trusted_device_expire_days: int = 30
+    # This key is intentionally independent from JWT_SECRET so rotation and
+    # compromise of one credential class cannot expose the other. Generate
+    # with `Fernet.generate_key()` and keep it in the deployment secret store.
+    totp_encryption_key: str | None = None
     # Verification codes have a fixed security lifetime. Literal prevents a
     # stale deployment environment from silently extending it.
     otp_expire_minutes: Literal[5] = 5
@@ -48,7 +61,23 @@ class Settings(BaseSettings):
     otp_resend_cooldown_seconds: int = 60
     redis_url: str = "redis://localhost:6380/0"
     recommendation_cache_ttl_seconds: int = 900
-    readiness_check_timeout_seconds: float = Field(default=2.0, ge=0.1, le=10.0)
+    # AI admission control is shared through Redis so every API and worker
+    # process observes the same limits.  "Units" are a small, deterministic
+    # cost assigned by operation rather than provider-specific token counts.
+    ai_user_daily_quota_units: int = Field(default=60, ge=1, le=100_000)
+    ai_company_daily_quota_units: int = Field(default=500, ge=1, le=1_000_000)
+    ai_global_daily_budget_units: int = Field(default=5_000, ge=1, le=10_000_000)
+    ai_global_concurrency: int = Field(default=8, ge=1, le=100)
+    ai_user_concurrency: int = Field(default=2, ge=1, le=20)
+    ai_queue_max_pending: int = Field(default=1_000, ge=1, le=100_000)
+    ai_provider_timeout_seconds: float = Field(default=30.0, ge=5.0, le=120.0)
+    ai_job_max_attempts: int = Field(default=3, ge=1, le=10)
+    ai_job_lease_seconds: int = Field(default=180, ge=30, le=900)
+    ai_dispatch_lease_seconds: int = Field(default=60, ge=10, le=300)
+    ai_dispatch_interval_seconds: float = Field(default=2.0, ge=0.25, le=30.0)
+    # Managed PostgreSQL can need a few seconds for a cold TLS connection.
+    # Keep this bounded while avoiding false-unhealthy restarts.
+    readiness_check_timeout_seconds: float = Field(default=5.0, ge=0.1, le=10.0)
     worker_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
     log_level: str = "INFO"
 
@@ -70,6 +99,16 @@ class Settings(BaseSettings):
             self.linkedin_client_secret and not self.linkedin_client_id
         ):
             raise ValueError("LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET must both be set")
+        if self.totp_encryption_key:
+            try:
+                Fernet(self.totp_encryption_key.encode("ascii"))
+            except (ValueError, UnicodeEncodeError) as exc:
+                raise ValueError("TOTP_ENCRYPTION_KEY must be a valid Fernet key") from exc
+        if self.email_outbox_encryption_key:
+            try:
+                Fernet(self.email_outbox_encryption_key.encode("ascii"))
+            except (ValueError, UnicodeEncodeError) as exc:
+                raise ValueError("EMAIL_OUTBOX_ENCRYPTION_KEY must be a valid Fernet key") from exc
         # Enforce Supabase-only DB: reject local DATABASE_URL early with clear error
         local_markers = ["@db:", "@localhost", "@127.0.0.1", "coditent:coditent@db"]
         for marker in local_markers:
@@ -78,6 +117,12 @@ class Settings(BaseSettings):
                     f"DATABASE_URL contains local marker '{marker}'. Local DB removed — use Supabase."
                 )
         if self.app_env == "production":
+            if not self.totp_encryption_key:
+                raise ValueError("TOTP_ENCRYPTION_KEY must be configured in production")
+            if self.resend_api_key and not self.email_outbox_encryption_key:
+                raise ValueError(
+                    "EMAIL_OUTBOX_ENCRYPTION_KEY must be configured when email delivery is enabled"
+                )
             if urlsplit(self.frontend_url).scheme != "https":
                 raise ValueError("FRONTEND_URL must use HTTPS in production")
             if not self.access_token_cookie_secure:

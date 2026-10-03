@@ -278,6 +278,8 @@ async def score_single_match(
     db: AsyncSession,
     candidate_id: uuid.UUID,
     offer_id: uuid.UUID,
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     """Run scoring for one pair, with a deterministic provider-outage fallback."""
     logger.info(f"[MATCH] requested candidate={candidate_id} offer={offer_id}")
@@ -289,6 +291,8 @@ async def score_single_match(
     )
     row = row_result.scalar_one_or_none()
     if row is None:
+        if not commit:
+            raise ValueError("Pending recommendation row not found")
         row = await get_or_create_pending(db, candidate_id, offer_id)
         if row is None:
             raise ValueError("Offer not found or inactive")
@@ -306,7 +310,10 @@ async def score_single_match(
         row.status = TERMINAL_FAIL
         row.error = "Offer not found or inactive"
         row.updated_at = datetime.utcnow()
-        await db.commit()
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
         logger.error(
             f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=inactive_offer"
         )
@@ -321,7 +328,10 @@ async def score_single_match(
         row.status = TERMINAL_FAIL
         row.error = "Candidate profile not found"
         row.updated_at = datetime.utcnow()
-        await db.commit()
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
         logger.error(
             f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=missing_profile"
         )
@@ -330,7 +340,10 @@ async def score_single_match(
     row.status = "processing"
     row.error = None
     row.updated_at = datetime.utcnow()
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     logger.info(f"[MATCH] processing candidate={candidate_id} offer={offer_id}")
 
     provider_error: Exception | None = None
@@ -355,7 +368,10 @@ async def score_single_match(
     row.status = TERMINAL_OK
     row.error = None
     row.updated_at = datetime.utcnow()
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     logger.info(
         f"[MATCH] persisted score={row.ai_score} candidate={candidate_id} offer={offer_id}"
     )
