@@ -11,7 +11,7 @@ import { candidateName, jobTitleFor } from "./hiring";
 import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
-import { FiArrowRight, FiCheck, FiGitBranch, FiX } from "react-icons/fi";
+import { FiArrowRight, FiBarChart2, FiCheck, FiFileText, FiGitBranch, FiMessageSquare, FiX } from "react-icons/fi";
 
 const PIPELINE_STAGES = [
   { status: "under_review", label: "Review", description: "Start structured screening" },
@@ -277,33 +277,55 @@ export function CandidateDetail({
                   )}
                 </div>
                   {assessment ? (
-                <div className="candidate-assessment-detail">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <StatusBadge status={assessment.status} size="sm" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Objective score</span>
-                    <span className="font-bold text-foreground">
-                      {typeof assessment.score === "number" ? assessment.score : "Pending evaluation"}
-                    </span>
-                  </div>
-                  {assessment.report ? (
-                    <div className="candidate-assessment-report">
-                      <p className="text-xs font-semibold text-foreground">AI analysis</p>
-                      <p className="mt-1 text-[13px] leading-relaxed text-foreground-secondary">{assessment.report}</p>
-                    </div>
+                    <section className="candidate-assessment-detail" aria-label="Practical assessment result">
+                      <header className="candidate-assessment-header">
+                        <div className="candidate-assessment-heading">
+                          <span className="candidate-assessment-icon" aria-hidden="true"><FiFileText /></span>
+                          <div>
+                            <p className="company-detail-label">Practical assessment</p>
+                            <h3>{assessment.title || "Assessment result"}</h3>
+                          </div>
+                        </div>
+                        <StatusBadge status={assessment.status} size="sm" />
+                      </header>
+                      <div className="candidate-assessment-score">
+                        <div className="candidate-assessment-score-icon" aria-hidden="true"><FiBarChart2 /></div>
+                        <div>
+                          <span className="company-detail-label">Objective score</span>
+                          <p>
+                            <strong>{typeof assessment.score === "number" ? assessment.score : "—"}</strong>
+                            <span>/ 100</span>
+                          </p>
+                        </div>
+                        <span className="candidate-assessment-score-note">
+                          {typeof assessment.score === "number" ? "Recorded result" : "Pending evaluation"}
+                        </span>
+                      </div>
+                      <div className="candidate-assessment-reports">
+                        {assessment.report ? (
+                          <section className="candidate-assessment-report candidate-assessment-report-analysis" aria-label="AI analysis">
+                            <span className="candidate-assessment-report-icon" aria-hidden="true"><FiBarChart2 /></span>
+                            <div>
+                              <h4>AI analysis</h4>
+                              <p>{assessment.report}</p>
+                            </div>
+                          </section>
+                        ) : null}
+                        {app.ai_report ? (
+                          <section className="candidate-assessment-report candidate-assessment-report-note" aria-label="Application AI note">
+                            <span className="candidate-assessment-report-icon" aria-hidden="true"><FiMessageSquare /></span>
+                            <div>
+                              <h4>Application AI note</h4>
+                              <p>{app.ai_report}</p>
+                            </div>
+                          </section>
+                        ) : null}
+                        {!assessment.report && !app.ai_report ? (
+                          <p className="candidate-assessment-empty">No AI notes recorded for this assessment.</p>
+                        ) : null}
+                      </div>
+                    </section>
                   ) : (
-                    <p className="text-[13px] text-muted-foreground">No AI analysis recorded for this assessment.</p>
-                  )}
-                  {app.ai_report ? (
-                    <div className="candidate-assessment-report">
-                      <p className="text-xs font-semibold text-foreground">Application AI note</p>
-                      <p className="mt-1 text-[13px] text-foreground-secondary">{app.ai_report}</p>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
                 <section className="candidate-assessment-notice" aria-label="Practical assessment">
                   <h3>Practical assessment</h3>
                   <p>No practical assessment registered for this application.</p>
