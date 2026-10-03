@@ -11,6 +11,14 @@ import { candidateName, jobTitleFor } from "./hiring";
 import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
+import { FiArrowRight, FiCheck, FiGitBranch, FiX } from "react-icons/fi";
+
+const PIPELINE_STAGES = [
+  { status: "under_review", label: "Review", description: "Start structured screening" },
+  { status: "shortlisted", label: "Shortlist", description: "Keep in active consideration" },
+  { status: "interview", label: "Interview", description: "Move to a live conversation" },
+  { status: "accepted", label: "Hire", description: "Mark the candidate as hired" },
+] as const;
 
 function parseScreeningReport(report?: string | null): { summary: string; strengths: string[]; gaps: string[] } | null {
   if (!report) return null;
@@ -88,27 +96,54 @@ export function CandidateDetail({
   return (
     <div className="company-candidate-detail">
       {canMoveStage && (
-        <section className="company-candidate-stage-actions" aria-labelledby="candidate-stage-actions-title">
+        <section
+          className="company-candidate-stage-actions"
+          aria-labelledby="candidate-stage-actions-title"
+          aria-busy={stagePending}
+        >
           <div className="company-candidate-stage-actions-heading">
-            <div>
-              <p className="company-detail-label">Pipeline controls</p>
-              <h3 id="candidate-stage-actions-title">Move this application</h3>
+            <span className="company-candidate-stage-actions-icon" aria-hidden="true">
+              <FiGitBranch />
+            </span>
+            <div className="company-candidate-stage-actions-copy">
+              <p className="company-detail-label">Application workflow</p>
+              <h3 id="candidate-stage-actions-title">Choose the next stage</h3>
+              <p>Move the candidate forward when your team is ready.</p>
             </div>
-            <StatusBadge status={app.status} size="sm" />
+            <div className="company-candidate-stage-current">
+              <span>Current stage</span>
+              <StatusBadge status={app.status} size="sm" />
+            </div>
           </div>
           <div className="company-candidate-stage-actions-controls">
-            {["under_review", "shortlisted", "interview", "accepted"].map((st) => (
-              <Button
-                key={st}
-                size="sm"
-                variant={app.status === st ? "primary" : "outline"}
-                disabled={stagePending}
-                loading={stagePending}
-                onClick={() => onStage(st)}
-              >
-                {({ under_review: "Under review", shortlisted: "Shortlisted", interview: "Interview", accepted: "Hired" } as Record<string, string>)[st]}
-              </Button>
-            ))}
+            {PIPELINE_STAGES.map((stage, index) => {
+              const active = app.status === stage.status;
+              return (
+                <button
+                  key={stage.status}
+                  type="button"
+                  className={`company-candidate-stage-option${active ? " company-candidate-stage-option-active" : ""}`}
+                  disabled={stagePending || active}
+                  aria-current={active ? "step" : undefined}
+                  onClick={() => onStage(stage.status)}
+                >
+                  <span className="company-candidate-stage-option-marker" aria-hidden="true">
+                    {active ? <FiCheck /> : index + 1}
+                  </span>
+                  <span className="company-candidate-stage-option-copy">
+                    <strong>{stage.label}</strong>
+                    <small>{active ? "Candidate is here now" : stage.description}</small>
+                  </span>
+                  <FiArrowRight className="company-candidate-stage-option-arrow" aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+          <div className="company-candidate-stage-actions-footer">
+            <div>
+              <p>{stagePending ? "Updating pipeline…" : "Not moving forward?"}</p>
+              <span>Rejecting keeps the application in the record.</span>
+            </div>
             {rejectConfirm ? (
               <span className="company-candidate-reject-confirm">
                 <span>Reject candidate?</span>
@@ -121,8 +156,8 @@ export function CandidateDetail({
               </span>
             ) : (
               app.status !== "rejected" && (
-                <Button size="sm" variant="danger" onClick={() => setRejectConfirm(true)}>
-                  Reject
+                <Button size="sm" variant="ghost" className="company-candidate-reject-trigger" onClick={() => setRejectConfirm(true)}>
+                  <FiX aria-hidden="true" /> Reject application
                 </Button>
               )
             )}
