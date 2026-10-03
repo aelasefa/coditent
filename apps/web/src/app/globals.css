@@ -1292,25 +1292,25 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   gap: 0;
   overflow: hidden;
   border: 1px solid #c9d9cb;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fffefa;
-  box-shadow: 0 12px 30px rgb(25 77 56 / 8%);
+  box-shadow: 0 6px 18px rgb(25 77 56 / 7%);
 }
 .candidate-assessment-header {
   position: relative;
   display: grid;
-  min-height: 8rem;
+  min-height: 6rem;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 1.25rem;
-  padding: 1.15rem 1.25rem;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
   background: #194d38;
 }
 .candidate-assessment-heading {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.7rem;
 }
 .candidate-assessment-heading .company-detail-label { color: #bfd1c3; }
 .candidate-assessment-heading h3 {
@@ -1318,7 +1318,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   overflow: hidden;
   color: #fffefa;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   font-weight: 400;
   letter-spacing: -0.025em;
   text-overflow: ellipsis;
@@ -1332,30 +1332,30 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   justify-content: center;
 }
 .candidate-assessment-icon {
-  width: 3rem;
-  height: 3rem;
+  width: 2.45rem;
+  height: 2.45rem;
   border: 1px solid rgb(255 254 250 / 20%);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgb(255 254 250 / 11%);
   color: #e9f0df;
 }
-.candidate-assessment-icon svg { width: 1.2rem; height: 1.2rem; }
+.candidate-assessment-icon svg { width: 1rem; height: 1rem; }
 .candidate-assessment-outcome {
   display: grid;
-  min-width: 15.5rem;
-  grid-template-columns: minmax(6.25rem, auto) auto;
+  min-width: 13.25rem;
+  grid-template-columns: minmax(5.5rem, auto) auto;
   align-items: stretch;
   overflow: hidden;
   border: 1px solid rgb(255 254 250 / 20%);
-  border-radius: 14px;
+  border-radius: 11px;
   background: rgb(255 254 250 / 10%);
 }
 .candidate-assessment-score {
   display: grid;
-  min-height: 4.5rem;
+  min-height: 3.75rem;
   align-content: center;
   gap: 0.25rem;
-  padding: 0.6rem 0.85rem;
+  padding: 0.45rem 0.65rem;
 }
 .candidate-assessment-score > span,
 .candidate-assessment-status > span:first-child {
@@ -1368,7 +1368,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-assessment-score p { display: flex; align-items: baseline; gap: 0.2rem; margin: 0.1rem 0 0; }
 .candidate-assessment-score p strong {
   color: #fffefa;
-  font-size: 2.15rem;
+  font-size: 1.7rem;
   font-weight: 800;
   letter-spacing: -0.05em;
   line-height: 1;
@@ -1377,11 +1377,11 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-assessment-score p span { color: #d4e2d8; font-size: 0.72rem; font-weight: 650; }
 .candidate-assessment-status {
   display: grid;
-  min-width: 7rem;
+  min-width: 6.25rem;
   align-content: center;
   justify-items: start;
-  gap: 0.45rem;
-  padding: 0.6rem 0.85rem;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
   border-left: 1px solid rgb(255 254 250 / 18%);
 }
 .candidate-assessment-status > span:last-child {
@@ -1391,39 +1391,39 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 }
 .candidate-assessment-reports {
   display: grid;
-  gap: 0.7rem;
-  padding: 0.9rem;
+  gap: 0.5rem;
+  padding: 0.65rem;
   background: #f8faf6;
 }
 .candidate-assessment-report {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 0.7rem;
+  gap: 0.55rem;
   margin: 0;
-  padding: 0.85rem;
+  padding: 0.65rem;
   border: 1px solid #dce6da;
   border-left-width: 3px;
-  border-radius: 11px;
+  border-radius: 9px;
   background: #fffefa;
 }
 .candidate-assessment-report-analysis { border-left-color: #6d9774; }
 .candidate-assessment-report-note { border-left-color: #a25c38; }
 .candidate-assessment-report-icon {
-  width: 1.8rem;
-  height: 1.8rem;
-  border-radius: 8px;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
   background: #e8f1e5;
   color: #315f45;
 }
 .candidate-assessment-report-note .candidate-assessment-report-icon { background: #f7e9df; color: #8f4d30; }
 .candidate-assessment-report-icon svg { width: 0.85rem; height: 0.85rem; }
 .candidate-assessment-report h4 { margin: 0; color: #203d2e; font-size: 0.76rem; font-weight: 800; }
-.candidate-assessment-report p { margin: 0.3rem 0 0; color: #405147; font-size: 0.8rem; line-height: 1.55; overflow-wrap: anywhere; }
+.candidate-assessment-report p { margin: 0.25rem 0 0; color: #405147; font-size: 0.75rem; line-height: 1.5; overflow-wrap: anywhere; }
 .candidate-assessment-empty { margin: 0; color: #617369; font-size: 0.8rem; }
 
 @media (max-width: 560px) {
-  .candidate-assessment-header { grid-template-columns: 1fr; padding: 1rem; }
+  .candidate-assessment-header { grid-template-columns: 1fr; padding: 0.75rem; }
   .candidate-assessment-outcome { width: 100%; min-width: 0; }
 }
 
@@ -1542,7 +1542,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   padding: 1rem 1.1rem;
 }
 
-.candidate-assessments-stack { display: grid; gap: 1rem; }
+.candidate-assessments-stack { display: grid; gap: 0.75rem; }
 
 .candidate-screening,
 .candidate-profile-skills,
@@ -1551,45 +1551,45 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   overflow: hidden;
   padding: 0;
   border-color: #cfddcf;
-  border-radius: 18px;
-  box-shadow: 0 10px 28px rgb(25 77 56 / 7%);
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgb(25 77 56 / 6%);
 }
 
 .candidate-section-icon {
   display: inline-flex;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
   flex: none;
   align-items: center;
   justify-content: center;
-  border-radius: 11px;
+  border-radius: 9px;
   background: #194d38;
   color: #fffefa;
 }
 
-.candidate-section-icon svg { width: 1.1rem; height: 1.1rem; }
+.candidate-section-icon svg { width: 0.95rem; height: 0.95rem; }
 .candidate-section-heading-copy { min-width: 0; }
 .candidate-section-heading-copy .company-detail-label { color: #617369; }
 .candidate-section-heading-copy > p:last-child {
-  margin: 0.25rem 0 0;
+  margin: 0.18rem 0 0;
   color: #617369;
-  font-size: 0.75rem;
-  line-height: 1.45;
+  font-size: 0.7rem;
+  line-height: 1.35;
 }
 
 .candidate-section-count,
 .candidate-messages-status {
   display: inline-flex;
-  min-height: 1.8rem;
+  min-height: 1.6rem;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.7rem;
+  padding: 0.25rem 0.6rem;
   border: 1px solid #c9dbc8;
   border-radius: 999px;
   background: #e8f1e5;
   color: #315f45;
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 750;
 }
 
@@ -1599,8 +1599,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.85rem;
-  padding: 1rem 1.1rem;
+  gap: 0.7rem;
+  padding: 0.75rem 0.85rem;
   background: #f2f6ef;
 }
 
@@ -1609,7 +1609,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-messages-heading h3 {
   margin: 0.15rem 0 0;
   color: #203d2e;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   letter-spacing: -0.025em;
 }
 
@@ -1617,8 +1617,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.1rem;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
   border-bottom: 1px solid #dce6da;
   background: #f2f6ef;
 }
@@ -1628,31 +1628,31 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   min-width: 0;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.7rem;
 }
 
 .candidate-screening-heading h3 {
   margin: 0.15rem 0 0;
   color: #203d2e;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   letter-spacing: -0.025em;
 }
 
 .candidate-screening-score {
   display: grid;
-  min-width: 6.75rem;
-  min-height: 3.5rem;
+  min-width: 5.8rem;
+  min-height: 3rem;
   align-content: center;
   justify-items: end;
-  gap: 0.25rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 12px;
+  gap: 0.18rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 10px;
   background: #194d38;
 }
 
 .candidate-screening-score > span:first-child {
   color: #bfd1c3;
-  font-size: 0.58rem;
+  font-size: 0.52rem;
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1664,14 +1664,14 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   border: 0;
   background: transparent;
   color: #fffefa;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
 
 .candidate-screening-report {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
-  padding: 0.85rem;
+  gap: 0.5rem;
+  padding: 0.65rem;
   background: #f8faf6;
 }
 
@@ -1680,21 +1680,21 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   grid-column: 1 / -1;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 0.75rem;
+  gap: 0.6rem;
   margin: 0;
-  padding: 0.9rem;
+  padding: 0.65rem;
   border: 1px solid #dce6da;
-  border-radius: 12px;
+  border-radius: 9px;
   background: #fffefa;
 }
 
 .candidate-screening-summary-icon {
   display: inline-flex;
-  width: 2rem;
-  height: 2rem;
+  width: 1.65rem;
+  height: 1.65rem;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #e8f1e5;
   color: #315f45;
 }
@@ -1709,18 +1709,18 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   max-width: 65ch;
   margin: 0.3rem 0 0;
   color: #405147;
-  font-size: 0.8rem;
-  line-height: 1.55;
+  font-size: 0.75rem;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .candidate-screening-findings {
   min-height: 100%;
-  padding: 0.9rem;
+  padding: 0.7rem;
   border-left-width: 3px;
 }
 
-.candidate-screening-state { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; }
+.candidate-screening-state { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 0.85rem; }
 .candidate-screening-state p { margin: 0; color: #617369; font-size: 0.8rem; line-height: 1.55; }
 
 .candidate-assessment-notice {
@@ -1731,27 +1731,27 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-profile-skills-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.65rem;
-  padding: 0.85rem;
+  gap: 0.5rem;
+  padding: 0.65rem;
   background: #f8faf6;
 }
 
 .candidate-profile-skills-list li {
   display: grid;
-  min-height: 3.25rem;
+  min-height: 2.7rem;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.65rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
   border: 1px solid #dce6da;
-  border-radius: 11px;
+  border-radius: 9px;
   background: #fffefa;
 }
 
 .candidate-profile-skills-list li > span:first-child {
   display: inline-flex;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.6rem;
+  height: 1.6rem;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
@@ -1764,21 +1764,21 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-profile-skills-list li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 
 .candidate-resume-file {
-  margin: 0.85rem;
-  padding: 0.9rem;
+  margin: 0.65rem;
+  padding: 0.7rem;
   border-color: #d7e2d5;
   background: #f8faf6;
 }
 
 .candidate-resume-file > svg {
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0.55rem;
-  border-radius: 10px;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0.45rem;
+  border-radius: 9px;
   background: #e8f1e5;
 }
 
-.candidate-resume-actions { padding: 0 0.85rem 0.85rem; }
+.candidate-resume-actions { padding: 0 0.65rem 0.65rem; }
 .candidate-resume-actions a { min-width: 7.5rem; gap: 0.45rem; border-radius: 10px; }
 .candidate-resume-actions a svg { width: 0.9rem; height: 0.9rem; }
 
@@ -1786,14 +1786,14 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.85rem 1rem;
-  padding: 0.85rem;
+  gap: 0.65rem 0.8rem;
+  padding: 0.65rem;
   background: #f8faf6;
 }
 
 .candidate-messages-person {
   grid-column: 1 / -1;
-  padding: 0.9rem;
+  padding: 0.7rem;
   border-color: #d7e2d5;
   background: #fffefa;
 }
@@ -1832,7 +1832,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   .candidate-resume-heading,
   .candidate-messages-heading { grid-template-columns: auto minmax(0, 1fr); }
   .candidate-section-count,
-  .candidate-messages-status { grid-column: 1 / -1; justify-self: start; margin-left: 3.6rem; }
+  .candidate-messages-status { grid-column: 1 / -1; justify-self: start; margin-left: 2.95rem; }
   .candidate-profile-skills-list { grid-template-columns: 1fr; }
   .candidate-messages-body { grid-template-columns: 1fr; }
   .candidate-messages-link { width: 100%; }
