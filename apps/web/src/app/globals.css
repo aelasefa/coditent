@@ -1583,22 +1583,91 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 }
 
 .candidate-profile-skills-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
-  padding: 0.65rem;
-  background: #f8faf6;
+  margin: 0;
+  padding: 0.75rem;
+  background: #fffefa;
+  list-style: none;
 }
 
 .candidate-profile-skills-list li {
-  display: block;
-  min-height: 0;
-  padding: 0.375rem 0.75rem;
-  border: 1px solid #dce6da;
-  border-radius: 8px;
-  background: #fffefa;
+  display: flex;
+  min-width: 0;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #d3e1d2;
+  border-radius: 9px;
+  background: #f6f9f4;
+  color: #203d2e;
   font-size: 0.875rem;
+  font-weight: 650;
   line-height: 1.4;
+  box-shadow: 0 2px 8px rgb(25 77 56 / 4%);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.candidate-profile-skills-list li::before {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 0.55rem;
+  border: 2px solid #d6e7d4;
+  border-radius: 999px;
+  background: #397451;
+  box-shadow: 0 0 0 2px #edf4eb;
+  content: "";
+}
+
+.candidate-profile-skills .candidate-profile-skills-heading {
+  padding: 0.75rem;
+  border-bottom: 1px solid #d5e2d3;
+  background: #edf4eb;
+}
+
+.candidate-profile-skills .candidate-section-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgb(25 77 56 / 14%);
+}
+
+.candidate-profile-skills .candidate-section-heading-copy h3 {
+  font-size: 1.125rem;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.candidate-profile-skills .candidate-section-heading-copy p {
+  margin: 0.2rem 0 0;
+  color: #617369;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.candidate-profile-skills .candidate-skills-count {
+  display: inline-grid;
+  min-height: 2rem;
+  grid-template-columns: auto auto;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border-color: #bcd2bc;
+  background: #fffefa;
+  font-weight: 650;
+}
+
+.candidate-profile-skills .candidate-skills-count strong {
+  color: #194d38;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.candidate-profile-skills .candidate-skills-count span {
+  color: #617369;
+  font-size: 0.72rem;
 }
 
 .candidate-resume-file {
@@ -1688,6 +1757,11 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   .candidate-messages-link { grid-column: auto; grid-row: auto; width: 100%; }
 }
 
+@media (max-width: 520px) {
+  .candidate-profile-skills-list { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 359px) {
   .company-candidate-stage-field label svg { display: none; }
+  .candidate-profile-skills .candidate-section-heading-copy p { display: none; }
 }

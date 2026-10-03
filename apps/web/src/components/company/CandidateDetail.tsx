@@ -203,13 +203,19 @@ export function CandidateDetail({
               id: "skills",
               label: "Skills",
               content: (
-                <section className="candidate-profile-skills" aria-label="Candidate skills">
+                <section className="candidate-profile-skills" aria-labelledby="candidate-skills-title">
                   <div className="candidate-profile-skills-heading">
                     <span className="candidate-section-icon" aria-hidden="true"><FiAward /></span>
                     <div className="candidate-section-heading-copy">
-                      <h3>Skills & expertise</h3>
+                      <h3 id="candidate-skills-title">Skills & expertise</h3>
+                      <p>Candidate-reported strengths</p>
                     </div>
-                    {skills.length ? <span className="candidate-section-count">{skills.length} skills</span> : null}
+                    {skills.length ? (
+                      <span className="candidate-section-count candidate-skills-count" aria-label={`${skills.length} skills`}>
+                        <strong>{skills.length}</strong>
+                        <span>skills</span>
+                      </span>
+                    ) : null}
                   </div>
                   {skills.length ? (
                     <ul className="candidate-profile-skills-list">
