@@ -13,14 +13,23 @@ import uuid
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy import text
 
+from app.config import settings
 from app.database import AsyncSessionLocal, engine
+from app.services import email_outbox
 from app.services import email_verification as ev
 from app.services.passwords import hash_password, verify_password
 
 BASE = "http://localhost:8001"
 KNOWN_OTP = "123456"
+
+
+@pytest.fixture(autouse=True)
+def _configured_email_outbox(monkeypatch):
+    monkeypatch.setattr(settings, "email_outbox_encryption_key", Fernet.generate_key().decode("ascii"))
+    monkeypatch.setattr(email_outbox, "send_email", lambda *_args, **_kwargs: {"id": "test-message"})
 
 
 def _known_hash() -> str:
@@ -160,10 +169,7 @@ async def test_reregister_rotates_the_complete_attempt_bundle():
     transport = httpx.ASGITransport(app=app, client=("s02-bundle", 41001))
 
     try:
-        with (
-            patch.object(auth_router, "send_otp_email"),
-            patch.object(auth_router, "generate_otp", side_effect=["111111", "222222"]),
-        ):
+        with patch.object(auth_router, "generate_otp", side_effect=["111111", "222222"]):
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 first = await client.post(
                     "/auth/register",
@@ -255,12 +261,11 @@ async def test_concurrent_registration_attempts_never_mix_identity_bundle():
     transport = httpx.ASGITransport(app=app, client=("s02-concurrent", 41002))
 
     try:
-        with patch.object(auth_router, "send_otp_email"):
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-                results = await asyncio.gather(
-                    client.post("/auth/register", json=attempts[0]),
-                    client.post("/auth/register", json=attempts[1]),
-                )
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            results = await asyncio.gather(
+                client.post("/auth/register", json=attempts[0]),
+                client.post("/auth/register", json=attempts[1]),
+            )
 
         assert sorted(result.status_code for result in results) == [202, 409]
         winner_index = next(index for index, result in enumerate(results) if result.status_code == 202)

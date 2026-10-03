@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -18,7 +18,7 @@ from app.config import settings
 from app.core.audit import log_audit
 from app.database import get_db
 from app.dependencies import get_current_access_payload, get_current_user
-from app.models import AccountDeletionRequest, CandidateProfile, Company, OAuthAccount, User, UserRole
+from app.models import AccountDeletionRequest, CandidateProfile, Company, EmailDelivery, OAuthAccount, User, UserRole
 from app.limiter import limiter
 from app.observability import get_logger
 from app.schemas import (
@@ -43,14 +43,20 @@ from app.schemas import (
 )
 from app.services.email_verification import (
     attempts_exceeded,
+    build_email_change_email,
+    build_otp_email,
     cooldown_remaining_seconds,
     generate_otp,
     hash_otp,
     is_expired,
     otp_expiry,
-    send_otp_email,
-    send_email_change_code,
+    verification_art_attachment,
     verify_otp,
+)
+from app.services.email_outbox import (
+    EmailOutboxUnavailable,
+    deliver_email_job,
+    enqueue_email_delivery,
 )
 from app.services.oauth_service import (
     OAuthIdentity,
@@ -146,6 +152,77 @@ def _new_candidate_profile(user_id) -> CandidateProfile:
         study_level=None,
         onboarding_step=1,
         onboarding_completed=False,
+    )
+
+
+async def _supersede_code_deliveries(
+    db: AsyncSession,
+    *,
+    kind: str,
+    resource_id: UUID,
+) -> None:
+    """Stop queued codes after rotation or successful consumption."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    await db.execute(
+        update(EmailDelivery)
+        .where(
+            EmailDelivery.kind == kind,
+            EmailDelivery.resource_id == resource_id,
+            EmailDelivery.status.in_(("pending", "retry")),
+        )
+        .values(
+            status="failed",
+            last_error_code="EMAIL_DELIVERY_SUPERSEDED",
+            lease_owner=None,
+            lease_until=None,
+            updated_at=now,
+        )
+    )
+
+
+async def _queue_registration_code(
+    db: AsyncSession,
+    *,
+    registration_id: UUID,
+    email: str,
+    full_name: str,
+    otp: str,
+    expires_at: datetime,
+) -> EmailDelivery:
+    subject, html = build_otp_email(full_name, otp)
+    return await enqueue_email_delivery(
+        db,
+        kind="registration_verification",
+        dedupe_key=f"registration-verification:{registration_id}:{uuid4()}",
+        resource_type="pending_registration",
+        resource_id=registration_id,
+        to_email=email,
+        subject=subject,
+        html=html,
+        attachments=[verification_art_attachment()],
+        expires_at=expires_at,
+    )
+
+
+async def _queue_email_change_code(
+    db: AsyncSession,
+    *,
+    user: User,
+    new_email: str,
+    otp: str,
+    expires_at: datetime,
+) -> EmailDelivery:
+    subject, html = build_email_change_email(user.full_name, otp)
+    return await enqueue_email_delivery(
+        db,
+        kind="email_change_verification",
+        dedupe_key=f"email-change-verification:{user.id}:{uuid4()}",
+        resource_type="user",
+        resource_id=user.id,
+        to_email=new_email,
+        subject=subject,
+        html=html,
+        expires_at=expires_at,
     )
 
 
@@ -658,7 +735,7 @@ async def register(
 
     result = await db.execute(select(User).where(User.email == email))
     if result.scalar_one_or_none() is not None:
-        logger.warning("register_failed", email=email, reason="email_in_use")
+        logger.warning("register_failed", reason="email_in_use")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -666,6 +743,7 @@ async def register(
         text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
     )
     pending = res.mappings().first()
+    previous_registration_id = UUID(str(pending["id"])) if pending is not None else None
     if pending is not None:
         if not is_expired(pending["otp_expires_at"], now):
             remaining = cooldown_remaining_seconds(pending["last_otp_sent_at"], now)
@@ -733,25 +811,42 @@ async def register(
         await db.flush()
 
     try:
-        await asyncio.to_thread(send_otp_email, email, full_name, otp, expires_at)
-    except RuntimeError:
-        # Roll back the challenge rotation. A previously delivered code stays
-        # usable; a brand-new undelivered challenge is never persisted.
+        if previous_registration_id is not None:
+            await _supersede_code_deliveries(
+                db,
+                kind="registration_verification",
+                resource_id=previous_registration_id,
+            )
+        delivery = await _queue_registration_code(
+            db,
+            registration_id=registration_id,
+            email=email,
+            full_name=full_name,
+            otp=otp,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
         await db.rollback()
-        logger.warning("register_failed", email=email, reason="otp_email_failed")
+        logger.error("register_failed", reason="email_outbox_unavailable")
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not send verification email. Please try again.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email service is temporarily unavailable.",
         )
 
     await db.commit()
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
 
-    logger.info("register_otp_sent", email=email)
+    logger.info("register_otp_queued", delivery_status=delivery_status)
     return RegistrationStarted(
-        detail="Verification code sent",
+        detail=(
+            "Verification code sent"
+            if delivery_status == "sent"
+            else "Verification code queued for delivery"
+        ),
         email=email,
         registration_id=registration_id,
         expires_in_seconds=settings.otp_expire_minutes * 60,
+        delivery_status=delivery_status,
     )
 
 
@@ -783,6 +878,11 @@ async def verify_email(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
 
     if is_expired(pending["otp_expires_at"], now):
+        await _supersede_code_deliveries(
+            db,
+            kind="registration_verification",
+            resource_id=registration_id,
+        )
         await db.execute(
             text("DELETE FROM pending_registrations WHERE id=:id"),
             {"id": str(registration_id)},
@@ -794,6 +894,11 @@ async def verify_email(
         )
 
     if attempts_exceeded(pending["otp_attempts"]):
+        await _supersede_code_deliveries(
+            db,
+            kind="registration_verification",
+            resource_id=registration_id,
+        )
         await db.execute(
             text("DELETE FROM pending_registrations WHERE id=:id"),
             {"id": str(registration_id)},
@@ -812,6 +917,11 @@ async def verify_email(
             await db.execute(
                 text("DELETE FROM pending_registrations WHERE id=:id"),
                 {"id": str(registration_id)},
+            )
+            await _supersede_code_deliveries(
+                db,
+                kind="registration_verification",
+                resource_id=registration_id,
             )
         else:
             await db.execute(
@@ -844,6 +954,11 @@ async def verify_email(
     await db.flush()
 
     db.add(_new_candidate_profile(user.id))
+    await _supersede_code_deliveries(
+        db,
+        kind="registration_verification",
+        resource_id=registration_id,
+    )
     await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
     await db.commit()
     await db.refresh(user)
@@ -917,22 +1032,39 @@ async def resend_verification(
     await db.flush()
 
     try:
-        await asyncio.to_thread(send_otp_email, email, pending["full_name"], otp, expires_at)
-    except RuntimeError:
-        # Roll back to the previous code so the user is not locked out.
+        await _supersede_code_deliveries(
+            db,
+            kind="registration_verification",
+            resource_id=registration_id,
+        )
+        delivery = await _queue_registration_code(
+            db,
+            registration_id=registration_id,
+            email=email,
+            full_name=pending["full_name"],
+            otp=otp,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not send verification email. Please try again.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email service is temporarily unavailable.",
         )
     await db.commit()
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
 
-    logger.info("register_otp_resent", email=email)
+    logger.info("register_otp_requeued", delivery_status=delivery_status)
     return RegistrationStarted(
-        detail="Verification code sent",
+        detail=(
+            "Verification code sent"
+            if delivery_status == "sent"
+            else "Verification code queued for delivery"
+        ),
         email=email,
         registration_id=registration_id,
         expires_in_seconds=settings.otp_expire_minutes * 60,
+        delivery_status=delivery_status,
     )
 
 
@@ -956,11 +1088,11 @@ async def login(
             user.password_hash,
         )
     if user is None or not password_verified:
-        logger.warning("login_failed", email=email)
+        logger.warning("login_failed", reason="invalid_credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if user.role == UserRole.RECRUITER and not user.is_approved:
-        logger.warning("login_failed", email=email, reason="recruiter_unapproved")
+        logger.warning("login_failed", reason="recruiter_unapproved")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recruiter account is pending admin approval",
@@ -1178,17 +1310,41 @@ async def request_email_change(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That email address is already in use.")
     otp = generate_otp()
+    expires_at = otp_expiry()
     current_user.pending_email = new_email
     current_user.pending_email_otp_hash = hash_otp(otp)
-    current_user.pending_email_expires_at = otp_expiry()
+    current_user.pending_email_expires_at = expires_at
     current_user.pending_email_attempts = 0
     try:
-        await asyncio.to_thread(send_email_change_code, new_email, current_user.full_name, otp)
-    except Exception:
+        await _supersede_code_deliveries(
+            db,
+            kind="email_change_verification",
+            resource_id=current_user.id,
+        )
+        delivery = await _queue_email_change_code(
+            db,
+            user=current_user,
+            new_email=new_email,
+            otp=otp,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not send the verification code.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email service is temporarily unavailable.",
+        )
     await db.commit()
-    return {"detail": "Verification code sent to the new email address.", "email": new_email}
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    return {
+        "detail": (
+            "Verification code sent to the new email address."
+            if delivery_status == "sent"
+            else "Verification code queued for delivery."
+        ),
+        "email": new_email,
+        "delivery_status": delivery_status,
+    }
 
 
 @router.post("/account/email/confirm", response_model=TokenResponse)
@@ -1203,6 +1359,11 @@ async def confirm_email_change(
     if not current_user.pending_email or not current_user.pending_email_otp_hash or not current_user.pending_email_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email change is pending.")
     if is_expired(current_user.pending_email_expires_at):
+        await _supersede_code_deliveries(
+            db,
+            kind="email_change_verification",
+            resource_id=current_user.id,
+        )
         current_user.pending_email = current_user.pending_email_otp_hash = None
         current_user.pending_email_expires_at = None
         current_user.pending_email_attempts = 0
@@ -1211,12 +1372,22 @@ async def confirm_email_change(
     if not verify_otp(data.otp, current_user.pending_email_otp_hash):
         current_user.pending_email_attempts += 1
         if current_user.pending_email_attempts >= settings.otp_max_attempts:
+            await _supersede_code_deliveries(
+                db,
+                kind="email_change_verification",
+                resource_id=current_user.id,
+            )
             current_user.pending_email = current_user.pending_email_otp_hash = None
             current_user.pending_email_expires_at = None
             current_user.pending_email_attempts = 0
         await db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code.")
     new_email = current_user.pending_email
+    await _supersede_code_deliveries(
+        db,
+        kind="email_change_verification",
+        resource_id=current_user.id,
+    )
     current_user.email = new_email
     current_user.pending_email = current_user.pending_email_otp_hash = None
     current_user.pending_email_expires_at = None

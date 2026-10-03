@@ -111,6 +111,7 @@ export interface RegistrationStarted {
   email: string;
   registration_id: string;
   expires_in_seconds: number;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
 }
 
 export async function register(payload: {

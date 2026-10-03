@@ -114,3 +114,27 @@ async def test_expired_processing_lease_is_recoverable(sessions, monkeypatch):
         delivery.lease_owner = "dead-worker"
         await db.commit()
         assert await deliver_email_job(db, delivery.id, worker_id="replacement") == "sent"
+
+
+@pytest.mark.asyncio
+async def test_expired_code_delivery_is_failed_without_contacting_provider(sessions, monkeypatch):
+    send = lambda *_args, **_kwargs: pytest.fail("expired code must never be sent")
+    monkeypatch.setattr(email_outbox, "send_email", send)
+    async with sessions() as db:
+        delivery = await enqueue_email_delivery(
+            db,
+            kind="registration_verification",
+            dedupe_key=f"registration-verification:{uuid.uuid4()}",
+            resource_type="pending_registration",
+            resource_id=uuid.uuid4(),
+            to_email="candidate@example.com",
+            subject="Code",
+            html="<p>expired</p>",
+            expires_at=datetime.utcnow() - timedelta(seconds=1),
+        )
+        await db.commit()
+        assert await deliver_email_job(db, delivery.id, worker_id="worker") == "failed"
+        stored = await db.scalar(select(EmailDelivery).where(EmailDelivery.id == delivery.id))
+        assert stored is not None
+        assert stored.last_error_code == "EMAIL_DELIVERY_EXPIRED"
+        assert stored.attempts == 0

@@ -1,4 +1,4 @@
-"""Focused assertions for non-blocking OTP and durable invitation delivery."""
+"""Focused assertions for durable OTP and invitation delivery."""
 
 from inspect import unwrap
 from unittest.mock import AsyncMock, patch
@@ -8,7 +8,7 @@ import pytest
 from starlette.requests import Request
 
 from app.models import EmailDelivery, User, UserRole
-from app.schemas import CompanyInviteCreateRequest, RegisterRequest
+from app.schemas import CompanyInviteCreateRequest, EmailChangeRequest, RegisterRequest
 
 
 class _EmptyResult:
@@ -29,6 +29,9 @@ class _RouteDatabase:
 
     async def execute(self, *_args, **_kwargs):
         return _EmptyResult()
+
+    async def scalar(self, *_args, **_kwargs):
+        return None
 
     async def flush(self) -> None:
         return None
@@ -53,13 +56,18 @@ def _request(path: str) -> Request:
 
 
 @pytest.mark.asyncio
-async def test_registration_offloads_synchronous_otp_email() -> None:
+async def test_registration_queues_delivery_before_commit() -> None:
     from app.routers import auth
 
     database = _RouteDatabase()
-    offload = AsyncMock(return_value=None)
+    delivery = EmailDelivery(id=uuid4(), status="pending")
+    queue = AsyncMock(return_value=delivery)
+    deliver = AsyncMock(return_value="sent")
 
-    with patch.object(auth.asyncio, "to_thread", offload):
+    with (
+        patch.object(auth, "_queue_registration_code", queue),
+        patch.object(auth, "deliver_email_job", deliver),
+    ):
         result = await unwrap(auth.register)(
             RegisterRequest(
                 email="offload-candidate@example.com",
@@ -71,9 +79,10 @@ async def test_registration_offloads_synchronous_otp_email() -> None:
         )
 
     assert result.email == "offload-candidate@example.com"
+    assert result.delivery_status == "sent"
     assert database.commits == 1
-    offload.assert_awaited_once()
-    assert offload.await_args.args[0] is auth.send_otp_email
+    queue.assert_awaited_once()
+    deliver.assert_awaited_once_with(database, delivery.id, worker_id="api-immediate")
 
 
 @pytest.mark.asyncio
@@ -110,3 +119,43 @@ async def test_company_invitation_queues_delivery_before_commit() -> None:
     assert database.commits == 1
     queue.assert_awaited_once()
     attempt.assert_awaited_once_with(database, delivery)
+
+
+@pytest.mark.asyncio
+async def test_email_change_queues_expiring_delivery() -> None:
+    from app.routers import auth
+
+    database = _RouteDatabase()
+    user = User(
+        id=uuid4(),
+        email="candidate@example.com",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        full_name="Candidate Person",
+    )
+    delivery = EmailDelivery(id=uuid4(), status="pending")
+    queue = AsyncMock(return_value=delivery)
+    deliver = AsyncMock(return_value="retry")
+
+    with (
+        patch.object(auth, "_verify_sensitive_action", AsyncMock(return_value=user)),
+        patch.object(auth, "_queue_email_change_code", queue),
+        patch.object(auth, "deliver_email_job", deliver),
+    ):
+        result = await unwrap(auth.request_email_change)(
+            EmailChangeRequest(
+                current_password="StrongPass123!",
+                new_email="new-candidate@example.com",
+            ),
+            _request("/auth/account/email/request"),
+            user,
+            database,  # type: ignore[arg-type]
+        )
+
+    assert result["delivery_status"] == "retry"
+    assert user.pending_email == "new-candidate@example.com"
+    assert user.pending_email_expires_at is not None
+    assert database.commits == 1
+    queue.assert_awaited_once()
+    deliver.assert_awaited_once_with(database, delivery.id, worker_id="api-immediate")

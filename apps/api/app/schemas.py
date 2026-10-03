@@ -44,6 +44,7 @@ class RegistrationStarted(APIModel):
     email: EmailStr
     registration_id: uuid.UUID
     expires_in_seconds: int
+    delivery_status: Literal["pending", "processing", "retry", "sent", "failed"]
 
 
 class VerifyEmailRequest(APIModel):

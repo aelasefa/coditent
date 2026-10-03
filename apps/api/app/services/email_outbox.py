@@ -80,6 +80,7 @@ async def enqueue_email_delivery(
     html: str,
     text: str | None = None,
     attachments: list[dict[str, str]] | None = None,
+    expires_at: datetime | None = None,
 ) -> EmailDelivery:
     """Add one delivery intent to the caller's uncommitted transaction."""
     if not kind or len(kind) > 50 or not dedupe_key or len(dedupe_key) > 255:
@@ -109,6 +110,7 @@ async def enqueue_email_delivery(
         attempts=0,
         max_attempts=settings.email_delivery_max_attempts,
         available_at=now,
+        expires_at=expires_at,
         created_at=now,
         updated_at=now,
     )
@@ -145,6 +147,14 @@ async def _claim_delivery(
     )
     if delivery is None:
         await db.rollback()
+        return None
+    if delivery.expires_at is not None and delivery.expires_at <= now:
+        delivery.status = "failed"
+        delivery.lease_owner = None
+        delivery.lease_until = None
+        delivery.last_error_code = "EMAIL_DELIVERY_EXPIRED"
+        delivery.updated_at = now
+        await db.commit()
         return None
     if delivery.attempts >= delivery.max_attempts:
         delivery.status = "failed"

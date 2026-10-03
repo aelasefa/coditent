@@ -147,9 +147,7 @@ def build_otp_email(full_name: str, otp: str) -> tuple[str, str]:
     return subject, html
 
 
-def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
-    from app.services.email import send_email
-
+def build_email_change_email(full_name: str, otp: str) -> tuple[str, str]:
     first = html_module.escape((full_name or "there").strip().split()[0])
     subject = "Confirm your new CODITENT email address"
     body = f"""
@@ -160,6 +158,13 @@ def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
       <p style="font-size:12px;color:#71717A;">If you did not request this change, keep your current email and change your password.</p>
     </div>
     """
+    return subject, body
+
+
+def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
+    from app.services.email import send_email
+
+    subject, body = build_email_change_email(full_name, otp)
     send_email(to_email, subject, body)
 
 
@@ -172,7 +177,6 @@ def send_otp_email(to_email: str, full_name: str, otp: str, expires_at: datetime
     except Exception as exc:
         logger.warning(
             "otp_email_failed",
-            email=to_email,
             exception_type=type(exc).__name__,
         )
         raise RuntimeError("Could not send verification email") from exc

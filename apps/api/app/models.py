@@ -508,6 +508,7 @@ class EmailDelivery(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     available_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
