@@ -11,7 +11,19 @@ import { candidateName, jobTitleFor } from "./hiring";
 import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
-import { FiArrowRight, FiBarChart2, FiCheck, FiFileText, FiGitBranch, FiMessageSquare, FiX } from "react-icons/fi";
+import {
+  FiActivity,
+  FiArrowRight,
+  FiAward,
+  FiBarChart2,
+  FiCheck,
+  FiDownload,
+  FiExternalLink,
+  FiFileText,
+  FiGitBranch,
+  FiMessageSquare,
+  FiX,
+} from "react-icons/fi";
 
 const PIPELINE_STAGES = [
   { status: "under_review", label: "Review", description: "Start structured screening" },
@@ -216,12 +228,22 @@ export function CandidateDetail({
               content: (
                 <section className="candidate-profile-skills" aria-label="Candidate skills">
                   <div className="candidate-profile-skills-heading">
-                    <h3>Skills & expertise</h3>
-                    <p>Skills shared on the candidate’s profile.</p>
+                    <span className="candidate-section-icon" aria-hidden="true"><FiAward /></span>
+                    <div className="candidate-section-heading-copy">
+                      <p className="company-detail-label">Candidate profile</p>
+                      <h3>Skills & expertise</h3>
+                      <p>Capabilities shared by the candidate.</p>
+                    </div>
+                    {skills.length ? <span className="candidate-section-count">{skills.length} skills</span> : null}
                   </div>
                   {skills.length ? (
                     <ul className="candidate-profile-skills-list">
-                      {skills.map((skill, index) => <li key={`${skill}-${index}`}>{skill}</li>)}
+                      {skills.map((skill, index) => (
+                        <li key={`${skill}-${index}`}>
+                          <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                          <span>{skill}</span>
+                        </li>
+                      ))}
                     </ul>
                   ) : (
                     <div className="candidate-profile-skills-empty">
@@ -236,46 +258,59 @@ export function CandidateDetail({
               id: "assessments",
               label: "Assessments",
               content: (
-                <div className="space-y-4">
-                  <div className="candidate-screening">
-                  <div className="candidate-screening-heading">
-                    <div>
-                      <h3>AI screening</h3>
-                      <p>AI-generated application review</p>
+                <div className="candidate-assessments-stack">
+                  <section className="candidate-screening" aria-labelledby="candidate-screening-title">
+                    <div className="candidate-screening-heading">
+                      <div className="candidate-screening-heading-main">
+                        <span className="candidate-section-icon" aria-hidden="true"><FiActivity /></span>
+                        <div className="candidate-section-heading-copy">
+                          <p className="company-detail-label">Application intelligence</p>
+                          <h3 id="candidate-screening-title">AI screening</h3>
+                          <p>AI-generated application review</p>
+                        </div>
+                      </div>
+                      <div className="candidate-screening-score">
+                        <span>Match signal</span>
+                        <AiScore app={app} />
+                      </div>
                     </div>
-                    <AiScore app={app} />
-                  </div>
-                  {app.ai_status === "failed" ? (
-                    <div className="mt-2">
-                      <p className="text-[13px] text-muted-foreground">Screening did not complete. Retry runs it again.</p>
-                      {canMoveStage ? (
-                        <Button size="sm" variant="outline" loading={screenMut.isPending} onClick={() => screenMut.mutate()} className="mt-2">
-                          Retry screening
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : screening ? (
-                    <div className="candidate-screening-report">
-                      <p className="candidate-screening-summary">{screening.summary}</p>
-                      {screening.strengths.length > 0 ? (
-                        <section className="candidate-screening-findings" aria-label="AI screening strengths">
-                          <h4>Strengths</h4>
-                          <ul>{screening.strengths.map((strength, index) => <li key={index}>{strength}</li>)}</ul>
-                        </section>
-                      ) : null}
-                      {screening.gaps.length > 0 ? (
-                        <section className="candidate-screening-findings candidate-screening-gaps" aria-label="AI screening gaps">
-                          <h4>Gaps</h4>
-                          <ul>{screening.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>
-                        </section>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[13px] text-muted-foreground">
-                      {app.ai_status === "processing" ? "Screening is running." : "Screening has not run yet."}
-                    </p>
-                  )}
-                </div>
+                    {app.ai_status === "failed" ? (
+                      <div className="candidate-screening-state">
+                        <p>Screening did not complete. Retry runs it again.</p>
+                        {canMoveStage ? (
+                          <Button size="sm" variant="outline" loading={screenMut.isPending} onClick={() => screenMut.mutate()}>
+                            Retry screening
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : screening ? (
+                      <div className="candidate-screening-report">
+                        <div className="candidate-screening-summary">
+                          <span className="candidate-screening-summary-icon" aria-hidden="true"><FiActivity /></span>
+                          <div>
+                            <span>Screening summary</span>
+                            <p>{screening.summary}</p>
+                          </div>
+                        </div>
+                        {screening.strengths.length > 0 ? (
+                          <section className="candidate-screening-findings" aria-label="AI screening strengths">
+                            <h4>Strengths</h4>
+                            <ul>{screening.strengths.map((strength, index) => <li key={index}>{strength}</li>)}</ul>
+                          </section>
+                        ) : null}
+                        {screening.gaps.length > 0 ? (
+                          <section className="candidate-screening-findings candidate-screening-gaps" aria-label="AI screening gaps">
+                            <h4>Gaps</h4>
+                            <ul>{screening.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>
+                          </section>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="candidate-screening-state">
+                        <p>{app.ai_status === "processing" ? "Screening is running." : "Screening has not run yet."}</p>
+                      </div>
+                    )}
+                  </section>
                   {assessment ? (
                     <section className="candidate-assessment-detail" aria-label="Practical assessment result">
                       <header className="candidate-assessment-header">
@@ -325,11 +360,11 @@ export function CandidateDetail({
                       </div>
                     </section>
                   ) : (
-                <section className="candidate-assessment-notice" aria-label="Practical assessment">
-                  <h3>Practical assessment</h3>
-                  <p>No practical assessment registered for this application.</p>
-                </section>
-              )}
+                    <section className="candidate-assessment-notice" aria-label="Practical assessment">
+                      <h3>Practical assessment</h3>
+                      <p>No practical assessment registered for this application.</p>
+                    </section>
+                  )}
                 </div>
               ),
             },
@@ -339,8 +374,13 @@ export function CandidateDetail({
               content: (
                 <section className="candidate-resume" aria-label="Candidate resume">
                   <div className="candidate-resume-heading">
-                    <h3>Resume</h3>
-                    <p>The CV attached to this application.</p>
+                    <span className="candidate-section-icon" aria-hidden="true"><FiFileText /></span>
+                    <div className="candidate-section-heading-copy">
+                      <p className="company-detail-label">Application document</p>
+                      <h3>Resume</h3>
+                      <p>The CV attached to this application.</p>
+                    </div>
+                    <span className="candidate-section-count">{cvHref ? "Attached" : "Missing"}</span>
                   </div>
                   {cvHref ? (
                     <>
@@ -355,8 +395,12 @@ export function CandidateDetail({
                         </div>
                       </div>
                       <div className="candidate-resume-actions">
-                        <a href={cvHref} target="_blank" rel="noreferrer noopener" className="candidate-resume-open">Open CV <span className="sr-only">in a new tab</span></a>
-                        <a href={cvHref} download={cvFilename ?? true} className="candidate-resume-download">Download</a>
+                        <a href={cvHref} target="_blank" rel="noreferrer noopener" className="candidate-resume-open">
+                          <FiExternalLink aria-hidden="true" /> Open CV <span className="sr-only">in a new tab</span>
+                        </a>
+                        <a href={cvHref} download={cvFilename ?? true} className="candidate-resume-download">
+                          <FiDownload aria-hidden="true" /> Download
+                        </a>
                       </div>
                     </>
                   ) : (
@@ -374,7 +418,9 @@ export function CandidateDetail({
               content: (
                 <section className="candidate-messages" aria-label="Recruitment messages">
                   <div className="candidate-messages-heading">
-                    <div>
+                    <span className="candidate-section-icon" aria-hidden="true"><FiMessageSquare /></span>
+                    <div className="candidate-section-heading-copy">
+                      <p className="company-detail-label">Candidate conversation</p>
                       <h3>Messages</h3>
                       <p>Recruitment conversation for this application.</p>
                     </div>
@@ -397,7 +443,7 @@ export function CandidateDetail({
                     </p>
                     {chatUnlocked ? (
                       <a href={`/chat/recruitment/${app.id}`} className="candidate-messages-link">
-                        Open chat <span className="sr-only">with {candidateName(app)}</span>
+                        <FiMessageSquare aria-hidden="true" /> Open chat <span className="sr-only">with {candidateName(app)}</span>
                       </a>
                     ) : null}
                   </div>
