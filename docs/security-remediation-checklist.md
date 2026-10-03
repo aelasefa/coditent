@@ -91,3 +91,5 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 ## Required release configuration/actions
 
 Set only through the deployment secret manager, using generated values: `DATABASE_URL`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `EMAIL_OUTBOX_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, OAuth client secrets, Supabase URL/service key, Redis URL, and production HTTPS origins. Follow `docs/security/secret-rotation.md` and `docs/operations/backup-restore-rollback.md`. Do not reuse historical values or place them in tracked files.
+
+Run the end-to-end role, invitation, hiring, assessment, stage, chat, privacy, and recovery checks in `docs/operations/manual-hiring-e2e.md` against the exact release commit.
