@@ -988,6 +988,18 @@ class MissionProgressOut(APIModel):
     attempts: list[MissionAttemptOut]
 
 
+class MissionReviewQueueItem(APIModel):
+    attempt: MissionAttemptOut
+    mission_title: str
+    mission_skills: list[str]
+    candidate_name: str
+    candidate_email: str
+
+
+class MissionReviewQueueOut(APIModel):
+    attempts: list[MissionReviewQueueItem]
+
+
 NotificationCategory = Literal["application", "assessment", "interview", "message", "system"]
 
 

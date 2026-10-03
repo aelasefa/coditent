@@ -18,6 +18,8 @@ from app.schemas import (
     MissionAttemptOut,
     MissionAttemptReview,
     MissionProgressOut,
+    MissionReviewQueueItem,
+    MissionReviewQueueOut,
     PracticeMissionCreate,
     PracticeMissionListOut,
     PracticeMissionOut,
@@ -127,6 +129,37 @@ async def create_mission(
     await db.commit()
     await db.refresh(mission)
     return _mission_out(mission)
+
+
+@router.get("/attempts/pending", response_model=MissionReviewQueueOut)
+async def list_pending_attempts(
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MissionReviewQueueOut:
+    rows = list(
+        (
+            await db.execute(
+                select(MissionAttempt, PracticeMission, User)
+                .join(PracticeMission, MissionAttempt.mission_id == PracticeMission.id)
+                .join(User, MissionAttempt.candidate_id == User.id)
+                .where(MissionAttempt.status == "submitted")
+                .order_by(MissionAttempt.created_at.asc())
+                .limit(200)
+            )
+        ).all()
+    )
+    return MissionReviewQueueOut(
+        attempts=[
+            MissionReviewQueueItem(
+                attempt=_attempt_out(attempt),
+                mission_title=mission.title,
+                mission_skills=_string_list(mission.skills),
+                candidate_name=candidate.full_name,
+                candidate_email=candidate.email,
+            )
+            for attempt, mission, candidate in rows
+        ]
+    )
 
 
 @router.post("/{mission_id}/attempts", response_model=MissionAttemptOut, status_code=status.HTTP_201_CREATED)

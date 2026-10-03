@@ -423,6 +423,14 @@ export interface MissionProgress {
   attempts: MissionAttempt[];
 }
 
+export interface MissionReviewQueueItem {
+  attempt: MissionAttempt;
+  mission_title: string;
+  mission_skills: string[];
+  candidate_name: string;
+  candidate_email: string;
+}
+
 export interface AuditLogItem {
   id: string;
   action: string;

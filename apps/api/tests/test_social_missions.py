@@ -94,6 +94,10 @@ async def test_mission_attempt_review_updates_only_validated_profile_fields(db):
         candidate,
         db,
     )
+    queue = await missions.list_pending_attempts(admin, db)
+    queued = next(item for item in queue.attempts if item.attempt.id == attempt.id)
+    assert queued.candidate_name == candidate.full_name
+    assert queued.mission_skills == ["Concurrency", "API design"]
     with pytest.raises(HTTPException) as duplicate:
         await missions.create_attempt(
             mission.id,

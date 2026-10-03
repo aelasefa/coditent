@@ -732,6 +732,21 @@ export async function submitMissionAttempt(missionId: string, evidence: string):
   const { data } = await api.post<import("@/lib/types").MissionAttempt>(`/missions/${missionId}/attempts`, { evidence });
   return data;
 }
+
+export async function createMission(payload: { field: string; level: string; title: string; description: string; evidence_prompt: string; skills: string[] }): Promise<import("@/lib/types").PracticeMission> {
+  const { data } = await api.post<import("@/lib/types").PracticeMission>("/missions", payload);
+  return data;
+}
+
+export async function listPendingMissionAttempts(): Promise<import("@/lib/types").MissionReviewQueueItem[]> {
+  const { data } = await api.get<{ attempts: import("@/lib/types").MissionReviewQueueItem[] }>("/missions/attempts/pending");
+  return data.attempts;
+}
+
+export async function reviewMissionAttempt(attemptId: string, payload: { expected_version: number; status: "validated" | "rejected"; score: number; validated_skills: string[]; feedback: string }): Promise<import("@/lib/types").MissionAttempt> {
+  const { data } = await api.patch<import("@/lib/types").MissionAttempt>(`/missions/attempts/${attemptId}/review`, payload);
+  return data;
+}
 export async function getApplications(): Promise<{ applications: { id: string; status: string }[] }> {
   const { data } = await api.get("/applications");
   return data;
