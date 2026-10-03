@@ -286,21 +286,20 @@ export function CandidateDetail({
                             <h3>{assessment.title || "Assessment result"}</h3>
                           </div>
                         </div>
-                        <StatusBadge status={assessment.status} size="sm" />
-                      </header>
-                      <div className="candidate-assessment-score">
-                        <div className="candidate-assessment-score-icon" aria-hidden="true"><FiBarChart2 /></div>
-                        <div>
-                          <span className="company-detail-label">Objective score</span>
-                          <p>
-                            <strong>{typeof assessment.score === "number" ? assessment.score : "—"}</strong>
-                            <span>/ 100</span>
-                          </p>
+                        <div className="candidate-assessment-outcome">
+                          <div className="candidate-assessment-score">
+                            <span>Objective score</span>
+                            <p>
+                              <strong>{typeof assessment.score === "number" ? assessment.score : "—"}</strong>
+                              <span>/ 100</span>
+                            </p>
+                          </div>
+                          <div className="candidate-assessment-status">
+                            <span>Status</span>
+                            <StatusBadge status={assessment.status} size="sm" />
+                          </div>
                         </div>
-                        <span className="candidate-assessment-score-note">
-                          {typeof assessment.score === "number" ? "Recorded result" : "Pending evaluation"}
-                        </span>
-                      </div>
+                      </header>
                       <div className="candidate-assessment-reports">
                         {assessment.report ? (
                           <section className="candidate-assessment-report candidate-assessment-report-analysis" aria-label="AI analysis">

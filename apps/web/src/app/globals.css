@@ -695,51 +695,51 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .company-candidate-stage-actions {
   overflow: hidden;
   border: 1px solid #cad9c9;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fffefa;
-  box-shadow: 0 6px 20px rgb(25 77 56 / 7%);
+  box-shadow: 0 4px 14px rgb(25 77 56 / 6%);
 }
 
 .company-candidate-stage-actions-heading {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.8rem 0.9rem;
+  gap: 0.55rem;
+  padding: 0.6rem 0.7rem;
   background: #194d38;
 }
 
 .company-candidate-stage-actions-icon {
   display: inline-flex;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
   align-items: center;
   justify-content: center;
   border: 1px solid rgb(255 254 250 / 20%);
-  border-radius: 9px;
+  border-radius: 8px;
   background: rgb(255 254 250 / 11%);
   color: #e9f0df;
 }
 
 .company-candidate-stage-actions-icon svg {
-  width: 1rem;
-  height: 1rem;
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .company-candidate-stage-actions-copy { min-width: 0; }
 
 .company-candidate-stage-actions-copy > p:last-child {
-  margin: 0.18rem 0 0;
+  margin: 0.12rem 0 0;
   color: #d4e2d1;
-  font-size: 0.7rem;
-  line-height: 1.35;
+  font-size: 0.65rem;
+  line-height: 1.3;
 }
 
 .company-candidate-stage-actions-heading h3 {
   margin: 0.1rem 0 0;
   color: #fffefa;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.08rem;
+  font-size: 1rem;
   font-weight: 400;
   letter-spacing: -0.025em;
   line-height: 1.2;
@@ -747,14 +747,14 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 .company-candidate-stage-actions-heading .company-detail-label {
   color: #bfd1b8;
-  font-size: 0.6rem;
+  font-size: 0.56rem;
 }
 
 .company-candidate-stage-current {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.3rem 0.25rem 0.65rem;
+  gap: 0.4rem;
+  padding: 0.18rem 0.22rem 0.18rem 0.55rem;
   border: 1px solid rgb(255 254 250 / 16%);
   border-radius: 999px;
   background: rgb(255 254 250 / 8%);
@@ -762,7 +762,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 .company-candidate-stage-current > span:first-child {
   color: #bfd1b8;
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -777,18 +777,18 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .company-candidate-stage-actions-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: 0.4rem;
+  padding: 0.55rem;
   background: #f6f8f2;
 }
 
 .company-candidate-stage-option {
   display: grid;
-  min-height: 3.75rem;
+  min-height: 3rem;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 0.7rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
   border: 1px solid #d6e1d4;
   border-radius: 10px;
   background: #fffefa;
@@ -800,11 +800,11 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 .company-candidate-stage-option-marker {
   display: inline-flex;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.6rem;
+  height: 1.6rem;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 7px;
   background: #e7eee4;
   color: #315f45;
   font-size: 0.72rem;
@@ -873,11 +873,11 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 .company-candidate-stage-actions-footer {
   display: flex;
-  min-height: 3.25rem;
+  min-height: 3rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.6rem 0.8rem;
+  padding: 0.5rem 0.7rem;
   border-top: 1px solid #dde6da;
   background: #fffefa;
 }
@@ -902,7 +902,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 @media (max-width: 560px) {
   .company-candidate-stage-actions-heading {
     grid-template-columns: auto minmax(0, 1fr);
-    padding: 0.8rem;
+    padding: 0.65rem;
   }
   .company-candidate-stage-current {
     grid-column: 1 / -1;
@@ -910,7 +910,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   }
   .company-candidate-stage-actions-controls {
     grid-template-columns: 1fr;
-    padding: 0.65rem;
+    padding: 0.5rem;
   }
   .company-candidate-stage-actions-footer { align-items: flex-start; flex-direction: column; }
 }
@@ -1291,40 +1291,40 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   display: grid;
   gap: 0;
   overflow: hidden;
-  border: 1px solid #dce6da;
-  border-radius: 16px;
+  border: 1px solid #c9d9cb;
+  border-radius: 18px;
   background: #fffefa;
-  box-shadow: 0 8px 22px rgb(25 77 56 / 5%);
+  box-shadow: 0 12px 30px rgb(25 77 56 / 8%);
 }
 .candidate-assessment-header {
-  display: flex;
-  min-height: 4.75rem;
+  position: relative;
+  display: grid;
+  min-height: 8rem;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 1rem;
-  border-bottom: 1px solid #e3e9df;
-  background: #f2f6ef;
+  gap: 1.25rem;
+  padding: 1.15rem 1.25rem;
+  background: #194d38;
 }
 .candidate-assessment-heading {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.85rem;
 }
+.candidate-assessment-heading .company-detail-label { color: #bfd1c3; }
 .candidate-assessment-heading h3 {
-  margin: 0.2rem 0 0;
+  margin: 0.25rem 0 0;
   overflow: hidden;
-  color: #203d2e;
+  color: #fffefa;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.1rem;
+  font-size: 1.35rem;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .candidate-assessment-icon,
-.candidate-assessment-score-icon,
 .candidate-assessment-report-icon {
   display: inline-flex;
   flex-shrink: 0;
@@ -1332,45 +1332,62 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   justify-content: center;
 }
 .candidate-assessment-icon {
-  width: 2.45rem;
-  height: 2.45rem;
-  border-radius: 10px;
-  background: #194d38;
-  color: #fffefa;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid rgb(255 254 250 / 20%);
+  border-radius: 12px;
+  background: rgb(255 254 250 / 11%);
+  color: #e9f0df;
 }
-.candidate-assessment-icon svg { width: 1.05rem; height: 1.05rem; }
+.candidate-assessment-icon svg { width: 1.2rem; height: 1.2rem; }
+.candidate-assessment-outcome {
+  display: grid;
+  min-width: 15.5rem;
+  grid-template-columns: minmax(6.25rem, auto) auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgb(255 254 250 / 20%);
+  border-radius: 14px;
+  background: rgb(255 254 250 / 10%);
+}
 .candidate-assessment-score {
-  display: flex;
-  min-height: 5.25rem;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid #e3e9df;
-  background: #fffefa;
+  display: grid;
+  min-height: 4.5rem;
+  align-content: center;
+  gap: 0.25rem;
+  padding: 0.6rem 0.85rem;
 }
-.candidate-assessment-score-icon {
-  width: 2.4rem;
-  height: 2.4rem;
-  border: 1px solid #c9dbc8;
-  border-radius: 10px;
-  background: #e8f1e5;
-  color: #315f45;
+.candidate-assessment-score > span,
+.candidate-assessment-status > span:first-child {
+  color: #bfd1c3;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.candidate-assessment-score-icon svg { width: 1.05rem; height: 1.05rem; }
 .candidate-assessment-score p { display: flex; align-items: baseline; gap: 0.2rem; margin: 0.1rem 0 0; }
 .candidate-assessment-score p strong {
-  color: #194d38;
-  font-size: 1.75rem;
+  color: #fffefa;
+  font-size: 2.15rem;
   font-weight: 800;
   letter-spacing: -0.05em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.candidate-assessment-score p span { color: #617369; font-size: 0.76rem; font-weight: 650; }
-.candidate-assessment-score-note {
-  margin-left: auto;
-  color: #617369;
-  font-size: 0.7rem;
+.candidate-assessment-score p span { color: #d4e2d8; font-size: 0.72rem; font-weight: 650; }
+.candidate-assessment-status {
+  display: grid;
+  min-width: 7rem;
+  align-content: center;
+  justify-items: start;
+  gap: 0.45rem;
+  padding: 0.6rem 0.85rem;
+  border-left: 1px solid rgb(255 254 250 / 18%);
+}
+.candidate-assessment-status > span:last-child {
+  border-color: rgb(255 254 250 / 22%);
+  background: #e8f1e5;
+  color: #194d38;
 }
 .candidate-assessment-reports {
   display: grid;
@@ -1406,9 +1423,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-assessment-empty { margin: 0; color: #617369; font-size: 0.8rem; }
 
 @media (max-width: 560px) {
-  .candidate-assessment-header { align-items: flex-start; flex-direction: column; }
-  .candidate-assessment-score { align-items: flex-start; flex-wrap: wrap; }
-  .candidate-assessment-score-note { flex-basis: 100%; margin-left: 3.15rem; margin-top: -0.35rem; }
+  .candidate-assessment-header { grid-template-columns: 1fr; padding: 1rem; }
+  .candidate-assessment-outcome { width: 100%; min-width: 0; }
 }
 
 /* Candidate profile drawer: final visual polish. */
