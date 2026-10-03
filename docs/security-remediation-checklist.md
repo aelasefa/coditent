@@ -1,91 +1,93 @@
-# Coditent security and product remediation checklist
+# Coditent security, reliability, and product remediation checklist
 
 Branch: `codex/security-review-remediation`
 
 Audit baseline: `3880510632fba213331e2bc10411870dde2a6b09`
 
-Re-audit target at start: `b7219a5cd99fefb801e64683c55a07c163796ead`
+Current migration head: `y1a2b3c4d5e6`
 
 ## Status legend
 
-- `AUDITING`: current behavior is being rechecked against the finding.
-- `FIXED_VERIFIED`: implementation and deterministic regression evidence are complete.
-- `ALREADY_FIXED_VERIFIED`: current branch already contained the complete fix and it was reverified.
-- `EXTERNAL_PENDING`: repository implementation is complete, but a provider/dashboard/production action remains.
-- `BLOCKED`: required evidence or authority is unavailable and no further safe repository work is possible.
+- `FIXED_VERIFIED`: repository implementation and deterministic regression evidence are complete.
+- `EXTERNAL_PENDING`: feasible repository implementation is complete, but a named provider/production action remains.
+- `PARTIAL`: repository work remains; it is not counted as resolved.
+- `BLOCKED`: authoritative input or permission is missing and no safe substitute can prove completion.
 
-## Missing review inputs
-
-The task references `Coditent_Backend_Security_Review.md`, `Coditent_Review_Evidence.zip`,
-`en.subject.md`, and `CODITENT PROGRAM.md`. They were not present in the supplied attachment,
-working tree, Git history available locally, or publicly discoverable under those filenames at
-the start of the remediation. Work proceeds from the complete S01-S18/B01-B14 descriptions in
-the supplied task. Exact report evidence mappings and the final school-module selection remain
-pending those files.
+The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PROGRAM.md` were not present in the attachment, working tree, or locally available history. This checklist maps the complete S01–S18/B01–B14 text supplied by the user. The exact school point calculation remains blocked on the missing subject/program files; implemented product requirements are recorded independently below.
 
 ## Security findings
 
-| ID | Status | Affected files | Fix/evidence | Regression test | External dependency |
-|---|---|---|---|---|---|
-| S01 | AUDITING | TBD | Historical secrets and rotation/session invalidation | TBD | Credential rotation and any shared-history rewrite |
-| S02 | FIXED_VERIFIED | `apps/api/app/routers/auth.py`, `apps/api/app/schemas.py`, `apps/web/src/lib/api.ts`, registration/verification pages | Registration returns an opaque attempt UUID; re-registration atomically rotates id, name, password hash, OTP, expiry, attempts, and timestamps under the email row lock. Verify/resend require matching id+email, so stale codes and attempt IDs cannot cross bundles. Email failure rolls the complete rotation back. | `test_reregister_rotates_the_complete_attempt_bundle`; `test_concurrent_registration_attempts_never_mix_identity_bundle` — 2 passed in API container; frontend `tsc --noEmit` passed | None |
-| S03 | AUDITING | TBD | MFA completion across password/OAuth | TBD | OAuth provider sandbox smoke tests |
-| S04 | AUDITING | TBD | Token purpose and socket tickets | TBD | None expected |
-| S05 | AUDITING | TBD | Owner-bound immutable CV references | TBD | Authorized Storage/RLS verification |
-| S06 | AUDITING | TBD | Live chat authorization revocation | TBD | Multi-instance test infrastructure |
-| S07 | AUDITING | TBD | Short database lifetime and socket bounds | TBD | Multi-instance test infrastructure |
-| S08 | AUDITING | TBD | Production ingress/cookies/origins/ports | TBD | Production ingress verification |
-| S09 | AUDITING | TBD | Vault/root credential and WAF boundary | TBD | Production secret manager/WAF verification |
-| S10 | AUDITING | TBD | Authenticated and budgeted AI routes | TBD | Provider quota/billing verification |
-| S11 | AUDITING | TBD | Safe OAuth identity linking/state/PKCE/nonce | TBD | Provider configuration verification |
-| S12 | AUDITING | TBD | Sessions/logout/revocation/CSRF | TBD | None expected |
-| S13 | AUDITING | CV/logo upload routes, parser/storage/screening services, `apps/api/app/services/upload_limits.py` | Uploads now stop at MAX+1 while reading, route-level signature/container checks reject spoofed files, DOCX ZIP expansion/entry/ratio and PDF page limits are bounded, image dimensions/pixels are bounded, extraction text/time limits are applied, and document/storage work runs off the event loop. Blocking email calls are the remaining repository item in this finding. | CV upload 36 passed; logo 16 passed; route bounds 5 passed; upload reader 2 passed | Stronger process-level parser sandbox remains a deployment hardening option |
-| S14 | FIXED_VERIFIED | `apps/api/app/observability.py`, `apps/api/tests/test_observability.py` | Metrics now use resolved route templates (or one `<unmatched>` bucket), normalize methods, and record failures in `finally`; request logs share the same bounded labels. | `test_route_labels_use_templates_and_bound_unmatched_paths`; `test_metrics_record_failures_under_the_route_template` | None |
-| S15 | EXTERNAL_PENDING | `apps/api/app/observability.py`, `apps/api/app/main.py`, `apps/api/app/tasks.py`, AI/screening/email/invitation services, `docker-compose.yml`, `apps/api/start_api.sh`, `nginx/nginx.conf` | Recursive structured-log redaction covers credentials, tokens, cookies, OTPs, emails, CV text, connection passwords, JWTs, and secret query parameters. Raw provider/exception/model text was removed from logs, job state, and invitation responses; 500s expose only a correlation ID. Uvicorn raw access logs are disabled at both launch points and Nginx excludes query/referrer data. | `test_structured_and_free_form_secrets_are_redacted`; metrics tests; match-scoring no-secret fallback regression — 16 focused tests passed; runtime random token URL logged only as `<unmatched>` | Production log-retention, sink access controls, and deletion verification |
-| S16 | AUDITING | TBD | Central password policy, Argon2id, encrypted MFA | TBD | Protected encryption key provisioning |
-| S17 | AUDITING | TBD | Patched/locked dependencies and Google Gen AI SDK | TBD | Official advisory/provider smoke checks |
-| S18 | AUDITING | TBD | Trusted deploy provenance/non-root/RLS boundaries | TBD | Authorized production database/Storage checks |
+| ID | Status | Implementation evidence | Regression evidence | External action |
+|---|---|---|---|---|
+| S01 | EXTERNAL_PENDING | Placeholder-only examples, secret validation, Gitleaks CI/pre-commit, independent JWT/TOTP/email keys, auth-version session invalidation; rotation runbook in `docs/security/secret-rotation.md` | `test_secret_configuration.py`, `test_production_boundary.py`, CI secret scan | Rotate database, JWT, Gemini, Resend, and historical admin credentials; decide and coordinate shared Git-history rewrite |
+| S02 | FIXED_VERIFIED | `routers/auth.py` binds name/password/OTP/email to an opaque registration attempt and rotates the whole row under lock | Concurrent/re-registration cases in `test_email_otp.py` | None |
+| S03 | EXTERNAL_PENDING | Shared auth completion enforces local MFA for password/OAuth; atomic MFA challenges and trusted-device revocation | `test_two_factor.py`, `test_oauth_popup.py`, `test_passwords.py` | Google/LinkedIn sandbox smoke test |
+| S04 | FIXED_VERIFIED | Purpose-specific access/MFA/trusted/socket credentials; access validation verifies subject, purpose, auth version, account/session state; single-use socket tickets | `test_two_factor.py`, `test_socket_tickets.py`, recruitment socket tests | None |
+| S05 | EXTERNAL_PENDING | Immutable owner-bound `CVAsset`, server-derived application snapshot, ownership checks before download/storage/AI | `test_cv_asset_lifecycle.py`, `test_cv_auth.py`, `test_recruiter_candidate_data.py` | Authorized Supabase Storage/RLS smoke test |
+| S06 | FIXED_VERIFIED | Recruitment sockets revalidate candidate, responsible HR, stage, account, and session; Redis fan-out revocation/read events; bounded clients | chat realtime/access suites, reassignment/stage/token cases | Multi-host production soak remains operational verification |
+| S07 | FIXED_VERIFIED | Short event-scoped DB sessions, no session held while awaiting socket input, heartbeat/expiry/rate/backpressure controls | `test_chat_realtime.py`, `test_recruitment_read_events.py` | None |
+| S08 | EXTERNAL_PENDING | Production settings require HTTPS/Secure cookies/explicit origins; direct API/Redis ports loopback-only; one proxy ingress; readiness-gated deploy | `test_production_boundary.py`, Compose/Ansible checks | Verify actual public ingress, redirects, origins, and closed security-group ports |
+| S09 | EXTERNAL_PENDING | Checked-in Vault root credential removed; production secret variables are injected; ingress/WAF guidance targets actual proxy | config/deployment tests | Provision production secret manager and verify WAF JSON rules with legitimate traffic |
+| S10 | EXTERNAL_PENDING | Authenticated Next.js proxy and Python AI routes, shared Redis quotas/concurrency/global budget, bounded I/O, timeouts, durable queue, server entitlements | AI job/control, match, entitlement, and route tests | Verify provider quotas/billing alerts and selected model in authorized account |
+| S11 | EXTERNAL_PENDING | Stable provider subject uniqueness, issuer/audience/email validation, browser-bound single-use state/handoff, PKCE/nonce where supported, explicit collision behavior | `test_oauth_popup.py` | Provider console redirect/origin and sandbox linking smoke tests |
+| S12 | FIXED_VERIFIED | Server logout, cookie attributes, CSRF on cookie mutations, auth-version invalidation after password/recovery/deactivation, trusted-device revocation | password, recovery, token, OAuth tests | None |
+| S13 | FIXED_VERIFIED | Streaming upload caps, signatures, ZIP/page/pixel/text/time bounds, off-event-loop storage/parser/email operations | upload/parser/logo/CV suites | Process-level parser sandbox is optional defense in depth |
+| S14 | FIXED_VERIFIED | Route-template metrics and bounded unmatched label; request failures recorded | `test_observability.py` | None |
+| S15 | EXTERNAL_PENDING | Recursive structured redaction; no JWT/token/OTP/password/email/CV/exception text; safe correlation IDs; raw access logs disabled | observability and production-boundary tests | Verify production sink retention, access, and deletion controls |
+| S16 | EXTERNAL_PENDING | One 12–128/lower/upper/number/symbol policy across registration/invites/change/recovery; live UI indicators; Argon2id plus safe bcrypt migration; encrypted TOTP; replay-safe challenges/codes | `test_passwords.py`, `test_two_factor.py`, invitation/recovery tests | Provision and rotate protected TOTP/outbox keys |
+| S17 | EXTERNAL_PENDING | Patched supported Next/React, hashed Python locks, Google Gen AI SDK, configurable model; advisory checks in CI | web lint/type/build/audit; backend imports/tests | Re-run official advisory/provider smoke checks at release time |
+| S18 | EXTERNAL_PENDING | Pinned tested commit deploy, strict known-host verification, non-root/cap-drop images, declared Ansible collections | deployment/non-root/Ansible tests | Authorized production DB role/RLS/Storage verification and deployed digest check |
 
 ## Functional findings
 
-| ID | Status | Affected files | Fix/evidence | Regression test | External dependency |
-|---|---|---|---|---|---|
-| B01 | FIXED_VERIFIED | `apps/api/app/services/match_scoring.py`, `apps/api/app/services/recommendation_jobs.py`, `apps/api/app/routers/recommendations.py`, schemas/models, `apps/web/src/lib/api.ts` | GET is now read-only and returns stable pagination metadata. Explicit POST initialization inserts all active offers with `ON CONFLICT DO NOTHING`; single-offer creation and scored-result writes are also conflict-safe. Frontend initializes explicitly and follows every 50-row page, so matches beyond 20 and newly published offers remain discoverable. Only real candidate accounts can access the flow. | `test_initialization_and_all_offsets_cover_more_than_twenty_matches`; `test_concurrent_initializers_are_conflict_safe`; full offline match suite — 15 passed; frontend typecheck and OpenAPI contract passed | None |
-| B02 | AUDITING | TBD | `CompanyOut` serialization and owner assignment | TBD | Ambiguous legacy owner rows require operator review |
-| B03 | AUDITING | TBD | Current company membership/legacy request flow | TBD | Product decision if legacy flow is retired |
-| B04 | AUDITING | TBD | Offer close/delete retention and application conflicts | TBD | Retention-policy approval |
-| B05 | AUDITING | TBD | Authorized stage transitions/evidence/concurrency | TBD | Workflow-policy approval |
-| B06 | AUDITING | TBD | Email MIME/compression and reliable delivery state | TBD | Provider delivery smoke tests |
-| B07 | AUDITING | TBD | Failure-safe CV/logo replacement and snapshots | TBD | Authorized Storage tests |
-| B08 | AUDITING | TBD | Durable background jobs/stale-result rejection | TBD | Worker crash integration environment |
-| B09 | AUDITING | TBD | Cursor chat history and multi-process routing | TBD | Redis multi-instance integration environment |
-| B10 | AUDITING | TBD | Typed bounded schemas and offer fields/contracts | TBD | OpenAPI client generation decision |
-| B11 | AUDITING | TBD | Liveness/readiness/deploy verification | TBD | Production smoke verification |
-| B12 | AUDITING | TBD | Ansible dependencies/backup/restore/rollback | TBD | Authorized restore target |
-| B13 | AUDITING | TBD | Admin data queries, Redis invalidation, repo/test hygiene | TBD | None expected |
-| B14 | FIXED_VERIFIED | `apps/api/app/routers/candidates.py`, `apps/api/tests/test_upload_routes.py` | `NoExtractableTextError` is caught before its `ValueError` base class and returns the documented `422` / `CV_NO_TEXT` response. | `test_no_text_cv_route_returns_documented_422` | None |
+| ID | Status | Implementation evidence | Regression evidence | External action |
+|---|---|---|---|---|
+| B01 | FIXED_VERIFIED | Read-only pagination; explicit idempotent initialization; conflict-safe all-offer/new-offer scoring | `test_match_scoring.py` (>20, offsets, concurrency) | None |
+| B02 | FIXED_VERIFIED | Typed `CompanyOut`; owner assigned only after user flush; repair logic avoids ambiguous ownership | company invitation/admin tests | Review any ambiguous legacy owner rows manually |
+| B03 | FIXED_VERIFIED | Current `COMPANY_USER` membership/roles used consistently; legacy recruiter role read-only compatibility | RBAC/request/company tests | None |
+| B04 | FIXED_VERIFIED | Offers close instead of erasing recruitment history; inactive/expired rejection; unique concurrent application handling | offer/application lifecycle tests | Retention policy approval for production timelines |
+| B05 | FIXED_VERIFIED | Transition graph, required assessment/interview evidence, row lock/version conflicts, terminal states, structured interview feedback | assessment/interview/application tests | None |
+| B06 | EXTERNAL_PENDING | Correct JPEG CID assets; encrypted durable invitation/recovery/registration/email-change outbox with atomic domain intent, code expiry, supersession, leases, retries, idempotency, and visible state | `test_email_outbox.py`, `test_async_email_routes.py`, invitation/recovery/OTP tests | Configure and smoke-test outbox key/Resend in the deployment secret manager |
+| B07 | EXTERNAL_PENDING | Upload-first/commit-reference/cleanup-old ordering for CV/logo/avatar; immutable application CV snapshots | asset lifecycle/logo/avatar tests | Authorized Storage failure smoke test |
+| B08 | FIXED_VERIFIED | Transactional AI outbox, atomic claims, leases, bounded retry, crash recovery, fingerprints/stale rejection, shared validated contracts | `test_ai_jobs.py`, assessment/match suites | None |
+| B09 | FIXED_VERIFIED | Stable cursor pagination beyond 100, Redis cross-process fan-out/read receipts, direct/recruitment separation and one application conversation | chat history/realtime/no-duplicate/read suites | None |
+| B10 | FIXED_VERIFIED | Bounded Pydantic create/patch schemas and explicit responses; full offer fields/lifecycle exposed; frontend types aligned | OpenAPI/typecheck and offer tests | Automated generated client remains optional |
+| B11 | FIXED_VERIFIED | Separate live/ready; DB/Redis/worker/dispatcher checks; helpers fail closed; CI starts disposable PostgreSQL/Redis and runs API files | health/deployment tests and workflow inspection | Public production readiness smoke at deploy |
+| B12 | EXTERNAL_PENDING | Declared Ansible collections; guarded checksum backup/restore scripts; migration-safe rollback runbook; CI round-trip drill | local PostgreSQL 18 drill: `Backup and restore drill passed`; shell syntax/Ansible CI | Run and record a restore drill in authorized production-like infrastructure and separately verify Storage recovery |
+| B13 | FIXED_VERIFIED | Current roles in stats, paginated/admin joins, scan-based Redis invalidation, consolidated locks/assets, real isolated fixtures, API CI | admin/deployment/test suites | None |
+| B14 | FIXED_VERIFIED | `NoExtractableTextError` precedes `ValueError`, returning `422 CV_NO_TEXT`; partial company patches preserved | `test_upload_routes.py`, company tests | None |
 
 ## Product and school workstreams
 
-| Workstream | Status | Evidence/tests | External dependency |
+| Workstream | Status | Evidence | External action |
 |---|---|---|---|
-| Practical assessments | AUDITING | Existing assessment surface is being inventoried | Isolated runner if submitted code is executed |
-| Practice missions and validated skills | AUDITING | TBD | Isolated runner if submitted code is executed |
-| Interview scheduling and feedback | AUDITING | TBD | Calendar integration only if later authorized/configured |
-| Notifications and preferences | AUDITING | TBD | Push/email provider production verification |
-| Account recovery | AUDITING | TBD | Email provider production verification |
-| Data export/deletion/retention | AUDITING | TBD | Final retention policy approval |
-| Subscription/entitlements | AUDITING | TBD | Payment/provider configuration; no fabricated payments |
-| Institution membership/licensing | AUDITING | TBD | Institution contract/configuration verification |
-| School module plan (minimum 14 points) | BLOCKED | Requires the missing school subject/program files for an authoritative selection | Attach `en.subject.md` and `CODITENT PROGRAM.md` |
+| Practical assessments | FIXED_VERIFIED | Assignment/rubric/submission/expiry/durable async grade/HR review+override/audit; `test_assessment_workflow.py` | Isolated runner required before accepting executable submissions; current flow never executes code |
+| Practice missions | FIXED_VERIFIED | Admin authoring/review UI and API, field/level attempts/progress, evidence-backed validated skills; `test_social_missions.py` | None |
+| Interview scheduling/feedback | FIXED_VERIFIED | Versioned scheduling plus per-interviewer structured private feedback UI/API; `test_interview_feedback.py` | Calendar integration only if later authorized |
+| Notifications/preferences | FIXED_VERIFIED | Durable owner-scoped notifications, unread/read-all/pagination, server-enforced preferences, candidate/company UI; `test_notifications.py` | Push/email notifications are not claimed |
+| Account recovery | EXTERNAL_PENDING | Enumeration-resistant single-use hashed reset token, central password rules, session invalidation, UI; `test_account_recovery.py` | Configure and smoke-test email provider/outbox key |
+| Data export/deletion/retention | EXTERNAL_PENDING | Reauthenticated JSON export; cancelable seven-day durable deletion; storage-first retry then anonymization; UI; `test_account_data_lifecycle.py` | Approve final legal retention periods and verify Storage deletion in authorized environment |
+| Subscription/entitlements | FIXED_VERIFIED | Server plan/status/expiry, locked offer/member limits, pending invites reserve seats, owner/admin UI; `test_entitlements.py` | No payment collection claimed |
+| Institution membership/licensing | FIXED_VERIFIED | Institution/admin/student/advisor memberships, locked seats, expiry/status/plan controls, admin UI; `test_institutions.py` | No contract or payment claimed |
+| Friends/presence/avatar | FIXED_VERIFIED | Symmetric add/remove/list, bounded presence, secure private avatar upload/progress; social/avatar tests | None |
+| Admin user/org lifecycle | FIXED_VERIFIED | Candidate-only creation, edit/deactivate, archive organization preserving history, session invalidation; admin tests | None |
+| School module plan (minimum 14 points) | BLOCKED | Product capabilities above are implemented, but an authoritative point selection cannot be calculated without the referenced subject/program files | Attach `en.subject.md` and `CODITENT PROGRAM.md` |
 
 ## Validation log
 
-Commands and results are appended here as fixes land. Passing tests with skips are recorded with
-their skip counts and are never treated as verification of the skipped behavior.
+- Registration race regressions: `2 passed`; password upgrade/change: `2 passed`.
+- Upload/parser/logo/CV suites: 36 + 16 + 5 + 2 focused cases passed; owner-bound CV broad set passed.
+- AI/CV/match focused broad run: `75 passed`; assessment/AI/CV/match run: `26 passed`.
+- Admin/MFA/invitation/avatar focused run: `18 passed`; durable email outbox set: `8 passed`.
+- Entitlement/recovery/email set: `5 passed`; notifications: `3 passed`; assessments: `3 passed`.
+- Recruitment access/message/read subset after Redis loop isolation fix: `4 passed`.
+- Interview feedback: `2 passed`; account privacy + interview: `5 passed`; institutions: `2 passed`.
+- Practice mission authoring/review: `3 passed`; durable expiring email delivery/route set: `6 passed`.
+- Frontend: repeated `npx tsc --noEmit` passed; ESLint reports `0 errors, 21 pre-existing warnings`.
+- Migrations applied through `y1a2b3c4d5e6 (head)` on the configured development database.
+- Disposable PostgreSQL 18 backup/restore drill: `Backup and restore drill passed` with checksum validation.
+- `python -m compileall` and `git diff --check` pass after each workstream.
 
-- 2026-10-01: `docker compose exec -T api python -m pytest tests/test_email_otp.py -q -k 'reregister_rotates or concurrent_registration_attempts'` -> `2 passed, 18 deselected`.
-- 2026-10-01: `apps/web/node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json` -> passed.
-- 2026-10-01: `docker compose exec -T api python -m pytest tests/test_observability.py tests/test_match_scoring.py -q` -> `16 passed` (65 deprecation warnings; zero skips). `aiosqlite` was installed ephemerally in the running test container because it was absent from the image.
-- 2026-10-01: `docker compose exec -T api python -m pytest tests/test_match_scoring.py -q` -> `15 passed` (126 deprecation warnings; zero skips), including 27-row pagination, a newly published offer, repeat initialization, and two concurrent initializers. Frontend `tsc --noEmit` and the live OpenAPI recommendation contract passed.
-- 2026-10-01: host isolated upload/parser suites -> CV `36 passed`, logo `16 passed`, route bounds `5 passed` (3 deprecation warnings), bounded reader `2 passed`; compileall and diff-check passed.
+## Required release configuration/actions
+
+Set only through the deployment secret manager, using generated values: `DATABASE_URL`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `EMAIL_OUTBOX_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, OAuth client secrets, Supabase URL/service key, Redis URL, and production HTTPS origins. Follow `docs/security/secret-rotation.md` and `docs/operations/backup-restore-rollback.md`. Do not reuse historical values or place them in tracked files.
