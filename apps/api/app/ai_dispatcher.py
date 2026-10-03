@@ -15,6 +15,7 @@ from app.health import DISPATCHER_HEARTBEAT_KEY
 from app.observability import get_logger
 from app.services.ai_jobs import run_dispatch_cycle
 from app.services.email_outbox import run_email_delivery_cycle
+from app.services.privacy import run_account_deletion_cycle
 
 
 logger = get_logger("ai")
@@ -62,6 +63,13 @@ async def run() -> None:
                 )
                 if email_deliveries:
                     logger.info("email_outbox_processed", count=email_deliveries)
+                async with AsyncSessionLocal() as privacy_db:
+                    deletions = await run_account_deletion_cycle(
+                        privacy_db,
+                        worker_id=f"privacy:{dispatcher_id}"[:100],
+                    )
+                if deletions:
+                    logger.info("account_deletions_processed", count=deletions)
             except Exception as exc:
                 logger.error(
                     "ai_outbox_dispatch_failed",

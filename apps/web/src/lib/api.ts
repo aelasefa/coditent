@@ -1051,3 +1051,28 @@ export async function updateInterviewFeedback(
   );
   return data;
 }
+
+export async function downloadAccountData(payload: { current_password: string; two_factor_code?: string }): Promise<Blob> {
+  const response = await api.post("/auth/account/data-export", payload, { responseType: "blob" });
+  return response.data as Blob;
+}
+
+export async function getAccountDeletion(): Promise<import("@/lib/types").AccountDeletionRequest | null> {
+  try {
+    const { data } = await api.get<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion");
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function scheduleAccountDeletion(payload: { current_password: string; two_factor_code?: string; confirmation: "DELETE" }): Promise<import("@/lib/types").AccountDeletionRequest> {
+  const { data } = await api.post<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion", payload);
+  return data;
+}
+
+export async function cancelAccountDeletion(payload: { current_password: string; two_factor_code?: string }): Promise<import("@/lib/types").AccountDeletionRequest> {
+  const { data } = await api.delete<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion", { data: payload });
+  return data;
+}

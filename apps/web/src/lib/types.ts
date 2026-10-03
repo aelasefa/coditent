@@ -486,3 +486,12 @@ export interface InterviewFeedback {
   created_at: string;
   updated_at: string;
 }
+
+export interface AccountDeletionRequest {
+  id: string;
+  status: "scheduled" | "processing" | "retry" | "completed" | "canceled";
+  execute_after: string;
+  requested_at: string;
+  canceled_at?: string | null;
+  completed_at?: string | null;
+}

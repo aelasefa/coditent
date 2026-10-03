@@ -172,6 +172,24 @@ class PasswordChangeRequest(SensitiveAccountRequest):
     new_password: NewPassword
 
 
+class AccountDataExportRequest(SensitiveAccountRequest):
+    model_config = ConfigDict(extra="forbid")
+
+
+class AccountDeletionCreate(SensitiveAccountRequest):
+    model_config = ConfigDict(extra="forbid")
+    confirmation: Literal["DELETE"]
+
+
+class AccountDeletionOut(APIModel):
+    id: uuid.UUID
+    status: Literal["scheduled", "processing", "retry", "completed", "canceled"]
+    execute_after: datetime
+    requested_at: datetime
+    canceled_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class InvitationAccountAcceptRequest(APIModel):
     token: str = Field(min_length=1, max_length=512)
     password: NewPassword

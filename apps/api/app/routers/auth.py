@@ -1,7 +1,8 @@
 import asyncio
 import io
 import secrets
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 from typing import Annotated
 from urllib.parse import urlencode
@@ -17,11 +18,14 @@ from app.config import settings
 from app.core.audit import log_audit
 from app.database import get_db
 from app.dependencies import get_current_access_payload, get_current_user
-from app.models import CandidateProfile, OAuthAccount, User, UserRole
+from app.models import AccountDeletionRequest, CandidateProfile, Company, OAuthAccount, User, UserRole
 from app.limiter import limiter
 from app.observability import get_logger
 from app.schemas import (
     AccountNameUpdate,
+    AccountDataExportRequest,
+    AccountDeletionCreate,
+    AccountDeletionOut,
     EmailChangeConfirm,
     EmailChangeRequest,
     LoginRequest,
@@ -98,6 +102,7 @@ from app.services.company_logo import (
     validate_logo_file,
 )
 from app.services.upload_limits import UploadTooLargeError, read_upload_limited
+from app.services.privacy import DELETION_GRACE_DAYS, build_account_export
 
 
 router = APIRouter()
@@ -1012,6 +1017,147 @@ async def update_account_name(
         select(User).options(joinedload(User.profile)).where(User.id == current_user.id)
     )
     return UserMeOut.model_validate(result.scalar_one())
+
+
+@router.post("/account/data-export")
+async def export_account_data(
+    data: AccountDataExportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    payload = await build_account_export(db, current_user)
+    await db.commit()
+    await log_audit(
+        db,
+        action="ACCOUNT_DATA_EXPORTED",
+        actor=current_user,
+        company_id=current_user.company_id,
+        resource_type="user",
+        resource_id=current_user.id,
+    )
+    filename = f"coditent-account-{current_user.id}.json"
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/account/deletion", response_model=AccountDeletionOut)
+async def get_account_deletion(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    deletion = (
+        await db.execute(
+            select(AccountDeletionRequest).where(
+                AccountDeletionRequest.user_id == current_user.id
+            )
+        )
+    ).scalar_one_or_none()
+    if deletion is None:
+        raise HTTPException(status_code=404, detail="No account deletion is scheduled")
+    return AccountDeletionOut.model_validate(deletion)
+
+
+@router.post("/account/deletion", response_model=AccountDeletionOut, status_code=202)
+async def schedule_account_deletion(
+    data: AccountDeletionCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    if current_user.company_id is not None:
+        owned_company = await db.scalar(
+            select(Company.id).where(Company.owner_id == current_user.id)
+        )
+        if owned_company is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Transfer or archive the company before deleting its owner account",
+            )
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    execute_after = now + timedelta(days=DELETION_GRACE_DAYS)
+    deletion = (
+        await db.execute(
+            select(AccountDeletionRequest)
+            .where(AccountDeletionRequest.user_id == current_user.id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if deletion is not None and deletion.status in {"scheduled", "processing", "retry"}:
+        return AccountDeletionOut.model_validate(deletion)
+    if deletion is None:
+        deletion = AccountDeletionRequest(
+            user_id=current_user.id,
+            status="scheduled",
+            execute_after=execute_after,
+            next_attempt_at=execute_after,
+        )
+        db.add(deletion)
+    else:
+        deletion.status = "scheduled"
+        deletion.execute_after = execute_after
+        deletion.next_attempt_at = execute_after
+        deletion.attempts = 0
+        deletion.lease_owner = None
+        deletion.lease_expires_at = None
+        deletion.last_error_type = None
+        deletion.requested_at = now
+        deletion.canceled_at = None
+        deletion.completed_at = None
+    await db.commit()
+    await db.refresh(deletion)
+    await log_audit(
+        db,
+        action="ACCOUNT_DELETION_SCHEDULED",
+        actor=current_user,
+        company_id=current_user.company_id,
+        resource_type="account_deletion",
+        resource_id=deletion.id,
+        details=f"grace_days={DELETION_GRACE_DAYS}",
+    )
+    return AccountDeletionOut.model_validate(deletion)
+
+
+@router.delete("/account/deletion", response_model=AccountDeletionOut)
+async def cancel_account_deletion(
+    data: AccountDataExportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    deletion = (
+        await db.execute(
+            select(AccountDeletionRequest)
+            .where(AccountDeletionRequest.user_id == current_user.id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if deletion is None or deletion.status not in {"scheduled", "retry"}:
+        raise HTTPException(status_code=409, detail="Account deletion cannot be canceled")
+    deletion.status = "canceled"
+    deletion.canceled_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    deletion.lease_owner = None
+    deletion.lease_expires_at = None
+    await db.commit()
+    await db.refresh(deletion)
+    await log_audit(
+        db,
+        action="ACCOUNT_DELETION_CANCELED",
+        actor=current_user,
+        company_id=current_user.company_id,
+        resource_type="account_deletion",
+        resource_id=deletion.id,
+    )
+    return AccountDeletionOut.model_validate(deletion)
 
 
 @router.post("/account/email/request", status_code=status.HTTP_202_ACCEPTED)

@@ -174,6 +174,35 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class AccountDeletionRequest(Base):
+    """Durable, cancelable account-erasure workflow with worker recovery."""
+
+    __tablename__ = "account_deletion_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('scheduled', 'processing', 'retry', 'completed', 'canceled')",
+            name="ck_account_deletion_status",
+        ),
+        UniqueConstraint("user_id", name="uq_account_deletion_user"),
+        Index("ix_account_deletion_due", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(30), default="scheduled", nullable=False)
+    execute_after: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class OAuthAccount(Base):
     """A stable external identity explicitly linked to one local account."""
 
