@@ -16,7 +16,7 @@ import { getApplications, getMe, updateApplicationStatus, getAssessments, getApi
 import { can } from "@/lib/permissions";
 import type { ApplicationItem, AssessmentItem, Offer } from "@/lib/types";
 import { HIRING_STAGES, candidateName, hiringStage, jobTitleFor } from "@/components/company/hiring";
-import { CandidateCard } from "@/components/company/CandidateCard";
+import { AiScore, CandidateCard } from "@/components/company/CandidateCard";
 import { CandidateDetail } from "@/components/company/CandidateDetail";
 import { FiSearch, FiUsers } from "react-icons/fi";
 
@@ -241,7 +241,12 @@ function PipelineContent() {
           title={selected ? candidateName(selected) : "Candidate"}
           subtitle={selected ? jobTitleFor(selected, offersById) : undefined}
           headerLeading={selected ? <Avatar name={candidateName(selected)} size="lg" src={selected.candidate?.avatar_url} /> : undefined}
-          headerMeta={selected ? <StatusBadge status={selected.status} size="sm" /> : undefined}
+          headerMeta={selected ? (
+            <>
+              <StatusBadge status={selected.status} size="sm" />
+              <AiScore app={selected} />
+            </>
+          ) : undefined}
           width="lg"
         >
           {selected && (
@@ -269,4 +274,3 @@ export default function CompanyCandidatesPage() {
     </Suspense>
   );
 }
-

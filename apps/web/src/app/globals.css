@@ -1326,6 +1326,14 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   padding-inline: 0.7rem;
 }
 
+.company-candidate-panel .sheet-header-meta > span:nth-child(2) {
+  border-color: #d6e3cf;
+  background: #fffefa;
+  color: #194d38;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
 .company-candidate-panel > .flex-1 {
   min-height: 0;
   flex: 0 1 auto;
