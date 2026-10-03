@@ -1600,6 +1600,10 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   list-style: none;
 }
 
+.candidate-profile-skills-list-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .candidate-profile-skills-list li {
   display: flex;
   min-width: 0;
@@ -1767,6 +1771,19 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 @media (max-width: 520px) {
   .candidate-profile-skills-list { grid-template-columns: 1fr; }
+  .candidate-profile-skills-list-three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.375rem;
+    padding: 0.5rem;
+  }
+  .candidate-profile-skills-list-three li {
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0.25rem;
+    font-size: 0.8125rem;
+    text-align: center;
+  }
+  .candidate-profile-skills-list-three li::before { display: none; }
 }
 
 @media (max-width: 359px) {

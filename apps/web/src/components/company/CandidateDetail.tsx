@@ -218,7 +218,7 @@ export function CandidateDetail({
                     ) : null}
                   </div>
                   {skills.length ? (
-                    <ul className="candidate-profile-skills-list">
+                    <ul className={`candidate-profile-skills-list${skills.length >= 3 ? " candidate-profile-skills-list-three" : ""}`}>
                       {skills.map((skill, index) => (
                         <li key={`${skill}-${index}`}>
                           {skill}
