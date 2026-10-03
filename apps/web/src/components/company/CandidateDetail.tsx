@@ -36,7 +36,7 @@ function parseScreeningReport(report?: string | null): { summary: string; streng
   if (!report) return null;
   try {
     const parsed = JSON.parse(report) as { summary?: unknown; strengths?: unknown; gaps?: unknown };
-    if (typeof parsed.summary !== "string") return null;
+    if (typeof parsed.summary !== "string") return { summary: report, strengths: [], gaps: [] };
     return {
       summary: parsed.summary,
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
@@ -118,9 +118,7 @@ export function CandidateDetail({
               <FiGitBranch />
             </span>
             <div className="company-candidate-stage-actions-copy">
-              <p className="company-detail-label">Application workflow</p>
-              <h3 id="candidate-stage-actions-title">Choose the next stage</h3>
-              <p>Move the candidate forward when your team is ready.</p>
+              <h3 id="candidate-stage-actions-title">Application workflow</h3>
             </div>
             <div className="company-candidate-stage-current">
               <span>Current stage</span>
@@ -137,6 +135,8 @@ export function CandidateDetail({
                   className={`company-candidate-stage-option${active ? " company-candidate-stage-option-active" : ""}`}
                   disabled={stagePending || active}
                   aria-current={active ? "step" : undefined}
+                  aria-label={active ? `${stage.label}: current stage` : `Move application to ${stage.label.toLowerCase()}`}
+                  title={stage.description}
                   onClick={() => onStage(stage.status)}
                 >
                   <span className="company-candidate-stage-option-marker" aria-hidden="true">
@@ -144,7 +144,6 @@ export function CandidateDetail({
                   </span>
                   <span className="company-candidate-stage-option-copy">
                     <strong>{stage.label}</strong>
-                    <small>{active ? "Candidate is here now" : stage.description}</small>
                   </span>
                   <FiArrowRight className="company-candidate-stage-option-arrow" aria-hidden="true" />
                 </button>
@@ -153,8 +152,7 @@ export function CandidateDetail({
           </div>
           <div className="company-candidate-stage-actions-footer">
             <div>
-              <p>{stagePending ? "Updating pipeline…" : "Not moving forward?"}</p>
-              <span>Rejecting keeps the application in the record.</span>
+              <p role="status">{stagePending ? "Updating pipeline…" : "Saved automatically"}</p>
             </div>
             {rejectConfirm ? (
               <span className="company-candidate-reject-confirm">
@@ -185,14 +183,6 @@ export function CandidateDetail({
               label: "Overview",
               content: (
                 <div className="company-candidate-overview company-candidate-overview-panel">
-                  <section className="company-candidate-stage-card" aria-label="Hiring stage">
-                    <div>
-                      <p className="company-detail-label">Hiring stage</p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">Current application status</p>
-                    </div>
-                    <StatusBadge status={app.status} size="md" />
-                  </section>
-
                   <dl className="company-candidate-detail-grid">
                     <div>
                       <dt className="company-detail-label">Applied</dt>
@@ -202,11 +192,11 @@ export function CandidateDetail({
                       <dt className="company-detail-label">Last update</dt>
                       <dd>{dateTime(app.updated_at)}</dd>
                     </div>
-                    <div className="sm:col-span-2">
+                    <div>
                       <dt className="company-detail-label">Email</dt>
                       <dd>{c?.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : "Not shared"}</dd>
                     </div>
-                    <div className="sm:col-span-2">
+                    <div>
                       <dt className="company-detail-label">Job</dt>
                       <dd>{jobTitle}</dd>
                     </div>
@@ -230,9 +220,7 @@ export function CandidateDetail({
                   <div className="candidate-profile-skills-heading">
                     <span className="candidate-section-icon" aria-hidden="true"><FiAward /></span>
                     <div className="candidate-section-heading-copy">
-                      <p className="company-detail-label">Candidate profile</p>
                       <h3>Skills & expertise</h3>
-                      <p>Capabilities shared by the candidate.</p>
                     </div>
                     {skills.length ? <span className="candidate-section-count">{skills.length} skills</span> : null}
                   </div>
@@ -240,8 +228,7 @@ export function CandidateDetail({
                     <ul className="candidate-profile-skills-list">
                       {skills.map((skill, index) => (
                         <li key={`${skill}-${index}`}>
-                          <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                          <span>{skill}</span>
+                          {skill}
                         </li>
                       ))}
                     </ul>
@@ -264,13 +251,11 @@ export function CandidateDetail({
                       <div className="candidate-screening-heading-main">
                         <span className="candidate-section-icon" aria-hidden="true"><FiActivity /></span>
                         <div className="candidate-section-heading-copy">
-                          <p className="company-detail-label">Application intelligence</p>
                           <h3 id="candidate-screening-title">AI screening</h3>
                           <p>AI-generated application review</p>
                         </div>
                       </div>
                       <div className="candidate-screening-score">
-                        <span>Match signal</span>
                         <AiScore app={app} />
                       </div>
                     </div>
@@ -283,10 +268,10 @@ export function CandidateDetail({
                           </Button>
                         ) : null}
                       </div>
-                    ) : screening ? (
+                    ) : null}
+                    {screening ? (
                       <div className="candidate-screening-report">
                         <div className="candidate-screening-summary">
-                          <span className="candidate-screening-summary-icon" aria-hidden="true"><FiActivity /></span>
                           <div>
                             <span>Screening summary</span>
                             <p>{screening.summary}</p>
@@ -305,11 +290,11 @@ export function CandidateDetail({
                           </section>
                         ) : null}
                       </div>
-                    ) : (
+                    ) : app.ai_status !== "failed" ? (
                       <div className="candidate-screening-state">
                         <p>{app.ai_status === "processing" ? "Screening is running." : "Screening has not run yet."}</p>
                       </div>
-                    )}
+                    ) : null}
                   </section>
                   {assessment ? (
                     <section className="candidate-assessment-detail" aria-label="Practical assessment result">
@@ -330,7 +315,7 @@ export function CandidateDetail({
                             </p>
                           </div>
                           <div className="candidate-assessment-status">
-                            <span>Status</span>
+                            <span className="sr-only">Status</span>
                             <StatusBadge status={assessment.status} size="sm" />
                           </div>
                         </div>
@@ -345,17 +330,8 @@ export function CandidateDetail({
                             </div>
                           </section>
                         ) : null}
-                        {app.ai_report ? (
-                          <section className="candidate-assessment-report candidate-assessment-report-note" aria-label="Application AI note">
-                            <span className="candidate-assessment-report-icon" aria-hidden="true"><FiMessageSquare /></span>
-                            <div>
-                              <h4>Application AI note</h4>
-                              <p>{app.ai_report}</p>
-                            </div>
-                          </section>
-                        ) : null}
-                        {!assessment.report && !app.ai_report ? (
-                          <p className="candidate-assessment-empty">No AI notes recorded for this assessment.</p>
+                        {!assessment.report ? (
+                          <p className="candidate-assessment-empty">No AI analysis recorded for this assessment.</p>
                         ) : null}
                       </div>
                     </section>
@@ -376,9 +352,7 @@ export function CandidateDetail({
                   <div className="candidate-resume-heading">
                     <span className="candidate-section-icon" aria-hidden="true"><FiFileText /></span>
                     <div className="candidate-section-heading-copy">
-                      <p className="company-detail-label">Application document</p>
                       <h3>Resume</h3>
-                      <p>The CV attached to this application.</p>
                     </div>
                     <span className="candidate-section-count">{cvHref ? "Attached" : "Missing"}</span>
                   </div>
@@ -420,9 +394,7 @@ export function CandidateDetail({
                   <div className="candidate-messages-heading">
                     <span className="candidate-section-icon" aria-hidden="true"><FiMessageSquare /></span>
                     <div className="candidate-section-heading-copy">
-                      <p className="company-detail-label">Candidate conversation</p>
                       <h3>Messages</h3>
-                      <p>Recruitment conversation for this application.</p>
                     </div>
                     <span className={chatUnlocked ? "candidate-messages-status candidate-messages-available" : "candidate-messages-status"}>
                       {chatUnlocked ? "Available" : "Locked"}
