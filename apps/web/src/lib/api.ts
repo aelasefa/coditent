@@ -1076,3 +1076,33 @@ export async function cancelAccountDeletion(payload: { current_password: string;
   const { data } = await api.delete<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion", { data: payload });
   return data;
 }
+
+export async function listInstitutions(): Promise<import("@/lib/types").Institution[]> {
+  const { data } = await api.get<{ institutions: import("@/lib/types").Institution[] }>("/institutions");
+  return data.institutions;
+}
+
+export async function createInstitution(payload: { name: string; domain?: string | null; license_plan: string; seat_limit: number }): Promise<import("@/lib/types").Institution> {
+  const { data } = await api.post<import("@/lib/types").Institution>("/institutions", payload);
+  return data;
+}
+
+export async function updateInstitutionLicense(id: string, payload: { status: string; license_plan: string; seat_limit: number; license_expires_at?: string | null }): Promise<import("@/lib/types").Institution> {
+  const { data } = await api.patch<import("@/lib/types").Institution>(`/institutions/${id}/license`, payload);
+  return data;
+}
+
+export async function listInstitutionMembers(id: string): Promise<{ institution: import("@/lib/types").Institution; members: import("@/lib/types").InstitutionMember[] }> {
+  const { data } = await api.get(`/institutions/${id}/members`);
+  return data;
+}
+
+export async function addInstitutionMember(id: string, payload: { email: string; role: string }): Promise<import("@/lib/types").InstitutionMember> {
+  const { data } = await api.post<import("@/lib/types").InstitutionMember>(`/institutions/${id}/members`, payload);
+  return data;
+}
+
+export async function removeInstitutionMember(institutionId: string, membershipId: string): Promise<import("@/lib/types").InstitutionMember> {
+  const { data } = await api.delete<import("@/lib/types").InstitutionMember>(`/institutions/${institutionId}/members/${membershipId}`);
+  return data;
+}

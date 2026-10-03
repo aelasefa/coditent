@@ -17,6 +17,7 @@ import {
   FiSettings,
   FiShield,
   FiUsers,
+  FiBookOpen,
 } from "react-icons/fi";
 
 const NAV = [
@@ -24,6 +25,7 @@ const NAV = [
   { label: "Companies", href: "/admin/companies", icon: FiShield },
   { label: "Company Invitations", href: "/admin/company-invitations", icon: FiMail },
   { label: "Users", href: "/admin/users", icon: FiUsers },
+  { label: "Institutions", href: "/admin/institutions", icon: FiBookOpen },
   { label: "Platform Activity", href: "/admin/activity", icon: FiActivity },
   { label: "Settings", href: "/admin/settings", icon: FiSettings },
 ];

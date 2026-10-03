@@ -203,6 +203,65 @@ class AccountDeletionRequest(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class Institution(Base):
+    __tablename__ = "institutions"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_institutions_status"),
+        CheckConstraint(
+            "license_plan IN ('community', 'standard', 'enterprise')",
+            name="ck_institutions_license_plan",
+        ),
+        CheckConstraint("seat_limit BETWEEN 1 AND 100000", name="ck_institutions_seat_limit"),
+        Index("ix_institutions_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(180), unique=True, nullable=False)
+    domain: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
+    license_plan: Mapped[str] = mapped_column(String(30), default="community", nullable=False)
+    seat_limit: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    license_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class InstitutionMembership(Base):
+    __tablename__ = "institution_memberships"
+    __table_args__ = (
+        UniqueConstraint("institution_id", "user_id", name="uq_institution_membership"),
+        CheckConstraint(
+            "role IN ('ADMIN', 'ADVISOR', 'STUDENT')",
+            name="ck_institution_membership_role",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'inactive')",
+            name="ck_institution_membership_status",
+        ),
+        Index("ix_institution_memberships_user", "user_id", "status"),
+        Index("ix_institution_memberships_institution", "institution_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    institution_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    institution: Mapped[Institution] = relationship("Institution")
+    user: Mapped[User] = relationship("User")
+
+
 class OAuthAccount(Base):
     """A stable external identity explicitly linked to one local account."""
 

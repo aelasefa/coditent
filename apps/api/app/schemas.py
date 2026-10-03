@@ -1029,6 +1029,79 @@ class NotificationPreferenceOut(NotificationPreferenceUpdate):
     updated_at: datetime | None = None
 
 
+class InstitutionCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=180)
+    domain: str | None = Field(default=None, max_length=255, pattern=r"^[A-Za-z0-9.-]+$")
+    license_plan: Literal["community", "standard", "enterprise"] = "community"
+    seat_limit: int = Field(default=100, ge=1, le=100_000)
+    license_expires_at: datetime | None = None
+
+    @field_validator("name", "domain", mode="before")
+    @classmethod
+    def normalize_institution_text(cls, value: str | None) -> str | None:
+        cleaned = sanitize_input_text(value)
+        return cleaned.lower() if cleaned and "." in cleaned else cleaned
+
+    @field_validator("license_expires_at")
+    @classmethod
+    def normalize_license_expiry(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+
+class InstitutionLicenseUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["active", "inactive"]
+    license_plan: Literal["community", "standard", "enterprise"]
+    seat_limit: int = Field(ge=1, le=100_000)
+    license_expires_at: datetime | None = None
+
+    @field_validator("license_expires_at")
+    @classmethod
+    def normalize_license_expiry(cls, value: datetime | None) -> datetime | None:
+        return _naive_utc(value)
+
+
+class InstitutionMembershipCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    role: Literal["ADMIN", "ADVISOR", "STUDENT"]
+
+
+class InstitutionMemberOut(APIModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    email: str
+    full_name: str
+    role: Literal["ADMIN", "ADVISOR", "STUDENT"]
+    status: Literal["active", "inactive"]
+    created_at: datetime
+
+
+class InstitutionOut(APIModel):
+    id: uuid.UUID
+    name: str
+    domain: str | None = None
+    status: Literal["active", "inactive"]
+    license_plan: Literal["community", "standard", "enterprise"]
+    seat_limit: int
+    seats_used: int = 0
+    license_expires_at: datetime | None = None
+    created_at: datetime
+
+
+class InstitutionListOut(APIModel):
+    institutions: list[InstitutionOut]
+
+
+class InstitutionMembershipListOut(APIModel):
+    institution: InstitutionOut
+    members: list[InstitutionMemberOut]
+
+
 class CandidateRequestCreate(APIModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -495,3 +495,25 @@ export interface AccountDeletionRequest {
   canceled_at?: string | null;
   completed_at?: string | null;
 }
+
+export interface Institution {
+  id: string;
+  name: string;
+  domain?: string | null;
+  status: "active" | "inactive";
+  license_plan: "community" | "standard" | "enterprise";
+  seat_limit: number;
+  seats_used: number;
+  license_expires_at?: string | null;
+  created_at: string;
+}
+
+export interface InstitutionMember {
+  id: string;
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: "ADMIN" | "ADVISOR" | "STUDENT";
+  status: "active" | "inactive";
+  created_at: string;
+}
