@@ -13,10 +13,8 @@ import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
 import {
   FiActivity,
-  FiArrowRight,
   FiAward,
   FiBarChart2,
-  FiCheck,
   FiDownload,
   FiExternalLink,
   FiFileText,
@@ -106,55 +104,44 @@ export function CandidateDetail({
   const cvFilename = app.cv?.filename ?? null;
 
   return (
-    <div className="company-candidate-detail">
+    <div className={`company-candidate-detail${canMoveStage ? " company-candidate-detail-manageable" : ""}`}>
       {canMoveStage && (
         <section
           className="company-candidate-stage-actions"
           aria-labelledby="candidate-stage-actions-title"
           aria-busy={stagePending}
         >
-          <div className="company-candidate-stage-actions-heading">
-            <span className="company-candidate-stage-actions-icon" aria-hidden="true">
-              <FiGitBranch />
-            </span>
-            <div className="company-candidate-stage-actions-copy">
-              <h3 id="candidate-stage-actions-title">Application workflow</h3>
-            </div>
-            <div className="company-candidate-stage-current">
-              <span>Current stage</span>
-              <StatusBadge status={app.status} size="sm" />
-            </div>
+          <div className="company-candidate-stage-field">
+            <label id="candidate-stage-actions-title" htmlFor="candidate-stage-select">
+              <FiGitBranch aria-hidden="true" /> Stage
+            </label>
+            <select
+              id="candidate-stage-select"
+              value={app.status}
+              disabled={stagePending}
+              aria-describedby="candidate-stage-save-status"
+              onChange={(event) => {
+                const status = event.target.value;
+                if (status === app.status || stagePending) return;
+                setRejectConfirm(false);
+                onStage(status);
+              }}
+            >
+              {!PIPELINE_STAGES.some((stage) => stage.status === app.status) && (
+                <option value={app.status} disabled>
+                  {app.status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                </option>
+              )}
+              {PIPELINE_STAGES.map((stage) => (
+                <option key={stage.status} value={stage.status} title={stage.description}>{stage.label}</option>
+              ))}
+            </select>
+            <p id="candidate-stage-save-status" role="status" className="sr-only">
+              {stagePending ? "Updating pipeline…" : "Stage changes save automatically."}
+            </p>
           </div>
-          <div className="company-candidate-stage-actions-controls">
-            {PIPELINE_STAGES.map((stage, index) => {
-              const active = app.status === stage.status;
-              return (
-                <button
-                  key={stage.status}
-                  type="button"
-                  className={`company-candidate-stage-option${active ? " company-candidate-stage-option-active" : ""}`}
-                  disabled={stagePending || active}
-                  aria-current={active ? "step" : undefined}
-                  aria-label={active ? `${stage.label}: current stage` : `Move application to ${stage.label.toLowerCase()}`}
-                  title={stage.description}
-                  onClick={() => onStage(stage.status)}
-                >
-                  <span className="company-candidate-stage-option-marker" aria-hidden="true">
-                    {active ? <FiCheck /> : index + 1}
-                  </span>
-                  <span className="company-candidate-stage-option-copy">
-                    <strong>{stage.label}</strong>
-                  </span>
-                  <FiArrowRight className="company-candidate-stage-option-arrow" aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
-          <div className="company-candidate-stage-actions-footer">
-            <div>
-              <p role="status">{stagePending ? "Updating pipeline…" : "Saved automatically"}</p>
-            </div>
-            {rejectConfirm ? (
+          <div className="company-candidate-stage-secondary">
+            {rejectConfirm && app.status !== "rejected" ? (
               <span className="company-candidate-reject-confirm">
                 <span>Reject candidate?</span>
                 <Button size="sm" variant="danger" disabled={stagePending} onClick={onReject}>
@@ -166,8 +153,8 @@ export function CandidateDetail({
               </span>
             ) : (
               app.status !== "rejected" && (
-                <Button size="sm" variant="ghost" className="company-candidate-reject-trigger" onClick={() => setRejectConfirm(true)}>
-                  <FiX aria-hidden="true" /> Reject application
+                <Button size="sm" variant="ghost" className="company-candidate-reject-trigger" aria-label="Reject application" disabled={stagePending} onClick={() => setRejectConfirm(true)}>
+                  <FiX aria-hidden="true" /> Reject
                 </Button>
               )
             )}
