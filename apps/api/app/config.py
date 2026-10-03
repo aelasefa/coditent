@@ -109,13 +109,16 @@ class Settings(BaseSettings):
                 Fernet(self.email_outbox_encryption_key.encode("ascii"))
             except (ValueError, UnicodeEncodeError) as exc:
                 raise ValueError("EMAIL_OUTBOX_ENCRYPTION_KEY must be a valid Fernet key") from exc
-        # Enforce Supabase-only DB: reject local DATABASE_URL early with clear error
-        local_markers = ["@db:", "@localhost", "@127.0.0.1", "coditent:coditent@db"]
-        for marker in local_markers:
-            if marker in self.database_url:
-                raise ValueError(
-                    f"DATABASE_URL contains local marker '{marker}'. Local DB removed — use Supabase."
-                )
+        # Runtime persistence is Supabase-only. Disposable local PostgreSQL is
+        # allowed explicitly in APP_ENV=test so CI can verify migrations,
+        # backup/restore, and PostgreSQL-specific concurrency semantics.
+        if self.app_env != "test":
+            local_markers = ["@db:", "@localhost", "@127.0.0.1", "coditent:coditent@db"]
+            for marker in local_markers:
+                if marker in self.database_url:
+                    raise ValueError(
+                        f"DATABASE_URL contains local marker '{marker}'. Local DB removed — use Supabase."
+                    )
         if self.app_env == "production":
             if not self.totp_encryption_key:
                 raise ValueError("TOTP_ENCRYPTION_KEY must be configured in production")

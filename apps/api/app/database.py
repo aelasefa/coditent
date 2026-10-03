@@ -17,15 +17,16 @@ def _normalize_database_url(url: str) -> str:
     if not url:
         raise ValueError("DATABASE_URL is not set")
     # Enforce Supabase-only: reject local fallbacks
-    local_markers = ["@db:", "@localhost", "@127.0.0.1", "coditent:coditent@db"]
-    for marker in local_markers:
-        if marker in url:
-            raise ValueError(
-                f"Local DATABASE_URL detected ({marker}). "
-                "Local PostgreSQL has been removed. Use Supabase PostgreSQL: "
-                "postgresql+asyncpg://postgres.<project_ref>:<password>@<host>:5432/postgres "
-                "or pooler: postgresql+asyncpg://postgres.<project_ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres"
-            )
+    if settings.app_env != "test":
+        local_markers = ["@db:", "@localhost", "@127.0.0.1", "coditent:coditent@db"]
+        for marker in local_markers:
+            if marker in url:
+                raise ValueError(
+                    f"Local DATABASE_URL detected ({marker}). "
+                    "Local PostgreSQL has been removed. Use Supabase PostgreSQL: "
+                    "postgresql+asyncpg://postgres.<project_ref>:<password>@<host>:5432/postgres "
+                    "or pooler: postgresql+asyncpg://postgres.<project_ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres"
+                )
     # Auto-upgrade to asyncpg driver if user supplied plain postgresql:// (common from Supabase dashboard)
     if url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
