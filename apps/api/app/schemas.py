@@ -516,6 +516,47 @@ class ApplicationStatusOut(APIModel):
     status_changed_at: datetime | None = None
 
 
+InterviewRecommendation = Literal["strong_no", "no", "neutral", "yes", "strong_yes"]
+
+
+class InterviewFeedbackCreate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rating: int = Field(ge=1, le=5)
+    recommendation: InterviewRecommendation
+    strengths: str = Field(min_length=2, max_length=5_000)
+    concerns: str | None = Field(default=None, max_length=5_000)
+    notes: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator("strengths", "concerns", "notes", mode="before")
+    @classmethod
+    def sanitize_feedback(cls, value: str | None) -> str | None:
+        return sanitize_input_text(value)
+
+
+class InterviewFeedbackUpdate(InterviewFeedbackCreate):
+    expected_version: int = Field(ge=1)
+
+
+class InterviewFeedbackOut(APIModel):
+    id: uuid.UUID
+    application_id: uuid.UUID
+    reviewer_id: uuid.UUID
+    reviewer_name: str
+    rating: int
+    recommendation: InterviewRecommendation
+    strengths: str
+    concerns: str | None = None
+    notes: str | None = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class InterviewFeedbackListOut(APIModel):
+    feedback: list[InterviewFeedbackOut]
+
+
 class ApplicationScreeningOut(APIModel):
     id: uuid.UUID
     ai_status: str

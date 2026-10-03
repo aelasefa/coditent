@@ -13,12 +13,16 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Assessment, Application, CVAsset, CandidateProfile, Company, Offer, User
+from app.models import Assessment, Application, CVAsset, CandidateProfile, Company, InterviewFeedback, Offer, User
 from app.schemas import (
     ApplicationCreate,
     ApplicationCreatedOut,
     ApplicationStatusOut,
     ApplicationStatusUpdate,
+    InterviewFeedbackCreate,
+    InterviewFeedbackListOut,
+    InterviewFeedbackOut,
+    InterviewFeedbackUpdate,
 )
 from app.services.cv_assets import (
     CVAssetOwnershipError,
@@ -612,3 +616,165 @@ async def update_application_status(
         stage_version=app.stage_version,
         chat_enabled=is_chat_enabled_for_status(app.status),
     )
+
+
+def _interview_feedback_out(feedback: InterviewFeedback, reviewer: User) -> InterviewFeedbackOut:
+    return InterviewFeedbackOut(
+        id=feedback.id,
+        application_id=feedback.application_id,
+        reviewer_id=feedback.reviewer_id,
+        reviewer_name=reviewer.full_name,
+        rating=feedback.rating,
+        recommendation=feedback.recommendation,
+        strengths=feedback.strengths,
+        concerns=feedback.concerns,
+        notes=feedback.notes,
+        version=feedback.version,
+        created_at=feedback.created_at,
+        updated_at=feedback.updated_at,
+    )
+
+
+async def _interview_application_for_company(
+    db: AsyncSession,
+    application_id: UUID,
+    current_user: User,
+    *,
+    lock: bool = False,
+) -> tuple[Application, Offer]:
+    query = (
+        select(Application, Offer)
+        .join(Offer, Application.opportunity_id == Offer.id)
+        .where(Application.id == application_id)
+    )
+    if lock:
+        query = query.with_for_update()
+    row = (await db.execute(query)).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    application, offer = row
+    if current_user.role.value == "COMPANY_USER":
+        if (
+            not can(current_user.company_role, "evaluate_candidates")
+            or offer.company_id != current_user.company_id
+        ):
+            raise HTTPException(status_code=404, detail="Application not found")
+    elif current_user.role.value != "PLATFORM_ADMIN":
+        raise HTTPException(status_code=404, detail="Application not found")
+    return application, offer
+
+
+@router.get("/{app_id}/interview-feedback", response_model=InterviewFeedbackListOut)
+async def list_interview_feedback(
+    app_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InterviewFeedbackListOut:
+    await _interview_application_for_company(db, app_id, current_user)
+    rows = list(
+        (
+            await db.execute(
+                select(InterviewFeedback, User)
+                .join(User, InterviewFeedback.reviewer_id == User.id)
+                .where(InterviewFeedback.application_id == app_id)
+                .order_by(InterviewFeedback.created_at.asc())
+            )
+        ).all()
+    )
+    return InterviewFeedbackListOut(
+        feedback=[_interview_feedback_out(feedback, reviewer) for feedback, reviewer in rows]
+    )
+
+
+@router.post(
+    "/{app_id}/interview-feedback",
+    response_model=InterviewFeedbackOut,
+    status_code=201,
+)
+async def create_interview_feedback(
+    app_id: UUID,
+    data: InterviewFeedbackCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InterviewFeedbackOut:
+    application, offer = await _interview_application_for_company(
+        db, app_id, current_user, lock=True
+    )
+    if current_user.role.value != "COMPANY_USER":
+        raise HTTPException(status_code=403, detail="Only company interviewers can submit feedback")
+    if application.status not in {"interview", "accepted", "rejected"} or application.interview_scheduled_at is None:
+        raise HTTPException(status_code=409, detail="A scheduled interview is required before feedback")
+    feedback = InterviewFeedback(
+        application_id=application.id,
+        reviewer_id=current_user.id,
+        rating=data.rating,
+        recommendation=data.recommendation,
+        strengths=data.strengths,
+        concerns=data.concerns,
+        notes=data.notes,
+    )
+    db.add(feedback)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="You already submitted interview feedback") from exc
+    await db.refresh(feedback)
+    await log_audit(
+        db,
+        action="INTERVIEW_FEEDBACK_CREATED",
+        actor=current_user,
+        company_id=offer.company_id,
+        resource_type="interview_feedback",
+        resource_id=feedback.id,
+        details=f"application_id={application.id}",
+    )
+    return _interview_feedback_out(feedback, current_user)
+
+
+@router.patch("/{app_id}/interview-feedback/{feedback_id}", response_model=InterviewFeedbackOut)
+async def update_interview_feedback(
+    app_id: UUID,
+    feedback_id: UUID,
+    data: InterviewFeedbackUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InterviewFeedbackOut:
+    _application, offer = await _interview_application_for_company(
+        db, app_id, current_user, lock=True
+    )
+    feedback = (
+        await db.execute(
+            select(InterviewFeedback)
+            .where(
+                InterviewFeedback.id == feedback_id,
+                InterviewFeedback.application_id == app_id,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if feedback is None or feedback.reviewer_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Interview feedback not found")
+    if feedback.version != data.expected_version:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "STALE_INTERVIEW_FEEDBACK", "current_version": feedback.version},
+        )
+    feedback.rating = data.rating
+    feedback.recommendation = data.recommendation
+    feedback.strengths = data.strengths
+    feedback.concerns = data.concerns
+    feedback.notes = data.notes
+    feedback.version += 1
+    await db.commit()
+    await db.refresh(feedback)
+    await log_audit(
+        db,
+        action="INTERVIEW_FEEDBACK_UPDATED",
+        actor=current_user,
+        company_id=offer.company_id,
+        resource_type="interview_feedback",
+        resource_id=feedback.id,
+        details=f"application_id={app_id};version={feedback.version}",
+    )
+    return _interview_feedback_out(feedback, current_user)

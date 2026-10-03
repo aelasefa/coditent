@@ -615,6 +615,41 @@ class Application(Base):
     company: Mapped[Company | None] = relationship("Company")
 
 
+class InterviewFeedback(Base):
+    __tablename__ = "interview_feedback"
+    __table_args__ = (
+        UniqueConstraint(
+            "application_id", "reviewer_id", name="uq_interview_feedback_reviewer"
+        ),
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_interview_feedback_rating"),
+        CheckConstraint(
+            "recommendation IN ('strong_no', 'no', 'neutral', 'yes', 'strong_yes')",
+            name="ck_interview_feedback_recommendation",
+        ),
+        Index("ix_interview_feedback_application", "application_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    application_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False
+    )
+    reviewer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    recommendation: Mapped[str] = mapped_column(String(30), nullable=False)
+    strengths: Mapped[str] = mapped_column(Text, nullable=False)
+    concerns: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    reviewer: Mapped[User] = relationship("User", foreign_keys=[reviewer_id])
+
+
 class Assessment(Base):
     __tablename__ = "assessments"
     __table_args__ = (

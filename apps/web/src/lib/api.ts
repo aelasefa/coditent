@@ -1008,3 +1008,46 @@ export async function updateNotificationPreferences(
   );
   return data;
 }
+
+export async function listInterviewFeedback(applicationId: string): Promise<import("@/lib/types").InterviewFeedback[]> {
+  const { data } = await api.get<{ feedback: import("@/lib/types").InterviewFeedback[] }>(
+    `/applications/${applicationId}/interview-feedback`,
+  );
+  return data.feedback;
+}
+
+export async function createInterviewFeedback(
+  applicationId: string,
+  payload: {
+    rating: number;
+    recommendation: import("@/lib/types").InterviewRecommendation;
+    strengths: string;
+    concerns?: string | null;
+    notes?: string | null;
+  },
+): Promise<import("@/lib/types").InterviewFeedback> {
+  const { data } = await api.post<import("@/lib/types").InterviewFeedback>(
+    `/applications/${applicationId}/interview-feedback`,
+    payload,
+  );
+  return data;
+}
+
+export async function updateInterviewFeedback(
+  applicationId: string,
+  feedbackId: string,
+  payload: {
+    expected_version: number;
+    rating: number;
+    recommendation: import("@/lib/types").InterviewRecommendation;
+    strengths: string;
+    concerns?: string | null;
+    notes?: string | null;
+  },
+): Promise<import("@/lib/types").InterviewFeedback> {
+  const { data } = await api.patch<import("@/lib/types").InterviewFeedback>(
+    `/applications/${applicationId}/interview-feedback/${feedbackId}`,
+    payload,
+  );
+  return data;
+}

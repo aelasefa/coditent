@@ -469,3 +469,20 @@ export interface NotificationPreferences {
   message_updates: boolean;
   updated_at?: string | null;
 }
+
+export type InterviewRecommendation = "strong_no" | "no" | "neutral" | "yes" | "strong_yes";
+
+export interface InterviewFeedback {
+  id: string;
+  application_id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  rating: number;
+  recommendation: InterviewRecommendation;
+  strengths: string;
+  concerns?: string | null;
+  notes?: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}

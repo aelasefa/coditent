@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { AiScore } from "./CandidateCard";
 import { candidateName, jobTitleFor } from "./hiring";
-import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
+import { createInterviewFeedback, getApiBaseUrl, getMe, listInterviewFeedback, retryApplicationScreening, updateInterviewFeedback } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import type { ApplicationItem, AssessmentItem } from "@/lib/types";
+import type { ApplicationItem, AssessmentItem, InterviewRecommendation } from "@/lib/types";
 
 const NEXT_STAGES: Record<string, string[]> = {
   applied: ["under_review", "rejected"],
@@ -70,9 +70,46 @@ export function CandidateDetail({
   const [rejectConfirm, setRejectConfirm] = useState(false);
   const [interviewAt, setInterviewAt] = useState("");
   const [interviewNotes, setInterviewNotes] = useState("");
+  const [feedbackForm, setFeedbackForm] = useState({
+    rating: 3,
+    recommendation: "neutral" as InterviewRecommendation,
+    strengths: "",
+    concerns: "",
+    notes: "",
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const screening = parseScreeningReport(app.ai_report);
+  const meQ = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
+  const feedbackQ = useQuery({
+    queryKey: ["interview-feedback", app.id],
+    queryFn: () => listInterviewFeedback(app.id),
+    enabled: Boolean(app.interview_scheduled_at),
+  });
+  const myFeedback = feedbackQ.data?.find((entry) => entry.reviewer_id === meQ.data?.id);
+  useEffect(() => {
+    if (!myFeedback) return;
+    setFeedbackForm({
+      rating: myFeedback.rating,
+      recommendation: myFeedback.recommendation,
+      strengths: myFeedback.strengths,
+      concerns: myFeedback.concerns ?? "",
+      notes: myFeedback.notes ?? "",
+    });
+  }, [myFeedback]);
+  const feedbackMut = useMutation({
+    mutationFn: () => myFeedback
+      ? updateInterviewFeedback(app.id, myFeedback.id, {
+          expected_version: myFeedback.version,
+          ...feedbackForm,
+        })
+      : createInterviewFeedback(app.id, feedbackForm),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["interview-feedback", app.id] });
+      toast(myFeedback ? "Interview feedback updated" : "Interview feedback saved", { variant: "success" });
+    },
+    onError: () => toast("Interview feedback could not be saved", { variant: "error" }),
+  });
   const screenMut = useMutation({
     mutationFn: () => retryApplicationScreening(app.id),
     onSuccess: () => {
@@ -220,6 +257,54 @@ export function CandidateDetail({
                   ))}
                 </dl>
               ),
+            },
+            {
+              id: "interview",
+              label: "Interview",
+              content: app.interview_scheduled_at ? (
+                <div className="space-y-5">
+                  <div className="rounded-lg bg-surface-secondary/50 p-3 text-sm">
+                    <p className="font-semibold text-foreground">Scheduled {dateTime(app.interview_scheduled_at)}</p>
+                    {app.interview_notes ? <p className="mt-1 text-muted-foreground">{app.interview_notes}</p> : null}
+                  </div>
+                  {canMoveStage ? (
+                    <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); feedbackMut.mutate(); }}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs font-medium text-foreground">Rating
+                          <select className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" value={feedbackForm.rating} onChange={(event) => setFeedbackForm((current) => ({ ...current, rating: Number(event.target.value) }))}>
+                            {[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating} / 5</option>)}
+                          </select>
+                        </label>
+                        <label className="text-xs font-medium text-foreground">Recommendation
+                          <select className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" value={feedbackForm.recommendation} onChange={(event) => setFeedbackForm((current) => ({ ...current, recommendation: event.target.value as InterviewRecommendation }))}>
+                            <option value="strong_no">Strong no</option><option value="no">No</option><option value="neutral">Neutral</option><option value="yes">Yes</option><option value="strong_yes">Strong yes</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block text-xs font-medium text-foreground">Strengths
+                        <textarea required minLength={2} maxLength={5000} rows={3} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm" value={feedbackForm.strengths} onChange={(event) => setFeedbackForm((current) => ({ ...current, strengths: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-medium text-foreground">Concerns
+                        <textarea maxLength={5000} rows={2} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm" value={feedbackForm.concerns} onChange={(event) => setFeedbackForm((current) => ({ ...current, concerns: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-medium text-foreground">Private notes
+                        <textarea maxLength={10000} rows={2} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm" value={feedbackForm.notes} onChange={(event) => setFeedbackForm((current) => ({ ...current, notes: event.target.value }))} />
+                      </label>
+                      <Button type="submit" size="sm" loading={feedbackMut.isPending}>{myFeedback ? "Update my feedback" : "Save my feedback"}</Button>
+                    </form>
+                  ) : null}
+                  <div className="space-y-2">
+                    {(feedbackQ.data ?? []).map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-border-subtle p-3 text-sm">
+                        <div className="flex justify-between gap-3"><strong>{entry.reviewer_name}</strong><span>{entry.rating}/5 · {entry.recommendation.replace(/_/g, " ")}</span></div>
+                        <p className="mt-2 text-foreground-secondary"><strong>Strengths:</strong> {entry.strengths}</p>
+                        {entry.concerns ? <p className="mt-1 text-foreground-secondary"><strong>Concerns:</strong> {entry.concerns}</p> : null}
+                      </div>
+                    ))}
+                    {feedbackQ.data?.length === 0 ? <p className="text-sm text-muted-foreground">No interviewer feedback yet.</p> : null}
+                  </div>
+                </div>
+              ) : <p className="text-sm text-muted-foreground">Schedule an interview before recording structured feedback.</p>,
             },
             {
               id: "skills",
