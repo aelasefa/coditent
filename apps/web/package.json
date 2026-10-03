@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:company": "NEXT_PUBLIC_COMPANY_PREVIEW=true next dev -p 3002",
+    "dev:company": "NEXT_PUBLIC_COMPANY_PREVIEW=true next dev -p 3005",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
