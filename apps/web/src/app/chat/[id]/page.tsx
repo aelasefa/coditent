@@ -5,6 +5,7 @@ import { ChatWorkspace } from "@/components/candidate/chat-workspace";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
+import { getChatRoleLabel } from "@/components/candidate/chat-participant-profile";
 import styles from "@/components/candidate/chat-workspace.module.css";
 
 export default function ChatRoomPage({ params }: { params: { id: string } }) {
@@ -20,7 +21,7 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
 
   const peer = (convQuery.data ?? []).find((c) => c.user.id === params.id)?.user ?? null;
   const title = peer?.full_name ?? "Conversation";
-  const subtitle = peer ? peer.role : undefined;
+  const subtitle = peer ? getChatRoleLabel(peer.role, peer.company_role) : undefined;
 
   const sendMut = useMutation({
     mutationFn: (text: string) => sendMessage(params.id, text),
@@ -32,7 +33,15 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
   });
 
   return (
-    <ChatWorkspace activeHref={`/chat/${params.id}`}>
+    <ChatWorkspace activeHref={`/chat/${params.id}`} profile={peer ? {
+      id: peer.id,
+      name: peer.full_name,
+      avatarUrl: peer.avatar_url,
+      role: peer.role,
+      companyRole: peer.company_role,
+      companyId: peer.company_id,
+      email: peer.email,
+    } : null}>
         <ChatHeader title={title} subtitle={subtitle} avatarSrc={peer?.avatar_url} backHref="/chat" />
         {msgQuery.isLoading ? (
           <div className={styles.threadLoading} role="status" aria-label="Loading messages">
