@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import axios from "axios";
+import { use, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getApiBaseUrl,
@@ -19,11 +20,27 @@ import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 
-export default function RecruitmentChatPage({ params }: { params: { applicationId: string } }) {
+function conversationErrorMessage(error: unknown): string {
+  if (!axios.isAxiosError(error)) {
+    return "The conversation could not be loaded. Please retry.";
+  }
+  if (error.response?.status === 403) {
+    return "Access denied. Only the candidate and responsible hiring team for this application can participate.";
+  }
+  if (error.response?.status === 404) {
+    return "This application conversation is no longer available.";
+  }
+  if (error.response?.status === 422) {
+    return "This conversation link is invalid. Return to your inbox and open it again.";
+  }
+  return "The conversation service is temporarily unavailable. Please retry.";
+}
+
+export default function RecruitmentChatPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const markingReadRef = useRef(false);
-  const { applicationId } = params;
+  const { applicationId } = use(params);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   const handleRealtimeMessage = useCallback((message: ChatMessage) => {
@@ -141,9 +158,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
         {chatQuery.isError && (
           <div role="alert" className={styles.threadNotice}>
             <strong>Conversation unavailable</strong>
-            <p>
-              Access denied. Only candidate and responsible hiring team for this application can participate.
-            </p>
+            <p>{conversationErrorMessage(chatQuery.error)}</p>
             <button type="button" onClick={() => chatQuery.refetch()}>
               Retry
             </button>

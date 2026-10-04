@@ -1,4 +1,5 @@
 "use client";
+import { use } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getConversationPage, getConversations, getMe, sendMessage } from "@/lib/api";
 import { ChatWorkspace } from "@/components/candidate/chat-workspace";
@@ -7,15 +8,16 @@ import { useToast } from "@/components/ui/toast";
 import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
 import styles from "@/components/candidate/chat-workspace.module.css";
 
-export default function ChatRoomPage({ params }: { params: { id: string } }) {
+export default function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { id } = use(params);
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe });
   const convQuery = useQuery({ queryKey: ["conversations"], queryFn: getConversations, staleTime: 60_000 });
   const msgQuery = useInfiniteQuery({
-    queryKey: ["chat", params.id],
+    queryKey: ["chat", id],
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => getConversationPage(params.id, pageParam),
+    queryFn: ({ pageParam }) => getConversationPage(id, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     refetchInterval: 3000,
   });
@@ -33,21 +35,21 @@ export default function ChatRoomPage({ params }: { params: { id: string } }) {
     return byTime || left.id.localeCompare(right.id);
   });
 
-  const peer = (convQuery.data ?? []).find((c) => c.user.id === params.id)?.user ?? null;
+  const peer = (convQuery.data ?? []).find((c) => c.user.id === id)?.user ?? null;
   const title = peer?.full_name ?? "Conversation";
   const subtitle = peer ? peer.role : undefined;
 
   const sendMut = useMutation({
-    mutationFn: (text: string) => sendMessage(params.id, text),
+    mutationFn: (text: string) => sendMessage(id, text),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["chat", params.id] });
+      qc.invalidateQueries({ queryKey: ["chat", id] });
       qc.invalidateQueries({ queryKey: ["conversations"] });
     },
     onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
   });
 
   return (
-    <ChatWorkspace activeHref={`/chat/${params.id}`}>
+    <ChatWorkspace activeHref={`/chat/${id}`}>
         <ChatHeader title={title} subtitle={subtitle} avatarSrc={peer?.avatar_url} backHref="/chat" />
         {msgQuery.isLoading ? (
           <div className={styles.threadLoading} role="status" aria-label="Loading messages">
