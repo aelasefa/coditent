@@ -1,6 +1,5 @@
 "use client";
 
-import axios from "axios";
 import { use, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -19,22 +18,7 @@ import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-v
 import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
-
-function conversationErrorMessage(error: unknown): string {
-  if (!axios.isAxiosError(error)) {
-    return "The conversation could not be loaded. Please retry.";
-  }
-  if (error.response?.status === 403) {
-    return "Access denied. Only the candidate and responsible hiring team for this application can participate.";
-  }
-  if (error.response?.status === 404) {
-    return "This application conversation is no longer available.";
-  }
-  if (error.response?.status === 422) {
-    return "This conversation link is invalid. Return to your inbox and open it again.";
-  }
-  return "The conversation service is temporarily unavailable. Please retry.";
-}
+import { recruitmentChatErrorMessage } from "@/lib/recruitment-chat-error";
 
 export default function RecruitmentChatPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const qc = useQueryClient();
@@ -59,7 +43,11 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
     } : previous);
   }, [applicationId, qc]);
 
-  const recruitmentSocket = useRecruitmentChatSocket({
+  const {
+    live: recruitmentLive,
+    markMessagesRead: markRealtimeMessagesRead,
+    sendMessage: sendRealtimeMessage,
+  } = useRecruitmentChatSocket({
     applicationId,
     onMessage: handleRealtimeMessage,
     onMessagesRead: handleMessagesRead,
@@ -68,7 +56,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
   const chatQuery = useQuery({
     queryKey: ["recruitment-chat", applicationId],
     queryFn: () => getRecruitmentChat(applicationId),
-    refetchInterval: recruitmentSocket.live ? false : 3000,
+    refetchInterval: recruitmentLive ? false : 3000,
     retry: false,
   });
   const ctx = chatQuery.data;
@@ -100,7 +88,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       if (!ctx?.chat_enabled || !unreadIncomingKey || document.visibilityState !== "visible" || !document.hasFocus() || markingReadRef.current) return;
       markingReadRef.current = true;
       try {
-        if (recruitmentSocket.markMessagesRead()) return;
+        if (markRealtimeMessagesRead()) return;
         const receipt = await markRecruitmentMessagesRead(applicationId);
         if (receipt.read_at) handleMessagesRead(receipt.message_ids, receipt.read_at);
       } finally {
@@ -115,11 +103,11 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       window.removeEventListener("focus", onVisibilityChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [applicationId, ctx?.chat_enabled, handleMessagesRead, recruitmentSocket.markMessagesRead, unreadIncomingKey]);
+  }, [applicationId, ctx?.chat_enabled, handleMessagesRead, markRealtimeMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
     mutationFn: async (text: string) => {
-      if (ctx?.chat_enabled && recruitmentSocket.sendMessage(text)) return null;
+      if (ctx?.chat_enabled && sendRealtimeMessage(text)) return null;
       return sendRecruitmentMessage(applicationId, text);
     },
     onSuccess: (created) => {
@@ -143,7 +131,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
           subtitle={ctx?.offer_title}
           context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
           avatarSrc={ctx?.peer?.avatar_url ?? companyLogo}
-          status={ctx ? `${recruitmentSocket.live ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
+          status={ctx ? `${recruitmentLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />
 
@@ -158,7 +146,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
         {chatQuery.isError && (
           <div role="alert" className={styles.threadNotice}>
             <strong>Conversation unavailable</strong>
-            <p>{conversationErrorMessage(chatQuery.error)}</p>
+            <p>{recruitmentChatErrorMessage(chatQuery.error)}</p>
             <button type="button" onClick={() => chatQuery.refetch()}>
               Retry
             </button>

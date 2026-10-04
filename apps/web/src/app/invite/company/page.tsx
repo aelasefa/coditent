@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
-export default function InviteCompanyRedirectPage({
+export default async function InviteCompanyRedirectPage({
   searchParams,
 }: {
-  searchParams: { token?: string };
+  searchParams: Promise<{ token?: string }>;
 }) {
-  const token = searchParams?.token;
+  const { token } = await searchParams;
   redirect(token ? `/company/invite/accept?token=${encodeURIComponent(token)}` : "/company/invite/accept");
 }
