@@ -10,10 +10,12 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 ARG NEXT_PUBLIC_API_URL=/api-proxy
+ARG NEXT_PUBLIC_OAUTH_API_URL=
 ARG BACKEND_PROXY_URL=http://api:8001
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_OAUTH_API_URL=$NEXT_PUBLIC_OAUTH_API_URL \
     BACKEND_PROXY_URL=$BACKEND_PROXY_URL
 
 COPY --from=dependencies /app/node_modules ./node_modules
@@ -28,6 +30,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     NEXT_PUBLIC_API_URL=/api-proxy \
+    NEXT_PUBLIC_OAUTH_API_URL= \
     BACKEND_PROXY_URL=http://api:8001
 
 RUN addgroup --system --gid 10001 nextjs \

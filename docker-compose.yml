@@ -153,6 +153,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: /api-proxy
+        NEXT_PUBLIC_OAUTH_API_URL: ${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}
         BACKEND_PROXY_URL: http://api:8001
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
@@ -166,6 +167,7 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: /api-proxy
+      NEXT_PUBLIC_OAUTH_API_URL: ${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}
       BACKEND_PROXY_URL: http://api:8001
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}

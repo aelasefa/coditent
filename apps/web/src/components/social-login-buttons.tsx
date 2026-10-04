@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { safeNextDestination } from "@/lib/auth-redirect";
-import { exchangeOAuthHandoff, getApiBaseUrl, getMe, logoutSession, verifyTwoFactor } from "@/lib/api";
+import { exchangeOAuthHandoff, getMe, getOAuthBaseUrl, logoutSession, verifyTwoFactor } from "@/lib/api";
 import { removeToken, saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
@@ -70,7 +70,7 @@ export function SocialLoginButtons({
   const [oauthMfa, setOauthMfa] = useState<{ token: string; isNewRegistration: boolean } | null>(null);
   const [oauthMfaCode, setOauthMfaCode] = useState("");
   const [oauthMfaBusy, setOauthMfaBusy] = useState(false);
-  const ssoBaseUrl = getApiBaseUrl();
+  const ssoBaseUrl = getOAuthBaseUrl();
   const baseButtonClass =
     "inline-flex h-11 w-full items-center justify-center gap-3 rounded-full px-4 text-sm font-semibold transition-all duration-300 ease-md active:scale-95";
 
@@ -348,6 +348,9 @@ function readableOAuthError(error: string): string {
     invalid_sso_state: "The sign-in session was invalid or expired. Please try again.",
     sso_provider_error: "The provider did not complete sign-in. Please try again.",
     sso_code_or_state_missing: "The provider returned an incomplete sign-in response. Please try again.",
+    google_token_exchange_failed: "Google could not validate this sign-in code. Please start a new sign-in.",
+    sso_invalid_code: "The sign-in code expired or was already used. Please start again.",
+    sso_token_exchange_failed: "The sign-in provider is temporarily unavailable. Please try again.",
   };
   return messages[error] ?? "Social sign-in failed. Please try again.";
 }

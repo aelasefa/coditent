@@ -588,6 +588,7 @@ async def sso_callback(
             provider=provider,
             status_code=exc.status_code,
             reason="provider_request_rejected",
+            error_code=str(exc.detail),
         )
         return _build_sso_error_response(
             request, str(exc.detail), exc.status_code, oauth_provider.name,

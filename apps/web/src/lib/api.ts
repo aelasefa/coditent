@@ -33,6 +33,17 @@ export function getApiBaseUrl(): string {
   return process.env.BACKEND_PROXY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://34.205.255.37";
 }
 
+/**
+ * OAuth must start on the same public API origin used by the provider callback.
+ * Normal JSON requests may use the Next.js rewrite, but beginning OAuth through
+ * that rewrite and returning directly to the API can lose the short-lived
+ * browser-binding cookie in some browsers/proxies.
+ */
+export function getOAuthBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_OAUTH_API_URL?.trim();
+  return configured || getApiBaseUrl();
+}
+
 export const api = axios.create({
   baseURL: getApiBaseUrl(),
   withCredentials: true,

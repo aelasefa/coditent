@@ -115,6 +115,26 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "app.include_router(health_router" in main
 
 
+def test_oauth_start_and_callback_share_a_public_origin() -> None:
+    compose = (REPO_ROOT / "docker-compose.yml").read_text()
+    web_dockerfile = (REPO_ROOT / "apps" / "web" / "Dockerfile").read_text()
+    social_buttons = (
+        REPO_ROOT / "apps" / "web" / "src" / "components" / "social-login-buttons.tsx"
+    ).read_text()
+    ansible_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
+    ).read_text()
+
+    oauth_origin = (
+        "NEXT_PUBLIC_OAUTH_API_URL: "
+        "${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}"
+    )
+    assert compose.count(oauth_origin) == 2
+    assert "ARG NEXT_PUBLIC_OAUTH_API_URL=" in web_dockerfile
+    assert "getOAuthBaseUrl()" in social_buttons
+    assert 'next_public_oauth_api_url: "{{ next_public_api_url }}"' in ansible_vars
+
+
 def test_ansible_declares_collection_and_syntax_check() -> None:
     requirements = (REPO_ROOT / "ansible" / "requirements.yml").read_text()
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()

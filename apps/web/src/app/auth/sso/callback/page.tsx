@@ -29,6 +29,9 @@ const errorMessages: Record<string, string> = {
   sso_handoff_expired: "This sign-in result expired or was already used.",
   sso_parent_unavailable: "We could not securely return sign-in to the original Coditent window.",
   sso_session_missing: "The secure Coditent session could not be established.",
+  google_token_exchange_failed: "Google could not validate this sign-in code. Start a new sign-in attempt.",
+  sso_invalid_code: "This sign-in code expired or was already used.",
+  sso_token_exchange_failed: "The sign-in provider is temporarily unavailable.",
 };
 
 export default function SsoCallbackPage() {

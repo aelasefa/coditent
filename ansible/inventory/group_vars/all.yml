@@ -38,6 +38,7 @@ tls_certificate_key_path: "/etc/letsencrypt/live/{{ server_name }}/privkey.pem"
 public_scheme: "{{ 'https' if nginx_tls_enabled else 'http' }}"
 frontend_url: "{{ public_scheme }}://{{ server_name }}"
 next_public_api_url: "/api-proxy"
+next_public_oauth_api_url: "{{ next_public_api_url }}"
 cors_origins: "{{ frontend_url }}"
 invitation_expiration_hours: 72
 
