@@ -103,7 +103,20 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
       : null;
 
   return (
-    <ChatWorkspace activeHref={`/chat/recruitment/${applicationId}`}>
+    <ChatWorkspace
+      activeHref={`/chat/recruitment/${applicationId}`}
+      profile={ctx?.peer ? {
+        id: ctx.peer.id,
+        name: ctx.peer.full_name,
+        avatarUrl: ctx.peer.avatar_url,
+        role: ctx.peer.role,
+        companyRole: ctx.peer.company_role,
+        companyId: ctx.peer.role === "CANDIDATE" ? null : ctx.company_id,
+        companyName: ctx.peer.role === "CANDIDATE" ? null : ctx.company_name,
+        opportunityTitle: ctx.offer_title,
+        applicationStatus: ctx.status,
+      } : null}
+    >
         <ChatHeader
           title={ctx?.peer?.full_name ?? peerRole}
           subtitle={ctx?.offer_title}

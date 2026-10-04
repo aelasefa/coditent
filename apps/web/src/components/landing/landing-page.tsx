@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
+import { TwinklingStars } from "@/components/ui/twinkling-stars";
 import { HeroDemo, ScrollTextReveals, StorySteps } from "./landing-interactions";
 import { SiteHeader } from "./site-header";
 import styles from "./landing-page.module.css";
@@ -140,11 +141,7 @@ export function LandingPage() {
               </Link>
             </div>
             <div className={styles.companyPanel}>
-              <div className={styles.companyStars} aria-hidden="true">
-                {Array.from({ length: 18 }, (_, index) => (
-                  <span key={index} className={styles.companyStar} />
-                ))}
-              </div>
+              <TwinklingStars className={styles.companyStars} />
               <ol className={styles.companySteps}>
                 {COMPANY_STEPS.map(([title, description], index) => (
                   <li key={title} data-scroll-reveal data-reveal-delay={(index % 3) + 1}>
