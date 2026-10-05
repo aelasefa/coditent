@@ -1512,8 +1512,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
-  border-bottom: 1px solid #dce6da;
-  background: #f2f6ef;
+  border-bottom: 1px solid #194d38;
+  background: #194d38;
 }
 
 .candidate-screening-heading-main {
@@ -1525,10 +1525,23 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 }
 
 .candidate-screening-heading h3 {
-  margin: 0.15rem 0 0;
-  color: #203d2e;
-  font-size: 1.1rem;
+  margin: 0;
+  color: #fffefa;
+  font-size: 1.125rem;
+  line-height: 1.3;
   letter-spacing: -0.025em;
+}
+
+.candidate-screening-heading .candidate-section-heading-copy > p:last-child {
+  color: #d4e2d8;
+  font-size: 0.75rem;
+}
+
+.candidate-screening-heading .candidate-section-icon {
+  border: 1px solid rgb(255 254 250 / 20%);
+  border-radius: 10px;
+  background: rgb(255 254 250 / 11%);
+  color: #e9f0df;
 }
 
 .candidate-screening-score {
@@ -1538,7 +1551,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   align-items: center;
   padding: 0.375rem 0.625rem;
   border-radius: 8px;
-  background: #194d38;
+  border: 1px solid #c9dbc8;
+  background: #e8f1e5;
 }
 
 .candidate-screening-score > span:last-child {
@@ -1546,33 +1560,16 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   padding: 0;
   border: 0;
   background: transparent;
-  color: #fffefa;
+  color: #194d38;
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
 .candidate-screening-report {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0.65rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   background: #f8faf6;
-}
-
-.candidate-screening-report-wide {
-  grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr));
-  align-items: stretch;
-}
-
-.candidate-screening-report-wide .candidate-screening-summary {
-  grid-column: auto;
-  padding: 0.7rem;
-  border-left: 3px solid #397451;
-  border-radius: 10px;
-  background: #fffefa;
-}
-
-.candidate-screening-report-wide .candidate-screening-summary p {
-  max-width: none;
 }
 
 .candidate-screening-summary {
@@ -1590,8 +1587,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 .candidate-screening-summary > div > span {
   color: #203d2e;
-  font-size: 0.75rem;
-  font-weight: 800;
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 .candidate-screening-summary p {
   max-width: 65ch;
@@ -1604,10 +1601,26 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 }
 
 .candidate-screening-findings {
-  min-height: 100%;
-  padding: 0.7rem;
-  border-left-width: 3px;
+  min-width: 0;
+  padding: 0.75rem 0 0;
+  border: 0;
+  border-top: 1px solid #dce6da;
+  border-radius: 0;
+  background: transparent;
 }
+
+.candidate-screening-findings:only-of-type { grid-column: 1 / -1; }
+.candidate-screening-findings h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.candidate-screening-findings h4 svg { width: 1rem; height: 1rem; flex: none; }
+.candidate-screening-findings ul { gap: 0.375rem; padding-left: 1rem; }
+.candidate-screening-findings li { padding-left: 0; font-size: 0.875rem; line-height: 1.5; text-wrap: pretty; }
 
 @media (max-width: 900px) {
   .candidate-assessments-stack-wide { grid-template-columns: 1fr; }
@@ -1766,7 +1779,8 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-messages-link svg { width: 0.9rem; height: 0.9rem; }
 
 @media (max-width: 639px) {
-  .company-candidate-panel {
+  .company-candidate-panel,
+  .company-candidate-panel:has(.candidate-assessments-stack-wide) {
     width: calc(100% - 1rem);
     max-height: calc(100dvh - 1rem);
     border-radius: 14px;
@@ -1790,7 +1804,6 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   .candidate-assessments-stack { grid-template-columns: 1fr; }
   .candidate-screening-report { grid-template-columns: 1fr; }
   .candidate-screening-summary { grid-column: auto; }
-  .candidate-screening-report-wide .candidate-screening-summary { grid-column: auto; }
   .candidate-screening-state { align-items: flex-start; flex-direction: column; }
   .candidate-profile-skills-heading,
   .candidate-resume-heading,

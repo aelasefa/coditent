@@ -13,8 +13,10 @@ import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, AssessmentItem } from "@/lib/types";
 import {
   FiActivity,
+  FiAlertCircle,
   FiAward,
   FiBarChart2,
+  FiCheckCircle,
   FiDownload,
   FiExternalLink,
   FiFileText,
@@ -81,9 +83,6 @@ export function CandidateDetail({
   const screeningNeedsWideLayout = Boolean(
     screening &&
       (screeningTextLength > 360 || screening.strengths.length + screening.gaps.length >= 4)
-  );
-  const screeningHasBothFindingGroups = Boolean(
-    screening && screening.strengths.length > 0 && screening.gaps.length > 0
   );
   const screenMut = useMutation({
     mutationFn: () => retryApplicationScreening(app.id),
@@ -275,9 +274,7 @@ export function CandidateDetail({
                       </div>
                     ) : null}
                     {screening ? (
-                      <div
-                        className={`candidate-screening-report${screeningNeedsWideLayout && screeningHasBothFindingGroups ? " candidate-screening-report-wide" : ""}`}
-                      >
+                      <div className="candidate-screening-report">
                         <div className="candidate-screening-summary">
                           <div>
                             <span>Screening summary</span>
@@ -286,13 +283,13 @@ export function CandidateDetail({
                         </div>
                         {screening.strengths.length > 0 ? (
                           <section className="candidate-screening-findings" aria-label="AI screening strengths">
-                            <h4>Strengths</h4>
+                            <h4><FiCheckCircle aria-hidden="true" /> Strengths</h4>
                             <ul>{screening.strengths.map((strength, index) => <li key={index}>{strength}</li>)}</ul>
                           </section>
                         ) : null}
                         {screening.gaps.length > 0 ? (
                           <section className="candidate-screening-findings candidate-screening-gaps" aria-label="AI screening gaps">
-                            <h4>Gaps</h4>
+                            <h4><FiAlertCircle aria-hidden="true" /> Gaps</h4>
                             <ul>{screening.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>
                           </section>
                         ) : null}
