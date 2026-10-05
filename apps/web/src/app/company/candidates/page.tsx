@@ -131,7 +131,7 @@ function PipelineContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          tone="dark"
+          tone="green"
           center
           eyebrow={activeJob ? "Job pipeline" : "Hiring pipeline"}
           title={activeJob ? `Candidates for ${activeJob.title}.` : "Every candidate, in clear view."}

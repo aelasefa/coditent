@@ -30,9 +30,10 @@ services:
       - ./apps/api:/app
     ports:
       - "8001:8001"
-    command: >
-      sh -c "alembic upgrade head &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    # Run migrations explicitly when the local revision chain is available.
+    # Keeping API startup independent prevents a missing historical revision
+    # from taking authentication and the rest of the development stack down.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     healthcheck:
       test:
         [

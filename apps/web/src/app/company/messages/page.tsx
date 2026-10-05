@@ -48,7 +48,7 @@ function InboxContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          tone="dark"
+          tone="green"
           center
           title="Every conversation, in clear view."
           subtitle="Keep candidate conversations focused, responsive and easy to follow."

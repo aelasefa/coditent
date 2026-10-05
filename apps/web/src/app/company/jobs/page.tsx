@@ -19,7 +19,7 @@ import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers,
 import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
-import { FiBriefcase, FiSearch } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiSearch, FiUsers } from "react-icons/fi";
 
 function getErrorMessage(err: unknown): string {
   const d = (err as { response?: { data?: { detail?: unknown } }; message?: string })?.response?.data?.detail;
@@ -232,7 +232,7 @@ export default function CompanyJobsPage() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          tone="dark"
+          tone="green"
           center
           title="Every role, in clear view."
           subtitle={`${offers?.length ?? 0} roles in one workspace · ${activeCount(offers)} active and ready for candidates.`}
@@ -316,12 +316,17 @@ export default function CompanyJobsPage() {
                   </div>
                   <StatusBadge status={o.active ? "active" : "paused"} size="sm" showDot={false} />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Link href={`/company/candidates?job=${o.id}`} className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-secondary">
-                    View candidates
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
+                  <Link
+                    href={`/company/candidates?job=${o.id}`}
+                    className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-primary-hover hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+                  >
+                    <FiUsers aria-hidden className="h-4 w-4" />
+                    <span>View candidates</span>
+                    <FiArrowRight aria-hidden className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" />
                   </Link>
                   {canEdit && (
-                    <button type="button" onClick={() => openEdit(o)} className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-secondary">
+                    <button type="button" onClick={() => openEdit(o)} className="inline-flex min-h-11 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2">
                       Edit
                     </button>
                   )}
@@ -331,13 +336,13 @@ export default function CompanyJobsPage() {
                       onClick={() => toggleMut.mutate(o.id)}
                       disabled={toggleMut.isPending}
                       aria-pressed={o.active}
-                      className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-secondary"
+                      className="inline-flex min-h-11 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {o.active ? "Pause" : "Activate"}
                     </button>
                   )}
                   {canDelete && (
-                    <button type="button" onClick={() => setDeleteTarget(o)} className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-danger hover:bg-danger-background">
+                    <button type="button" onClick={() => setDeleteTarget(o)} className="inline-flex min-h-11 items-center rounded-lg px-3.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2">
                       Delete
                     </button>
                   )}
@@ -346,7 +351,7 @@ export default function CompanyJobsPage() {
                       value={o.id === editTarget?.id ? responsibleHrId : o.responsible_hr_id ?? ""}
                       onChange={(e) => hrMut.mutate({ offerId: o.id, hrId: e.target.value })}
                       aria-label={`Responsible recruiter for ${o.title}`}
-                      className="h-8 rounded-lg border border-border bg-surface px-2 text-xs"
+                      className="min-h-11 rounded-lg border border-border bg-surface px-3 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
                     >
                       <option value="">Unassigned HR</option>
                       {members.map((m: { id: string; full_name: string; email: string }) => (

@@ -71,7 +71,7 @@ export default function AssessmentsPage() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          tone="dark"
+          tone="green"
           title="Assessments"
           subtitle="Practical evaluations linked to applications. Scores shown as recorded."
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{assessments.length} total</span>}

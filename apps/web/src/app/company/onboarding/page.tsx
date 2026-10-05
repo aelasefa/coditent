@@ -64,7 +64,7 @@ export default function CompanyOnboardingPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-2xl space-y-6">
-        <PageHeader tone="dark" center title={`Welcome, ${company?.name || "owner"}`} subtitle="Complete company information to finish onboarding." />
+        <PageHeader tone="green" center title={`Welcome, ${company?.name || "owner"}`} subtitle="Complete company information to finish onboarding." />
         {companyQ.isLoading ? (
           <Skeleton className="h-64" />
         ) : companyQ.isError ? (

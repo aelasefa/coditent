@@ -9,7 +9,7 @@ interface PageHeaderProps {
   badge?: React.ReactNode;
   actions?: React.ReactNode;
   breadcrumbs?: Array<{ label: string; href?: string }>;
-  tone?: "soft" | "dark";
+  tone?: "soft" | "green";
   variant?: "hero" | "plain";
   center?: boolean;
   icon?: React.ReactNode;
@@ -54,5 +54,5 @@ export function PageHeader({ title, subtitle, badge, actions, breadcrumbs, tone 
     />
     </>
   );
-  return variant === "plain" ? content : <section className={`company-page-hero ${tone === "dark" ? "company-page-hero-dark" : ""} ${center ? "company-page-hero-center" : ""}`}>{content}</section>;
+  return variant === "plain" ? content : <section className={`company-page-hero ${tone === "green" ? "company-page-hero-green" : ""} ${center ? "company-page-hero-center" : ""}`}>{content}</section>;
 }

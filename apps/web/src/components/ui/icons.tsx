@@ -22,8 +22,6 @@ export {
   FiTrendingUp,
   FiSettings,
   FiLogOut,
-  FiSun,
-  FiMoon,
   FiMapPin,
   FiClock,
   FiBookmark,
