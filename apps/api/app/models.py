@@ -65,8 +65,6 @@ class ApplicationStatus(str, enum.Enum):
     applied = "applied"
     under_review = "under_review"
     shortlisted = "shortlisted"
-    assessment_required = "assessment_required"
-    assessment_completed = "assessment_completed"
     interview = "interview"
     accepted = "accepted"
     rejected = "rejected"
@@ -137,7 +135,6 @@ class NotificationPreference(Base):
         primary_key=True,
     )
     application_updates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    assessment_updates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     interview_updates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     message_updates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -151,7 +148,7 @@ class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
         CheckConstraint(
-            "category IN ('application', 'assessment', 'interview', 'message', 'system')",
+            "category IN ('application', 'interview', 'message', 'system')",
             name="ck_notifications_category",
         ),
         UniqueConstraint("user_id", "dedupe_key", name="uq_notifications_user_dedupe"),
@@ -737,43 +734,6 @@ class InterviewFeedback(Base):
     )
 
     reviewer: Mapped[User] = relationship("User", foreign_keys=[reviewer_id])
-
-
-class Assessment(Base):
-    __tablename__ = "assessments"
-    __table_args__ = (
-        Index("ix_assessments_application_id", "application_id"),
-        Index("ix_assessments_candidate_id", "candidate_id"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
-    candidate_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    title: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rubric: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
-    max_score: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
-    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    status: Mapped[str] = mapped_column(String, default="assigned", nullable=False)
-    submission_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    grading_status: Mapped[str] = mapped_column(String, default="not_started", nullable=False)
-    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    report: Mapped[str | None] = mapped_column(Text, nullable=True)
-    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
-    )
-
-    application: Mapped[Application] = relationship("Application")
-    candidate: Mapped[User] = relationship("User", foreign_keys=[candidate_id])
 
 
 class PracticeMission(Base):

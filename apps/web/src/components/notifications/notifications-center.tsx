@@ -17,12 +17,11 @@ import type { NotificationPreferences, ProductNotification } from "@/lib/types";
 
 
 const preferenceRows: Array<{
-  key: keyof Pick<NotificationPreferences, "application_updates" | "assessment_updates" | "interview_updates" | "message_updates">;
+  key: keyof Pick<NotificationPreferences, "application_updates" | "interview_updates" | "message_updates">;
   label: string;
   description: string;
 }> = [
   { key: "application_updates", label: "Application updates", description: "Stage changes, decisions, and hiring progress." },
-  { key: "assessment_updates", label: "Assessment updates", description: "New assignments and completed reviews." },
   { key: "interview_updates", label: "Interview updates", description: "Interview scheduling and changes." },
   { key: "message_updates", label: "Message updates", description: "New direct and recruitment messages." },
 ];
@@ -77,7 +76,6 @@ export function NotificationsCenter() {
     if (!current) return;
     preferencesMut.mutate({
       application_updates: current.application_updates,
-      assessment_updates: current.assessment_updates,
       interview_updates: current.interview_updates,
       message_updates: current.message_updates,
       [key]: enabled,
@@ -92,7 +90,7 @@ export function NotificationsCenter() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Activity center</p>
           <h1 className="mt-2 text-3xl font-semibold text-foreground">Notifications</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Important hiring activity, assessments, interviews, and messages in one place.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Important hiring activity, interviews, and messages in one place.</p>
         </div>
         <Button type="button" variant="secondary" disabled={!data?.unread || readAllMut.isPending} onClick={() => readAllMut.mutate()}>
           Mark all as read

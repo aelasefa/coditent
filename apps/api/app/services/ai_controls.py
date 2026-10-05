@@ -95,7 +95,6 @@ def operation_cost(operation: str) -> int:
         "match_score": 2,
         "recommendation_rank": 5,
         "application_screen": 4,
-        "assessment_grade": 4,
     }.get(operation, 1)
 
 

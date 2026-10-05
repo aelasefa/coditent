@@ -15,7 +15,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
-from app.models import AIJob, Application, Assessment, CVAsset, CandidateProfile, Offer
+from app.models import AIJob, Application, CVAsset, CandidateProfile, Offer
 from app.services.offer_eligibility import eligible_offer_predicates
 
 
@@ -548,29 +548,6 @@ async def recommendation_source_fingerprint(
     )
 
 
-async def assessment_source_fingerprint(
-    db: AsyncSession, assessment_id: UUID
-) -> str | None:
-    assessment = (
-        await db.execute(select(Assessment).where(Assessment.id == assessment_id))
-    ).scalar_one_or_none()
-    if assessment is None or not assessment.submission_text:
-        return None
-    return content_fingerprint(
-        {
-            "id": assessment.id,
-            "application_id": assessment.application_id,
-            "candidate_id": assessment.candidate_id,
-            "title": assessment.title,
-            "description": assessment.description,
-            "rubric": assessment.rubric,
-            "max_score": assessment.max_score,
-            "submission_text": assessment.submission_text,
-            "submitted_at": assessment.submitted_at,
-        }
-    )
-
-
 async def current_source_fingerprint(db: AsyncSession, job: AIJob) -> str | None:
     payload = json.loads(job.payload)
     if job.kind == "application_screen" and job.resource_id:
@@ -579,6 +556,4 @@ async def current_source_fingerprint(db: AsyncSession, job: AIJob) -> str | None
         return await match_source_fingerprint(db, job.actor_id, job.resource_id) if job.actor_id else None
     if job.kind == "recommendation_rank" and job.actor_id:
         return await recommendation_source_fingerprint(db, job.actor_id, payload.get("criteria", {}))
-    if job.kind == "assessment_grade" and job.resource_id:
-        return await assessment_source_fingerprint(db, job.resource_id)
     return job.source_fingerprint

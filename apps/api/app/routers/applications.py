@@ -13,7 +13,7 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Assessment, Application, CVAsset, CandidateProfile, Company, InterviewFeedback, Offer, User
+from app.models import Application, CVAsset, CandidateProfile, Company, InterviewFeedback, Offer, User
 from app.schemas import (
     ApplicationCreate,
     ApplicationCreatedOut,
@@ -475,8 +475,6 @@ _ALLOWED_STAGE_TRANSITIONS: dict[str, frozenset[str]] = {
         {"shortlisted", "interview", "rejected"}
     ),
     "shortlisted": frozenset({"interview", "rejected"}),
-    "assessment_required": frozenset({"assessment_completed", "rejected"}),
-    "assessment_completed": frozenset({"interview", "accepted", "rejected"}),
     "interview": frozenset({"accepted", "rejected"}),
     "accepted": frozenset(),
     "rejected": frozenset(),
@@ -488,21 +486,6 @@ async def _validate_stage_evidence(
     app: Application,
     data: ApplicationStatusUpdate,
 ) -> None:
-    if data.status == "assessment_completed":
-        assessment = (
-            await db.execute(
-                select(Assessment).where(
-                    Assessment.application_id == app.id,
-                    Assessment.status.in_(("completed", "graded", "reviewed")),
-                    Assessment.score.is_not(None),
-                )
-            )
-        ).scalars().first()
-        if assessment is None:
-            raise HTTPException(
-                status_code=409,
-                detail="A graded assessment is required before completing assessment",
-            )
     if data.status == "interview" and data.interview_scheduled_at is None:
         raise HTTPException(
             status_code=422,
@@ -550,11 +533,6 @@ async def update_application_status(
             status=app.status,
             stage_version=app.stage_version,
             chat_enabled=is_chat_enabled_for_status(app.status),
-        )
-    if new_status == "assessment_required":
-        raise HTTPException(
-            status_code=409,
-            detail="Assign an assessment to move the application into the assessment stage",
         )
     allowed = _ALLOWED_STAGE_TRANSITIONS.get(app.status, frozenset())
     if new_status not in allowed:

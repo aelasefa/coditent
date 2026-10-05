@@ -481,8 +481,6 @@ ApplicationStage = Literal[
     "applied",
     "under_review",
     "shortlisted",
-    "assessment_required",
-    "assessment_completed",
     "interview",
     "accepted",
     "rejected",
@@ -793,87 +791,6 @@ class CompanySubscriptionUpdate(APIModel):
         return _naive_utc(value)
 
 
-class AssessmentCreate(APIModel):
-    model_config = ConfigDict(extra="forbid")
-
-    application_id: uuid.UUID
-    title: str = Field(min_length=2, max_length=160)
-    description: str = Field(min_length=10, max_length=10_000)
-    rubric: list[str] = Field(min_length=1, max_length=12)
-    max_score: int = Field(default=100, ge=1, le=100)
-    due_at: datetime | None = None
-
-    @field_validator("title", "description", mode="before")
-    @classmethod
-    def sanitize_assessment_text(cls, value: str) -> str:
-        return sanitize_input_text(value)
-
-    @field_validator("rubric", mode="before")
-    @classmethod
-    def sanitize_rubric(cls, values: list[str]) -> list[str]:
-        cleaned = [sanitize_input_text(value) for value in values]
-        if any(not value or len(value) > 500 for value in cleaned):
-            raise ValueError("Each rubric item must contain 1-500 characters")
-        return cleaned
-
-    @field_validator("due_at")
-    @classmethod
-    def normalize_assessment_due_at(cls, value: datetime | None) -> datetime | None:
-        return _naive_utc(value)
-
-
-class AssessmentSubmit(APIModel):
-    model_config = ConfigDict(extra="forbid")
-
-    submission_text: str = Field(min_length=20, max_length=20_000)
-
-    @field_validator("submission_text", mode="before")
-    @classmethod
-    def sanitize_submission(cls, value: str) -> str:
-        return sanitize_input_text(value)
-
-
-class AssessmentReview(APIModel):
-    model_config = ConfigDict(extra="forbid")
-
-    expected_version: int = Field(ge=1)
-    score: int = Field(ge=0, le=100)
-    feedback: str = Field(min_length=2, max_length=5_000)
-
-    @field_validator("feedback", mode="before")
-    @classmethod
-    def sanitize_feedback(cls, value: str) -> str:
-        return sanitize_input_text(value)
-
-
-class AssessmentOut(APIModel):
-    id: uuid.UUID
-    application_id: uuid.UUID
-    candidate_id: uuid.UUID
-    created_by: uuid.UUID | None = None
-    title: str
-    description: str | None = None
-    rubric: list[str]
-    max_score: int
-    due_at: datetime | None = None
-    status: str
-    grading_status: str
-    score: int | None = None
-    report: str | None = None
-    feedback: str | None = None
-    submitted_at: datetime | None = None
-    reviewed_by: uuid.UUID | None = None
-    reviewed_at: datetime | None = None
-    version: int
-    created_at: datetime
-    updated_at: datetime
-    ai_job_id: uuid.UUID | None = None
-
-
-class AssessmentListOut(APIModel):
-    assessments: list[AssessmentOut]
-
-
 class FriendOut(APIModel):
     id: uuid.UUID
     full_name: str
@@ -1001,7 +918,7 @@ class MissionReviewQueueOut(APIModel):
     attempts: list[MissionReviewQueueItem]
 
 
-NotificationCategory = Literal["application", "assessment", "interview", "message", "system"]
+NotificationCategory = Literal["application", "interview", "message", "system"]
 
 
 class NotificationOut(APIModel):
@@ -1032,7 +949,6 @@ class NotificationPreferenceUpdate(APIModel):
     model_config = ConfigDict(extra="forbid")
 
     application_updates: bool = True
-    assessment_updates: bool = True
     interview_updates: bool = True
     message_updates: bool = True
 

@@ -10,11 +10,11 @@ import { StatCard } from "@/components/company/StatCard";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { EmptyState } from "@/components/company/EmptyState";
 import { StatCardsSkeleton } from "@/components/company/LoadingSkeleton";
-import { getMe, getApplications, getAssessments, getAuditLogs, getCompany, getApiBaseUrl, offerLogoSrc } from "@/lib/api";
+import { getMe, getApplications, getAuditLogs, getCompany, getApiBaseUrl, offerLogoSrc } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
 import { candidateName, jobTitleFor } from "@/components/company/hiring";
 import type { ApplicationItem, Offer } from "@/lib/types";
-import { FiArrowRight, FiBriefcase, FiFileText, FiPlus, FiUserCheck, FiUsers } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiPlus, FiUserCheck, FiUsers } from "react-icons/fi";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -64,11 +64,6 @@ export default function CompanyDashboard() {
     queryFn: async () => (await getApplications()).applications as ApplicationItem[],
     enabled: !!me,
   });
-  const assQ = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => (await getAssessments()).assessments,
-    enabled: !!me,
-  });
   const auditQ = useQuery({
     queryKey: ["audit"],
     queryFn: async () => (await getAuditLogs()).logs,
@@ -77,7 +72,6 @@ export default function CompanyDashboard() {
 
   const offers = offersQ.data ?? [];
   const apps = appsQ.data ?? [];
-  const assessments = assQ.data ?? [];
   const auditLogs = (auditQ.data ?? []).slice(0, 5);
   const offersById = new Map(offers.map((o) => [o.id, o.title]));
 
@@ -85,8 +79,7 @@ export default function CompanyDashboard() {
   const byStatus = (s: string) => apps.filter((a) => a.status === s).length;
   const appliedPending = apps.filter((a) => a.status === "applied").slice(0, 3);
   const interviewNow = apps.filter((a) => a.status === "interview").slice(0, 2);
-  const assessedPending = (assessments as Array<{ id: string; status: string }>).filter((a) => a.status === "pending").slice(0, 2);
-  const attentionCount = appliedPending.length + interviewNow.length + assessedPending.length;
+  const attentionCount = appliedPending.length + interviewNow.length;
   const loading = offersQ.isLoading || appsQ.isLoading;
 
   return (
@@ -114,13 +107,13 @@ export default function CompanyDashboard() {
           <h2 className="ct-section-title">
             Needs attention {attentionCount > 0 ? `(${attentionCount})` : ""}
           </h2>
-          {appsQ.isError || assQ.isError ? (
+          {appsQ.isError ? (
             <div className="mt-3">
-              <SectionError onRetry={() => { appsQ.refetch(); assQ.refetch(); }} />
+              <SectionError onRetry={() => { appsQ.refetch(); }} />
             </div>
-          ) : appliedPending.length + interviewNow.length + assessedPending.length === 0 ? (
+          ) : appliedPending.length + interviewNow.length === 0 ? (
             <p className="mt-2 rounded-xl border border-dashed border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
-              Nothing waiting. New applications, interviews and pending assessments appear here.
+              Nothing waiting. New applications and interviews appear here.
             </p>
           ) : (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -144,14 +137,6 @@ export default function CompanyDashboard() {
                   </Link>
                 </li>
               ))}
-              {assessedPending.map((a) => (
-                <li key={String(a.id)}>
-                  <Link href="/company/assessments" className="block rounded-xl border border-border-subtle bg-surface px-4 py-3 hover:border-border-strong">
-                    <span className="block text-sm font-semibold text-foreground">Assessment awaiting review</span>
-                    <span className="block text-xs text-muted-foreground">Open assessments queue</span>
-                  </Link>
-                </li>
-              ))}
             </ul>
           )}
         </section>
@@ -160,15 +145,15 @@ export default function CompanyDashboard() {
           <h2 className="ct-section-title">Hiring summary</h2>
           {loading ? (
             <div className="mt-3"><StatCardsSkeleton /></div>
-          ) : offersQ.isError || appsQ.isError || assQ.isError ? (
+          ) : offersQ.isError || appsQ.isError ? (
             <div className="mt-3">
-              <SectionError onRetry={() => { offersQ.refetch(); appsQ.refetch(); assQ.refetch(); }} />
+              <SectionError onRetry={() => { offersQ.refetch(); appsQ.refetch(); }} />
             </div>
           ) : (
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard label="Open jobs" value={activeOffers} subValue={`${offers.length} total jobs`} icon={FiBriefcase} />
               <StatCard label="Awaiting review" value={byStatus("applied")} subValue={`${byStatus("under_review")} under review`} icon={FiUsers} />
-              <StatCard label="In assessment" value={byStatus("assessment_required") + byStatus("assessment_completed")} subValue={`${byStatus("interview")} in interview`} icon={FiFileText} />
+              <StatCard label="In interview" value={byStatus("interview")} subValue={`${byStatus("shortlisted")} shortlisted`} icon={FiUsers} />
               <StatCard label="Hired" value={byStatus("accepted")} subValue={`${byStatus("shortlisted")} shortlisted`} icon={FiUserCheck} highlight />
             </div>
           )}
@@ -184,23 +169,19 @@ export default function CompanyDashboard() {
           {appsQ.isError ? (
             <div className="mt-3"><SectionError onRetry={() => appsQ.refetch()} /></div>
           ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
               {[
                 { key: "applied", label: "Applied" },
                 { key: "under_review", label: "Screening" },
                 { key: "shortlisted", label: "Shortlisted" },
-                { key: "assessment", label: "Assessment" },
                 { key: "interview", label: "Interview" },
                 { key: "accepted", label: "Hired" },
               ].map((s) => {
-                const count =
-                  s.key === "assessment"
-                    ? byStatus("assessment_required") + byStatus("assessment_completed")
-                    : byStatus(s.key);
+                const count = byStatus(s.key);
                 return (
                   <Link
                     key={s.key}
-                    href={`/company/candidates?status=${s.key === "assessment" ? "assessment_required" : s.key}`}
+                    href={`/company/candidates?status=${s.key}`}
                     className="rounded-xl border border-border-subtle bg-surface p-3.5 text-center hover:border-border-strong"
                   >
                     <span className="block text-2xl font-bold text-foreground">{count}</span>

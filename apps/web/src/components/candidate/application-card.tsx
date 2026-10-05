@@ -63,7 +63,6 @@ export function ApplicationCard({ app, chat, selected, pathname }: { app: Applic
 const phases: Array<{ id: ApplicationPhase; label: string }> = [
   { id: "applied", label: "Applied" },
   { id: "review", label: "Review" },
-  { id: "assessment", label: "Assessment" },
   { id: "interview", label: "Interview" },
   { id: "decision", label: "Decision" },
 ];

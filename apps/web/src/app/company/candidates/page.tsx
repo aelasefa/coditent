@@ -11,9 +11,9 @@ import { Drawer } from "@/components/company/Drawer";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { getApplications, getMe, updateApplicationStatus, getAssessments, getApiBaseUrl, listRecruitmentChats } from "@/lib/api";
+import { getApplications, getMe, updateApplicationStatus, getApiBaseUrl, listRecruitmentChats } from "@/lib/api";
 import { can } from "@/lib/permissions";
-import type { ApplicationItem, AssessmentItem, Offer } from "@/lib/types";
+import type { ApplicationItem, Offer } from "@/lib/types";
 import { HIRING_STAGES, candidateName, hiringStage, jobTitleFor } from "@/components/company/hiring";
 import { AiScore, CandidateCard } from "@/components/company/CandidateCard";
 import { CandidateDetail } from "@/components/company/CandidateDetail";
@@ -31,10 +31,6 @@ function PipelineContent() {
   const appsQ = useQuery({
     queryKey: ["applications"],
     queryFn: async () => (await getApplications()).applications as ApplicationItem[],
-  });
-  const assQ = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => (await getAssessments()).assessments as AssessmentItem[],
   });
   const offersQ = useQuery({
     queryKey: ["company-offers"],
@@ -94,14 +90,12 @@ function PipelineContent() {
   });
 
   const apps = appsQ.data ?? [];
-  const assessments = assQ.data ?? [];
   const offersById = useMemo(() => new Map((offersQ.data ?? []).map((o) => [o.id, o.title])), [offersQ.data]);
 
   const filtered = useMemo(() => {
     let list = apps;
     if (statusFilter !== "all") {
-      if (statusFilter === "assessment") list = list.filter((a) => a.status === "assessment_required" || a.status === "assessment_completed");
-      else list = list.filter((a) => a.status === statusFilter);
+      list = list.filter((a) => a.status === statusFilter);
     }
     if (jobFilter !== "all") list = list.filter((a) => a.opportunity_id === jobFilter);
     if (search.trim()) {
@@ -118,9 +112,6 @@ function PipelineContent() {
   }, [apps, statusFilter, jobFilter, search, offersById]);
 
   const selected = apps.find((a) => a.id === selectedId) ?? null;
-  const selectedAssessment = selected
-    ? assessments.find((x) => x.candidate_id === selected.candidate_id || x.application_id === selected.id) ?? null
-    : null;
   const selectedChat = selected ? chatByApp.get(selected.id) : null;
   const selectedUnlocked = Boolean(selected && (selected.chat_enabled || selectedChat));
 
@@ -128,7 +119,7 @@ function PipelineContent() {
     () =>
       HIRING_STAGES.map((s) => ({
         stage: s,
-        items: filtered.filter((a) => hiringStage(a.status) === s || (s === "Assessment" && hiringStage(a.status) === "Assessment")),
+        items: filtered.filter((a) => hiringStage(a.status) === s),
       })),
     [filtered]
   );
@@ -171,7 +162,6 @@ function PipelineContent() {
               <option value="applied">Applied</option>
               <option value="under_review">Screening</option>
               <option value="shortlisted">Shortlisted</option>
-              <option value="assessment">Assessment</option>
               <option value="interview">Interview</option>
               <option value="accepted">Hired</option>
               <option value="rejected">Rejected</option>
@@ -255,7 +245,6 @@ function PipelineContent() {
             <CandidateDetail
               app={selected}
               jobTitle={jobTitleFor(selected, offersById)}
-              assessment={selectedAssessment}
               canMoveStage={canMoveStage}
               stagePending={stageMut.isPending}
               chatUnlocked={selectedUnlocked}

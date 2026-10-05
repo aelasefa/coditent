@@ -38,9 +38,9 @@ function roleLabel(role: string): string {
 const ROLE_CAPABILITIES: Record<string, string[]> = {
   OWNER: ["Full company management", "Team roles and removal", "All hiring workflows", "Subscription"],
   ADMIN: ["Company profile and settings", "Team roles and removal", "All hiring workflows"],
-  HR: ["Publish and edit offers", "Review and advance candidates", "Assessments and analytics"],
-  RECRUITER: ["Publish and edit offers", "Review and advance candidates", "Assessments and analytics"],
-  HIRING_MANAGER: ["Edit offers", "Review and evaluate candidates", "Assessments and analytics"],
+  HR: ["Publish and edit offers", "Review and advance candidates", "Candidate insights and analytics"],
+  RECRUITER: ["Publish and edit offers", "Review and advance candidates", "Candidate insights and analytics"],
+  HIRING_MANAGER: ["Edit offers", "Review and evaluate candidates", "Candidate insights and analytics"],
 };
 
 const ASSIGNABLE_ROLES: CompanyRole[] = ["ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"];

@@ -9,7 +9,6 @@ import {
   FiUser,
   FiGrid,
   FiUsers,
-  FiFileText,
   FiMail,
   FiShield,
   FiTrendingUp,
@@ -44,7 +43,6 @@ export const candidateNavItems: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: FiHome, match: "exact" },
   { label: "Discover", href: "/dashboard/recommendations", icon: FiSearch, match: "prefix" },
   { label: "My Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
-  { label: "Assessments", href: "/dashboard/assessments", icon: FiFileText, match: "prefix" },
   { label: "Practice", href: "/dashboard/missions", icon: FiAward, match: "prefix" },
   { label: "Friends", href: "/dashboard/friends", icon: FiUsers, match: "prefix" },
   { label: "Messages", href: "/chat", icon: FiMessageSquare, match: "prefix" },
@@ -62,7 +60,6 @@ export const companyNavSections: NavSection[] = [
     items: [
       { label: "All Jobs", href: "/company/jobs", icon: FiBriefcase, match: "prefix" },
       { label: "Candidates", href: "/company/candidates", icon: FiUsers, match: "prefix" },
-      { label: "Assessments", href: "/company/assessments", icon: FiFileText, match: "prefix" },
       { label: "Messages", href: "/company/messages", icon: FiMessageSquare, match: "prefix" },
     ],
   },

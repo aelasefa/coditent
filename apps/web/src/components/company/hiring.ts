@@ -4,7 +4,6 @@ export type HiringStage =
   | "Applied"
   | "Screening"
   | "Shortlisted"
-  | "Assessment"
   | "Interview"
   | "Offer"
   | "Rejected"
@@ -14,7 +13,6 @@ export const HIRING_STAGES: HiringStage[] = [
   "Applied",
   "Screening",
   "Shortlisted",
-  "Assessment",
   "Interview",
   "Offer",
 ];
@@ -24,7 +22,6 @@ export function hiringStage(status: string): HiringStage {
   if (s === "applied") return "Applied";
   if (s === "under_review") return "Screening";
   if (s === "shortlisted") return "Shortlisted";
-  if (s === "assessment_required" || s === "assessment_completed") return "Assessment";
   if (s === "interview") return "Interview";
   if (s === "accepted" || s === "offer") return "Offer";
   if (s === "rejected") return "Rejected";

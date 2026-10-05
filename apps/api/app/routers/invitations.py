@@ -102,7 +102,7 @@ def _build_employee_invite_email(company_name: str, role: str, token: str, expir
             <td style="padding:32px 28px 30px;">
               <p style="margin:0 0 9px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:11px;font-weight:700;line-height:1.4;color:#5b765e;letter-spacing:1.8px;text-transform:uppercase;">Join {company_safe}</p>
               <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:32px;font-weight:400;line-height:1.12;color:#192b23;letter-spacing:-1px;">Your next chapter starts with the team.</h1>
-              <p style="margin:14px 0 22px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.65;color:#53665a;"><strong style="color:#192b23;">{company_safe}</strong> invited you to collaborate on CODITENT. Accept the invitation to work with candidates, assessments, recruitment stages, and practical evaluations in one shared workspace.</p>
+              <p style="margin:14px 0 22px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.65;color:#53665a;"><strong style="color:#192b23;">{company_safe}</strong> invited you to collaborate on CODITENT. Accept the invitation to review candidates, coordinate recruitment stages, schedule interviews, and work with your hiring team in one shared workspace.</p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#edf1e9;border:1px solid #cfdbcf;border-radius:12px;">
                 <tr>

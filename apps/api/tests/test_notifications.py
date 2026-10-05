@@ -90,7 +90,6 @@ async def test_disabled_preference_prevents_new_event(db):
     preferences = await notifications.update_notification_preferences(
         NotificationPreferenceUpdate(
             application_updates=False,
-            assessment_updates=True,
             interview_updates=True,
             message_updates=True,
         ),

@@ -30,7 +30,7 @@ const MATRIX: Array<{ capability: string; roles: string[] }> = [
   { capability: "Edit job offers", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
   { capability: "Delete job offers", roles: ["OWNER", "ADMIN"] },
   { capability: "Review and advance candidates", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
-  { capability: "View assessments and insights", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
+  { capability: "View candidates and insights", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
   { capability: "Manage subscription", roles: ["OWNER"] },
 ];
 

@@ -374,9 +374,9 @@ async def test_7_messages_survive_stage_moves(client, flow):
         )
         assert r.status_code == 200, r.text
     # Move through the pipeline: history (timestamps + senders) preserved.
-    for stage in ["interview", "accepted", "assessment_completed"]:
+    for stage in ["shortlisted", "interview", "accepted"]:
         await _set_status(flow["application"].id, stage)
-        # Re-enable chat-gated stages for readability; assessment_completed
+        # Re-enable chat-gated stages for readability; accepted
         # keeps chat enabled as well.
         r = await client.get(f"/chat/recruitment/{flow['application'].id}", headers=auth(flow["cand"]))
         assert r.status_code == 200

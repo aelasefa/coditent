@@ -204,7 +204,7 @@ async def _set_status(application_id, new_status):
 
 @pytest.mark.asyncio
 async def test_stage_gate_allows_post_review_only():
-    for s in ["shortlisted", "assessment_required", "assessment_completed", "interview", "accepted"]:
+    for s in ["shortlisted", "interview", "accepted"]:
         assert is_chat_enabled_for_status(s) is True
     for s in ["applied", "under_review", "rejected", None, "", "withdrawn", "hired"]:
         assert is_chat_enabled_for_status(s) is False

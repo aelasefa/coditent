@@ -11,7 +11,6 @@ from app.models import Notification, NotificationPreference
 
 _PREFERENCE_BY_CATEGORY = {
     "application": "application_updates",
-    "assessment": "assessment_updates",
     "interview": "interview_updates",
     "message": "message_updates",
     "system": None,

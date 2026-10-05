@@ -35,16 +35,14 @@ Use disposable test accounts and non-production candidate data. Record the teste
 2. Publish the offer. Confirm it is discoverable by the candidate and appears in recommendation pagination even when more than 20 matches exist.
 3. Apply as the candidate. Submit twice concurrently or double-click; exactly one application should exist and the second request should return a conflict, not HTTP 500.
 4. Replace the candidate's profile CV after applying. Confirm the application retains its immutable CV snapshot while the profile shows the new version.
-5. Close the offer. Confirm new applications are rejected while the existing application, messages, assessment evidence, and audit history remain.
+5. Close the offer. Confirm new applications are rejected while the existing application, messages, interview feedback, and audit history remain.
 
-## Assessment, interview, and stages
+## Interview and stages
 
-1. As HR, create an assessment with a bounded rubric and expiry, then assign it to the candidate application.
-2. As the candidate, submit evidence before expiry. Confirm grading becomes visibly queued and later produces a bounded score and feedback; no executable submission is run in the application worker.
-3. As HR, review or override the result with a reason. Confirm the audit trail preserves automated and human outcomes.
-4. Attempt to move the application to a stage whose assessment/interview prerequisite is missing; the server must reject it.
-5. Schedule an interview, then add structured feedback as two interviewers. Confirm feedback is private to authorized company users and version conflicts are reported.
-6. Move the application through only allowed transitions. Confirm terminal states cannot transition and concurrent stale updates are rejected.
+1. Move the application from applied to under review, then shortlisted. Confirm skipped and reverse transitions are rejected.
+2. Attempt to move the application to interview without scheduling details; the server must reject it.
+3. Schedule an interview, then add structured feedback as two interviewers. Confirm feedback is private to authorized company users and version conflicts are reported.
+4. Move the application through only allowed transitions. Confirm terminal states cannot transition and concurrent stale updates are rejected.
 
 ## Recruitment chat and authorization revocation
 
@@ -56,7 +54,7 @@ Use disposable test accounts and non-production candidate data. Record the teste
 
 ## Notifications, missions, privacy, and recovery
 
-1. Confirm application, assessment, interview, and message events create owner-scoped notifications. Disable one category and verify the server stops creating it; test read-one and read-all.
+1. Confirm application, interview, and message events create owner-scoped notifications. Disable one category and verify the server stops creating it; test read-one and read-all.
 2. As an administrator, publish a practice mission. Submit candidate evidence, review it, and confirm only administrator-validated skills change the evaluated profile score.
 3. Request a password reset for an existing and nonexistent email. Confirm responses are indistinguishable; use the real single-use link once and verify prior sessions are invalidated.
 4. Reauthenticate and export account data. Inspect that the export contains the user's data but no password hashes, OTPs, TOTP secrets, invitation tokens, or provider credentials.

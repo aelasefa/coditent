@@ -763,44 +763,6 @@ export async function getApplications(): Promise<{ applications: { id: string; s
   const { data } = await api.get("/applications");
   return data;
 }
-export async function getAssessments(): Promise<{ assessments: import("@/lib/types").AssessmentItem[] }> {
-  const { data } = await api.get<{ assessments: import("@/lib/types").AssessmentItem[] }>("/assessments");
-  return data;
-}
-
-export async function createAssessment(payload: {
-  application_id: string;
-  title: string;
-  description: string;
-  rubric: string[];
-  max_score?: number;
-  due_at?: string | null;
-}): Promise<import("@/lib/types").AssessmentItem> {
-  const { data } = await api.post<import("@/lib/types").AssessmentItem>("/assessments", payload);
-  return data;
-}
-
-export async function submitAssessment(
-  id: string,
-  submissionText: string
-): Promise<import("@/lib/types").AssessmentItem> {
-  const { data } = await api.post<import("@/lib/types").AssessmentItem>(
-    `/assessments/${id}/submit`,
-    { submission_text: submissionText }
-  );
-  return data;
-}
-
-export async function reviewAssessment(
-  id: string,
-  payload: { expected_version: number; score: number; feedback: string }
-): Promise<import("@/lib/types").AssessmentItem> {
-  const { data } = await api.patch<import("@/lib/types").AssessmentItem>(
-    `/assessments/${id}/review`,
-    payload
-  );
-  return data;
-}
 export async function getAuditLogs(): Promise<{ logs: { id: string; action: string; details: string | null; created_at: string }[] }> {
   const { data } = await api.get("/audit");
   return data;
@@ -918,11 +880,6 @@ export async function retryApplicationScreening(
   id: string
 ): Promise<{ id: string; ai_status: string }> {
   const { data } = await api.post(`/applications/${id}/screen`);
-  return data;
-}
-
-export async function getAssessment(id: string): Promise<import("@/lib/types").AssessmentItem> {
-  const { data } = await api.get(`/assessments/${id}`);
   return data;
 }
 

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
-from app.models import AIJob, Assessment
+from app.models import AIJob
 from app.services.ai_controls import AIAdmissionError, ai_capacity
 from app.services.ai_jobs import (
     AIJobLeaseLostError,
@@ -56,11 +56,6 @@ async def _perform_job(db: AsyncSession, job: AIJob) -> dict[str, Any]:
             commit=False,
         )
         return {"recommendation_count": len(rows)}
-
-    if job.kind == "assessment_grade" and job.resource_id:
-        from app.services.assessment_grading import grade_assessment
-
-        return await grade_assessment(db, job.resource_id, commit=False)
 
     raise ValueError("AI_JOB_KIND_INVALID")
 
@@ -196,20 +191,6 @@ async def execute_ai_job(
                     error_code=_safe_error_code(exc),
                     retryable=True,
                 )
-                if (
-                    outcome == "failed"
-                    and job.kind == "assessment_grade"
-                    and job.resource_id is not None
-                ):
-                    assessment = (
-                        await db.execute(
-                            select(Assessment).where(Assessment.id == job.resource_id)
-                        )
-                    ).scalar_one_or_none()
-                    if assessment is not None and assessment.status in {"submitted", "grading"}:
-                        assessment.status = "submitted"
-                        assessment.grading_status = "failed"
-                        await db.commit()
                 return outcome
             except AIJobLeaseLostError:
                 return "lease_lost"

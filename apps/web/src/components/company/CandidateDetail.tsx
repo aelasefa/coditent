@@ -10,14 +10,12 @@ import { AiScore } from "./CandidateCard";
 import { candidateName, jobTitleFor } from "./hiring";
 import { createInterviewFeedback, getApiBaseUrl, getMe, listInterviewFeedback, retryApplicationScreening, updateInterviewFeedback } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import type { ApplicationItem, AssessmentItem, InterviewRecommendation } from "@/lib/types";
+import type { ApplicationItem, InterviewRecommendation } from "@/lib/types";
 
 const NEXT_STAGES: Record<string, string[]> = {
   applied: ["under_review", "rejected"],
   under_review: ["shortlisted", "interview", "rejected"],
   shortlisted: ["interview", "rejected"],
-  assessment_required: ["assessment_completed", "rejected"],
-  assessment_completed: ["interview", "accepted", "rejected"],
   interview: ["accepted", "rejected"],
   accepted: [],
   rejected: [],
@@ -48,7 +46,6 @@ function dateTime(iso?: string | null): string {
 export function CandidateDetail({
   app,
   jobTitle,
-  assessment,
   canMoveStage,
   stagePending,
   chatUnlocked,
@@ -57,7 +54,6 @@ export function CandidateDetail({
 }: {
   app: ApplicationItem;
   jobTitle: string;
-  assessment?: AssessmentItem | null;
   canMoveStage: boolean;
   stagePending: boolean;
   chatUnlocked: boolean;
@@ -322,8 +318,8 @@ export function CandidateDetail({
               ),
             },
             {
-              id: "assessments",
-              label: "Assessments",
+              id: "screening",
+              label: "Screening",
               content: (
                 <div className="space-y-4">
                   <div className="mb-4 rounded-xl border border-border-subtle p-3">
@@ -356,36 +352,6 @@ export function CandidateDetail({
                     </p>
                   )}
                 </div>
-                  {assessment ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <StatusBadge status={assessment.status} size="sm" />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Objective score</span>
-                    <span className="font-bold text-foreground">
-                      {typeof assessment.score === "number" ? assessment.score : "Pending evaluation"}
-                    </span>
-                  </div>
-                  {assessment.report ? (
-                    <div className="rounded-lg bg-surface-secondary/50 p-3">
-                      <p className="text-xs font-semibold text-foreground">AI analysis</p>
-                      <p className="mt-1 text-[13px] leading-relaxed text-foreground-secondary">{assessment.report}</p>
-                    </div>
-                  ) : (
-                    <p className="text-[13px] text-muted-foreground">No AI analysis recorded for this assessment.</p>
-                  )}
-                  {app.ai_report ? (
-                    <div className="rounded-lg bg-surface-secondary/50 p-3">
-                      <p className="text-xs font-semibold text-foreground">Application AI note</p>
-                      <p className="mt-1 text-[13px] text-foreground-secondary">{app.ai_report}</p>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No practical assessment registered for this application.</p>
-              )}
                 </div>
               ),
             },

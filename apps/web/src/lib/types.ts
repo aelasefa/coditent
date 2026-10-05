@@ -282,7 +282,7 @@ export interface ApplicationItem {
   candidate_id: string;
   opportunity_id: string;
   company_id?: string | null;
-  status: "applied" | "under_review" | "shortlisted" | "assessment_required" | "assessment_completed" | "interview" | "accepted" | "rejected" | string;
+  status: "applied" | "under_review" | "shortlisted" | "interview" | "accepted" | "rejected" | string;
   stage_version: number;
   chat_enabled?: boolean;
   cv_url?: string | null;
@@ -339,32 +339,6 @@ export interface RecruitmentChatListItem {
   peer?: RecruitmentPeer | null;
   last_message?: string | null;
   last_at?: string | null;
-}
-
-export interface AssessmentItem {
-  id: string;
-  application_id?: string;
-  candidate_id?: string;
-  created_by?: string | null;
-  title?: string;
-  description?: string | null;
-  status: "assigned" | "submitted" | "grading" | "graded" | "reviewed" | "expired" | string;
-  rubric: string[];
-  max_score: number;
-  due_at?: string | null;
-  grading_status: "not_started" | "queued" | "processing" | "completed" | "failed" | string;
-  score?: number | null;
-  report?: string | null;
-  feedback?: string | null;
-  submitted_at?: string | null;
-  reviewed_by?: string | null;
-  reviewed_at?: string | null;
-  version: number;
-  updated_at?: string;
-  ai_job_id?: string | null;
-  created_at?: string;
-  candidate?: User;
-  application?: ApplicationItem;
 }
 
 export interface EmployeeInvitation {
@@ -447,7 +421,7 @@ export interface TeamMember {
   is_approved?: boolean;
 }
 
-export type NotificationCategory = "application" | "assessment" | "interview" | "message" | "system";
+export type NotificationCategory = "application" | "interview" | "message" | "system";
 
 export interface ProductNotification {
   id: string;
@@ -472,7 +446,6 @@ export interface NotificationPage {
 export interface NotificationPreferences {
   user_id: string;
   application_updates: boolean;
-  assessment_updates: boolean;
   interview_updates: boolean;
   message_updates: boolean;
   updated_at?: string | null;

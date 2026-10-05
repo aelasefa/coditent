@@ -46,10 +46,10 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 | B02 | FIXED_VERIFIED | Typed `CompanyOut`; owner assigned only after user flush; repair logic avoids ambiguous ownership | company invitation/admin tests | Review any ambiguous legacy owner rows manually |
 | B03 | FIXED_VERIFIED | Current `COMPANY_USER` membership/roles used consistently; legacy recruiter role read-only compatibility | RBAC/request/company tests | None |
 | B04 | FIXED_VERIFIED | Offers close instead of erasing recruitment history; inactive/expired rejection; unique concurrent application handling | offer/application lifecycle tests | Retention policy approval for production timelines |
-| B05 | FIXED_VERIFIED | Transition graph, required assessment/interview evidence, row lock/version conflicts, terminal states, structured interview feedback | assessment/interview/application tests | None |
+| B05 | FIXED_VERIFIED | Transition graph, required interview evidence, row lock/version conflicts, terminal states, structured interview feedback | interview/application tests | None |
 | B06 | EXTERNAL_PENDING | Correct JPEG CID assets; encrypted durable invitation/recovery/registration/email-change outbox with atomic domain intent, code expiry, supersession, leases, retries, idempotency, and visible state | `test_email_outbox.py`, `test_async_email_routes.py`, invitation/recovery/OTP tests | Configure and smoke-test outbox key/Resend in the deployment secret manager |
 | B07 | EXTERNAL_PENDING | Upload-first/commit-reference/cleanup-old ordering for CV/logo/avatar; immutable application CV snapshots | asset lifecycle/logo/avatar tests | Authorized Storage failure smoke test |
-| B08 | FIXED_VERIFIED | Transactional AI outbox, atomic claims, leases, bounded retry, crash recovery, fingerprints/stale rejection, shared validated contracts | `test_ai_jobs.py`, assessment/match suites | None |
+| B08 | FIXED_VERIFIED | Transactional AI outbox, atomic claims, leases, bounded retry, crash recovery, fingerprints/stale rejection, shared validated contracts | `test_ai_jobs.py`, screening/match suites | None |
 | B09 | FIXED_VERIFIED | Stable cursor pagination beyond 100, Redis cross-process fan-out/read receipts, direct/recruitment separation and one application conversation | chat history/realtime/no-duplicate/read suites | None |
 | B10 | FIXED_VERIFIED | Bounded Pydantic create/patch schemas and explicit responses; full offer fields/lifecycle exposed; frontend types aligned | OpenAPI/typecheck and offer tests | Automated generated client remains optional |
 | B11 | FIXED_VERIFIED | Separate live/ready; DB/Redis/worker/dispatcher checks; helpers fail closed; CI starts disposable PostgreSQL/Redis and runs API files | health/deployment tests and workflow inspection | Public production readiness smoke at deploy |
@@ -61,7 +61,6 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 
 | Workstream | Status | Evidence | External action |
 |---|---|---|---|
-| Practical assessments | FIXED_VERIFIED | Assignment/rubric/submission/expiry/durable async grade/HR review+override/audit; `test_assessment_workflow.py` | Isolated runner required before accepting executable submissions; current flow never executes code |
 | Practice missions | FIXED_VERIFIED | Admin authoring/review UI and API, field/level attempts/progress, evidence-backed validated skills; `test_social_missions.py` | None |
 | Interview scheduling/feedback | FIXED_VERIFIED | Versioned scheduling plus per-interviewer structured private feedback UI/API; `test_interview_feedback.py` | Calendar integration only if later authorized |
 | Notifications/preferences | FIXED_VERIFIED | Durable owner-scoped notifications, unread/read-all/pagination, server-enforced preferences, candidate/company UI; `test_notifications.py` | Push/email notifications are not claimed |
@@ -77,14 +76,14 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 
 - Registration race regressions: `2 passed`; password upgrade/change: `2 passed`.
 - Upload/parser/logo/CV suites: 36 + 16 + 5 + 2 focused cases passed; owner-bound CV broad set passed.
-- AI/CV/match focused broad run: `75 passed`; assessment/AI/CV/match run: `26 passed`.
+- AI/CV/match focused broad run: `75 passed`.
 - Admin/MFA/invitation/avatar focused run: `18 passed`; durable email outbox set: `8 passed`.
-- Entitlement/recovery/email set: `5 passed`; notifications: `3 passed`; assessments: `3 passed`.
+- Entitlement/recovery/email set: `5 passed`; notifications: `3 passed`.
 - Recruitment access/message/read subset after Redis loop isolation fix: `4 passed`.
 - Interview feedback: `2 passed`; account privacy + interview: `5 passed`; institutions: `2 passed`.
 - Practice mission authoring/review: `3 passed`; durable expiring email delivery/route set: `6 passed`.
 - Frontend: repeated `npx tsc --noEmit` passed; ESLint reports `0 errors, 21 pre-existing warnings`.
-- Migrations applied through `y1a2b3c4d5e6 (head)` on the configured development database.
+- Migrations applied through `z1a2b3c4d5e6 (head)` on the configured development database.
 - Disposable PostgreSQL 18 backup/restore drill: `Backup and restore drill passed` with checksum validation.
 - `python -m compileall` and `git diff --check` pass after each workstream.
 
@@ -92,4 +91,4 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 
 Set only through the deployment secret manager, using generated values: `DATABASE_URL`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `EMAIL_OUTBOX_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, OAuth client secrets, Supabase URL/service key, Redis URL, and production HTTPS origins. Follow `docs/security/secret-rotation.md` and `docs/operations/backup-restore-rollback.md`. Do not reuse historical values or place them in tracked files.
 
-Run the end-to-end role, invitation, hiring, assessment, stage, chat, privacy, and recovery checks in `docs/operations/manual-hiring-e2e.md` against the exact release commit.
+Run the end-to-end role, invitation, hiring, stage, chat, privacy, and recovery checks in `docs/operations/manual-hiring-e2e.md` against the exact release commit.

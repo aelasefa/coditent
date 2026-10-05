@@ -48,7 +48,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 17. [Chat system](#chat-system)
 18. [AI architecture](#ai-architecture)
 19. [Recommendation system](#recommendation-system)
-20. [Assessments / practice missions](#assessments--practice-missions)
+20. [Practice missions](#practice-missions)
 21. [Company logo](#company-logo)
 22. [Running CODITENT](#running-coditent)
 23. [Complete user flows](#complete-user-flows)
@@ -171,7 +171,7 @@ flowchart TD
     API --> RL[slowapi - auth/OTP rate limits]
     API --> AuthZ[get_current_user - Bearer first + access_token cookie fallback]
     AuthZ --> Gates[require_* gates + can role,action matrix]
-    Gates --> Routers[12 routers - auth/candidates/offers/recommendations/companies/requests/invites/applications/assessments/audit/chat/admin]
+    Gates --> Routers[Auth, candidate, company, hiring, messaging, and admin routers]
     Routers --> Services[Services: ai/screening/cv_parser/cv_extraction/cv_storage/company_logo/email/recruitment_chat/match_scoring/recommendation_jobs]
     Services --> PG[(Supabase Postgres - SQLAlchemy asyncpg - PgBouncer-safe)]
     Services --> CVStore[(Storage bucket candidate-cvs - private)]
@@ -330,7 +330,7 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 ## Backend architecture
 
 - **Framework/entry:** FastAPI (`apps/api/app/main.py`, `title="CODITENT API"`), Python 3.12 (`apps/api/Dockerfile`, CI `setup-python 3.12`). Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001`. `GET /health` is process liveness only; Compose and deployment gates poll `GET /ready`, which checks PostgreSQL, Redis, and a TTL-backed Celery worker heartbeat with bounded timeouts.
-- **Routers:** 12 mounted with prefixes in `main.py:45-56` (`/auth`, `/candidates`, `/offers`, `/recommendations`, `/companies`, `/requests`, `/invites`, `/applications`, `/assessments`, `/audit`, `/chat`, admin without prefix).
+- **Routers:** FastAPI routers are mounted in `main.py` for authentication, candidates, offers, recommendations, companies, requests, invitations, applications, audit, chat, notifications, missions, institutions, and administration.
 - **AuthN:** `get_current_user` (`dependencies.py:20-48`) — `HTTPBearer(auto_error=False)` first, `access_token` cookie fallback; `sub`→UUID→`users` row. OpenAPI Bearer scheme so Swagger "Authorize" works.
 - **AuthZ gates** (`dependencies.py:51-177`): `require_platform_admin`, `require_company_user`, `require_company_owner`, `require_company_admin` (OWNER/ADMIN), `require_company_member` (all 5 company roles), `require_candidate`, `require_candidate_account` (strict), `require_recruiter` (COMPANY_USER-approved or legacy), `require_admin` (PLATFORM_ADMIN + legacy ADMIN compat). Write paths double-gate (dependency + `can()`).
 - **Validation:** Pydantic `schemas.py` (357 lines) + `sanitize_input_text` validators on profile/offer text; UUID parsing; `401` unauthenticated only, `403` wrong role/scope/approval, `404` miss *or deliberate isolation* (same "not found" to avoid leaking cross-company existence).
@@ -386,7 +386,6 @@ Recruiter sees score via GET /applications (company join, view_applications gate
 | `candidate_requests` (`models.py:230-247`) | Company→candidate outreach | UUID `id` | `candidate_id` CASCADE, `company_id` CASCADE, `recruiter_id` SET NULL; `message`; `status` enum default `pending` (no pair-unique — duplicates possible) | M2O candidate/company/recruiter |
 | `chat_messages` (`models.py:250-289`) | All messages; `application_id` NULL = legacy general chat | UUID `id` | `sender_id/receiver_id` CASCADE; `application_id` CASCADE NULL; `content` Text | M2O sender/receiver/application |
 | `applications` (`models.py:292-316`) | Candidate application + AI screening result | UUID `id` | `candidate_id` CASCADE, `opportunity_id` CASCADE, `company_id` NULL; `status` free String default `applied`; `cv_url/cover_letter` NULL; `ai_score/ai_report` NULL; `ai_status` default `pending`; UQ pair | M2O candidate/opportunity/company |
-| `assessments` (`models.py:319-338`) | Assessment rows (read-only API) | UUID `id` | `application_id` CASCADE, `candidate_id` CASCADE, `created_by` NULL; `title`; `status` default `pending`; `score/report` NULL (no writer in `app/`) | M2O application/candidate |
 | `admin_activity_logs` (`models.py:341-351`) | Append-only audit | UUID `id` | `action(80)`, `admin_id` FK, `admin_email` (denormalized), `target_user_id` UUID NULL **no FK** (can dangle), `target_user_email`, `details` | M2O admin only |
 | `company_invitations` (raw SQL) | Platform→company invites | `id` | email, company_name, token_hash UNIQUE, status, invited_by, company_id NULL, expires_at (7 d), accepted/revoked_at | No ORM relations |
 | `employee_invitations` (raw SQL) | Owner→employee invites | `id` | email, company_id NOT NULL CASCADE, role NOT NULL, token_hash UNIQUE, expires_at (72 h) | No ORM relations |
@@ -408,7 +407,7 @@ Offer
  ├── SavedRecommendation (1-M) + Application (1-M via opportunity_id)
  └── responsible_hr (→ users.id; fallback created_by → recruiter_id)
 Application (= one logical recruitment conversation)
- ├── ChatMessage (1-M via application_id) + Assessment (1-M)
+ ├── ChatMessage (1-M via application_id)
  └── CandidateRequest is separate (company→candidate outreach, not application-bound)
 ```
 
@@ -446,7 +445,6 @@ offers.recruiter_id(-)/.created_by(*,-)/.responsible_hr_id(*,-) → users; offer
 saved_recommendations [UQ pair](-,-) → users + offers
 candidate_requests → users(C) + companies(C); recruiter_id(*,N) → users
 applications [UQ pair] → users(C) + offers(C); company_id(*,-) → companies
-assessments → applications(C) + users(C); created_by(*,-) → users
 chat_messages → users(C) + users(C) + applications(C, nullable)
 admin_activity_logs.admin_id(-) → users; target_user_id: no FK
 ```
@@ -558,7 +556,7 @@ No logout / refresh / password-reset endpoints — NOT IMPLEMENTED (frontend cle
 | GET | `/applications/{id}/cv` | Application CV stream | scoped (candidate owner / same-company / admin) |
 | POST | `/applications` | Apply `{opportunity_id, cv_url?, cover_letter?}` → 400 "Already applied" on dup (UQ backstop); `company_id` from offer; audit + queue `applications.screen`. No withdraw endpoint | CANDIDATE only (403 else) |
 | POST | `/applications/{id}/screen` | Reset to pending + requeue screening (`processing` short-circuits) | COMPANY_USER + `evaluate_candidates` same-company; PLATFORM_ADMIN |
-| PATCH | `/applications/{id}` | Stage change (7-value allowlist: `under_review, shortlisted, assessment_required, assessment_completed, interview, accepted, rejected`; free jumping allowed); audit (`APPLICATION_STATUS_CHANGED` / `CANDIDATE_SHORTLISTED` / `CANDIDATE_REJECTED` / `RECRUITMENT_CHAT_ENABLED` on chat-stage entry) | PLATFORM_ADMIN wide or COMPANY_USER + `move_recruitment_stage` same-company; CANDIDATE always 403 |
+| PATCH | `/applications/{id}` | Versioned stage transition through `applied → under_review → shortlisted → interview → accepted/rejected`; interview scheduling evidence is required; audit + candidate notification | PLATFORM_ADMIN wide or COMPANY_USER + `move_recruitment_stage` same-company; CANDIDATE always 403 |
 
 ### Recommendations (`routers/recommendations.py`, prefix `/recommendations`)
 
@@ -570,15 +568,6 @@ No logout / refresh / password-reset endpoints — NOT IMPLEMENTED (frontend cle
 | GET | `/recommendations/by-offer/{offer_id}` | Single match row | candidate owner |
 | GET | `/recommendations/config-status` | AI provider configured? (no secret leakage) | candidate |
 | GET | `/recommendations` | Ranked `SavedRecommendation`s; auto-inserts `ai_score=0` **pending placeholder** rows for unscored active offers | candidate (own rows) |
-
-### Assessments (`routers/assessments.py`, prefix `/assessments`) — read-only
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/assessments` | Sparse list (`{id,status[,score]}`): admin wide, candidate own, company via offer join + `view_assessments` | role-branched |
-| GET | `/assessments/{id}` | Sparse detail with ownership/company checks (404 isolation) | role-branched |
-
-Create / assign / submit / score / delete: NOT IMPLEMENTED (no writers in `app/`).
 
 ### Chat (`routers/chat.py`, prefix `/chat`)
 
@@ -673,11 +662,10 @@ Real matrix (`app/core/permissions.py:18-33`, mirrored in `web/src/lib/permissio
 | view_applications | ✓ | ✓ | ✓ | ✓ | ✓ |
 | evaluate_candidates | ✓ | ✓ | ✓ | ✓ | ✓ |
 | move_recruitment_stage | ✓ | ✓ | ✓ | ✓ | ✓ |
-| view_assessments | ✓ | ✓ | ✓ | ✓ | ✓ |
 | company_analytics | ✓ | ✓ | ✓ | ✓ | ✓ |
 | manage_subscription | ✓ | — | — | — | — |
 
-Enforcement: `require_*` dependency (platform role + membership) **plus** `can(company_role, action)` in the handler; cross-company/cross-candidate access returns `404` (not 403) to avoid leaking existence (`companies.py:124-125,139-140` member scoping + logo endpoints `212-213,267-268`; `offers.py` scoped reads; `applications.py` role shapes; `assessments.py:56-61`; `chat.py` 404-vs-403 docstring). Backend authorization is the security boundary; frontend `lib/permissions.ts` is UX-only (hides buttons, never trusted).
+Enforcement: `require_*` dependency (platform role + membership) **plus** `can(company_role, action)` in the handler; cross-company/cross-candidate access returns `404` (not 403) to avoid leaking existence. Backend authorization is the security boundary; frontend `lib/permissions.ts` is UX-only (hides buttons, never trusted).
 
 ---
 
@@ -721,11 +709,10 @@ flowchart TD
     Screen --> Review[Recruiter reviews - GET /applications - view_applications]
     Review --> Stage[Stage change - PATCH /applications - move_recruitment_stage]
     Stage --> Chat{Stage chat-enabled?}
-    Chat -->|shortlisted/assessment_*/interview/accepted| Talk[Recruitment chat - REST + WS]
+    Chat -->|shortlisted/interview/accepted| Talk[Recruitment chat - REST + WS]
     Chat -->|applied/under_review/rejected| Locked[Chat locked]
-    Stage --> Assess[Assessment - read-only GET - assign/submit NOT IMPLEMENTED]
-    Stage --> Interview[interview = status string only - scheduling NOT IMPLEMENTED]
-    Stage --> Hire[accepted/rejected - audit only, no notifications]
+    Stage --> Interview[Interview scheduling and structured feedback]
+    Stage --> Hire[Accepted/rejected with candidate notification]
 ```
 
 | Step | Frontend | API call | Backend | DB | State |
@@ -735,11 +722,11 @@ flowchart TD
 | Apply | job-details apply | `POST /applications` (no `createApplication` helper — direct call) | `applications.py:289` CANDIDATE-only; 400 dup; UQ backstop | INSERT `applications` (`company_id` from offer) | `applied`, screening queued |
 | Screening | application detail (`ai_status`) | auto + `POST /applications/{id}/screen` | `screen_application_task` → `screening.py` | `ai_score/ai_report/ai_status` | `pending→processing→completed\|failed` |
 | Review | company candidates | `GET /applications` | join + scores, same-company | read | — |
-| Stage | pipeline UI | `PATCH /applications/{id}` | 7-value allowlist, free jumping; audit | status update | any of 8 statuses |
-| Chat | chat workspace / RecruitmentThread | `/chat/recruitment*` + WS | stage gate + responsible-HR gate | `chat_messages` rows | enabled only in 5 stages |
+| Stage | pipeline UI | `PATCH /applications/{id}` | transition graph + optimistic version; audit | status update | applied/review/shortlist/interview/decision |
+| Chat | chat workspace / RecruitmentThread | `/chat/recruitment*` + WS | stage gate + responsible-HR gate | `chat_messages` rows | enabled after shortlisting and through accepted |
 | Hire/reject | pipeline | same PATCH → `accepted/rejected` | audit only | status update | no notifications |
 
-Backend has **no stage state machine** — `applications.status` is a free String; the only enforced rule is the 7-value allowlist on PATCH. Chat unlock is stage-derived (`CHAT_ENABLED_STATUSES` in `recruitment_chat.py:28-36`), not event-driven.
+The backend enforces the transition graph and optimistic stage versions in the application router. Chat unlock is stage-derived (`CHAT_ENABLED_STATUSES`), not event-driven.
 
 ---
 
@@ -749,7 +736,7 @@ Backend has **no stage state machine** — `applications.status` is a free Strin
 flowchart TD
     Stage[Application status] --> Gate{is_chat_enabled_for_status?}
     Gate -->|applied/under_review/rejected| No[chat_enabled=false - [] + no peer]
-    Gate -->|shortlisted/assessment_required/assessment_completed/interview/accepted| Auth{can_access_recruitment_chat}
+    Gate -->|shortlisted/interview/accepted| Auth{can_access_recruitment_chat}
     Auth -->|CANDIDATE = application.candidate_id| PeerHR[peer = responsible_hr - offer.responsible_hr_id → created_by → recruiter_id]
     Auth -->|COMPANY_USER = responsible HR + same company + view_applications| PeerC[peer = candidate]
     Auth -->|anyone else incl. platform admins| Deny[deny - 404/403]
@@ -809,12 +796,9 @@ flowchart TD
 
 ---
 
-## Assessments / practice missions
+## Practice missions
 
-- **Implemented:** model (`assessments` table: `application_id` CASCADE, `candidate_id` CASCADE, `created_by` NULL, `title`, `status` default `pending`, `score/report` NULL) + two read-only GETs (`assessments.py:16-73`) with role/company/ownership scoping returning sparse `{id,status[,score]}`.
-- **Not implemented:** create, assign, submit answers, scoring, status updates, delete, deadlines, questions, attempts. `status/score/report` columns exist but no writer was found in `app/`.
-- **Interview:** only the `interview` status string exists. No scheduling, slots, location/link, interviewer, feedback, reschedule, cancel, or notifications anywhere in backend or migrations — explicitly NOT IMPLEMENTED.
-- Trace (as far as code goes): recruiter sets `PATCH /applications/{id}` → `assessment_required` → (nothing creates an assessment row) → candidate `GET /assessments` reads whatever sparse rows exist → UI tabs render them.
+Practice missions are candidate-owned learning exercises and are separate from the hiring pipeline. Candidates can submit evidence, and authorized reviewers can review attempts and validate skills.
 
 ---
 
@@ -926,10 +910,6 @@ See [example in Frontend↔backend](#how-frontend-and-backend-communicate). File
 
 Pipeline UI → `PATCH /applications/{id}` (`applications.py:346`) → allowlist check → audit (+ chat-enabled audit on stage entry). No notifications.
 
-### Assessment
-
-`GET /assessments` → sparse rows only. Creation/submission/scoring: NOT IMPLEMENTED.
-
 ### Recommendation generation
 
 See [Recommendation system](#recommendation-system). Files: `dashboard/*`, `routers/recommendations.py:38-80`, `tasks.py:29-87`, `services/recommendation_jobs.py`, `services/ai.py`.
@@ -948,7 +928,7 @@ NOT IMPLEMENTED as a product system: no notification table/channel/hooks for app
 
 ### Candidate features — Implemented
 
-Registration + OTP verify/resend, login, SSO (Google/LinkedIn), onboarding steps, profile builder, avatar, CV upload/meta/download/delete/parse, recommendations (generate/poll/score/by-offer/list), offer browse/detail, apply, application list/detail/CV view, stage + `ai_status` tracking, stage-gated chat (REST + WS + polling), requests inbox (accept/reject), assessments read.
+Registration + OTP verify/resend, login, SSO (Google/LinkedIn), onboarding steps, profile builder, avatar, CV upload/meta/download/delete/parse, recommendations (generate/poll/score/by-offer/list), offer browse/detail, apply, application list/detail/CV view, stage + `ai_status` tracking, stage-gated chat (REST + WS + polling), requests inbox (accept/reject), and practice missions.
 
 ### Company features — Implemented
 
@@ -956,7 +936,7 @@ Invitation accept, employee invites + team list/role-change/remove, company CRUD
 
 ### Recruiter/HR features — Implemented
 
-Same as company features scoped by `responsible_hr_id` for chat; all recruitment roles share view/evaluate/move/assess/analytics; only OWNER/ADMIN administer.
+Same as company features scoped by `responsible_hr_id` for chat; all recruitment roles share view/evaluate/move/analytics; only OWNER/ADMIN administer.
 
 ### Admin features — Implemented
 
@@ -978,7 +958,6 @@ bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require
 
 ## Planned / incomplete features
 
-- Assessments: model + read-only GETs exist; create/assign/submit/score/delete NOT IMPLEMENTED (`assessments.py` has 2 GETs, no writers).
 - Interviews: status string only; scheduling/detail/feedback NOT IMPLEMENTED.
 - Notifications (in-app/email/push) for product events: NOT IMPLEMENTED (audit + emails for invites/OTP only).
 - Public company self-registration; ownership transfer; org deletion: NOT IMPLEMENTED.
@@ -1044,7 +1023,7 @@ Previous README claimed 12 pts including the full User-mgmt major "needs friends
   cd apps/api && python -m pytest tests/ -v                        # live suites need localhost:8001 + Supabase
   cd apps/web && npm run lint && npm run build
   ```
-- **Coverage (from code):** auth/OTP/RBAC/isolation/offers/applications-dup/CV/chat-gates/invitations COVERED; screening trigger + recommendations generate PARTIAL (manually verified, no committed end-to-end AI test); admin happy paths PARTIAL; assessments read-only PARTIAL; notifications NOT COVERED (nothing to cover).
+- **Coverage (from code):** auth/OTP/RBAC/isolation/offers/applications-dup/CV/chat-gates/invitations COVERED; screening trigger + recommendations generate PARTIAL; admin happy paths PARTIAL.
 
 ---
 
@@ -1149,7 +1128,7 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 - Gemini model name drift risk (`gemini-3-flash-preview` pinned in 3 backend files + frontend bio REST; a 404 requires a coordinated bump).
 - Legacy `RECRUITER`/`ADMIN` roles readable but deprecated; several compat paths drift (M4/M7/M8 mismatches + B3/B4).
 - No zero-downtime deploys (compose rebuild restarts API; in-flight requests dropped).
-- Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns unenforceable at DB level; dangerous cascades (deleting a User/Offer cascades applications → assessments + messages; deleting a User wipes sent/received messages and requests).
+- Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns require application-level validation; deleting a User can cascade applications and messages.
 - `apps/apps/web/` nested copy appears unused — TO-VERIFY, do not rely on it.
 
 ---
@@ -1195,15 +1174,14 @@ Study in this order (files are exact):
 18. How are logos stored? — Same pattern, separate `company-logos` bucket, path `{company_id}/{uuid}.{ext}`, served via public scoped stream (never raw bucket URLs).
 19. What validates uploads? — Extension + MIME + magic bytes + size (CV 5 MB/413; logo 2 MB/400+413 gate), both sides, backend authoritative.
 20. How does the WS stay in sync? — In-memory fan-out + per-message re-auth + `ready/message/error` frames + 4401/4403/4404 closes + 3 s polling fallback; single-replica only.
-21. How are stages moved? — `PATCH /applications/{id}` with 7-value allowlist, free jumping, audit per transition; no state machine, no notifications.
-22. When does chat unlock? — Crossing into `shortlisted/assessment_required/assessment_completed/interview/accepted` (`CHAT_ENABLED_STATUSES`); `rejected` locks again.
+21. How are stages moved? — `PATCH /applications/{id}` uses an explicit transition graph, optimistic versions, evidence validation, audit, and notifications.
+22. When does chat unlock? — Crossing into `shortlisted`, `interview`, or `accepted` (`CHAT_ENABLED_STATUSES`); `rejected` locks again.
 23. What does `GET /recommendations` do besides listing? — Inserts `0`-score pending placeholders for unscored active offers (why Discover shows "en attente").
 24. What does offer create/toggle bust? — `recommendations:*` Redis keys (`_bust_recommendation_cache`, `offers.py:54-63`), forcing the next Generate to rescan.
 25. How long do caches/jobs live? — Result cache 900 s (`recommendation_cache_ttl_seconds`), job keys 3600 s; invites 7 d / 72 h; OTP 10 min / 5 attempts / 60 s cooldown.
-26. How are assessments stored vs served? — Full columns in `assessments`, but API returns sparse `{id,status[,score]}`; no writers exist.
 27. Can a candidate message any HR? — No: only the responsible HR of an application in a chat-enabled stage; receiver derived server-side.
 28. What can a platform admin do that a company OWNER cannot? — Platform invites, user/offer moderation, stats, impersonation, cross-company reads; admins are denied recruitment chats and employee-invite paths.
-29. What can HIRING_MANAGER do? — View + edit offers + view/evaluate/move + assessments/analytics; cannot create/delete offers, edit company, invite, or manage members/subscription.
+29. What can HIRING_MANAGER do? — View + edit offers + view/evaluate/move + analytics; cannot create/delete offers, edit company, invite, or manage members/subscription.
 30. How does SSO link accounts? — Email match links existing users (+profile backfill); new emails get onboarding cookie → candidate-only completion; never creates company roles.
 31. Where is the Bearer token stored? — `localStorage coditent_token` (`lib/constants.ts`); backend ignores that name and reads `Authorization` header or its own `access_token` cookie.
 32. How are errors surfaced? — `HTTPException` codes (400/401/403/404-isolation/409/410/413/422/429/500/502/503/504) + interceptor logout/redirect + toasts on logo/chat/CV actions.

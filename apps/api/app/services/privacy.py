@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
     AccountDeletionRequest,
     Application,
-    Assessment,
     CandidateProfile,
     CandidateRequest,
     ChatMessage,
@@ -57,9 +56,6 @@ async def build_account_export(db: AsyncSession, user: User) -> dict[str, Any]:
     ).scalar_one_or_none()
     applications = list(
         (await db.execute(select(Application).where(Application.candidate_id == user.id))).scalars()
-    )
-    assessments = list(
-        (await db.execute(select(Assessment).where(Assessment.candidate_id == user.id))).scalars()
     )
     attempts = list(
         (await db.execute(select(MissionAttempt).where(MissionAttempt.candidate_id == user.id))).scalars()
@@ -137,10 +133,6 @@ async def build_account_export(db: AsyncSession, user: User) -> dict[str, Any]:
         "applications": [
             _record(item, ("id", "opportunity_id", "status", "cover_letter", "interview_scheduled_at", "created_at", "updated_at"))
             for item in applications
-        ],
-        "assessments": [
-            _record(item, ("id", "application_id", "title", "submission_text", "submitted_at", "status", "score", "feedback", "reviewed_at", "created_at"))
-            for item in assessments
         ],
         "practice_attempts": [
             _record(item, ("id", "mission_id", "attempt_number", "evidence", "status", "score", "validated_skills", "feedback", "created_at"))
@@ -261,7 +253,6 @@ async def execute_deletion(db: AsyncSession, request_id: UUID, worker_id: str) -
         asset.content_type = "application/octet-stream"
         asset.size_bytes = None
     await db.execute(update(Application).where(Application.candidate_id == user.id).values(cv_url=None, cover_letter=None))
-    await db.execute(update(Assessment).where(Assessment.candidate_id == user.id).values(submission_text=None))
     await db.execute(update(MissionAttempt).where(MissionAttempt.candidate_id == user.id).values(evidence="[deleted by account owner]"))
     await db.execute(update(ChatMessage).where(ChatMessage.sender_id == user.id).values(content="[deleted by account owner]"))
     await db.execute(update(CandidateRequest).where(CandidateRequest.candidate_id == user.id).values(message=None))

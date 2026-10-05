@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -9,7 +9,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { FiArrowRight, FiCheck, FiFileText, FiTrash2, FiUpload, FiX } from "react-icons/fi";
 import {
   deleteCV,
-  getAssessments,
   getCVMeta,
   getCVDownloadUrl,
   getMe,
@@ -138,11 +137,6 @@ export default function ProfileBuilderPage() {
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: getProfile });
   const userQuery = useQuery({ queryKey: ["me"], queryFn: getMe });
   const cvMetaQuery = useQuery({ queryKey: ["cv-meta"], queryFn: getCVMeta, retry: false });
-  const assessmentsQuery = useQuery({
-    queryKey: ["my-assessments"],
-    queryFn: getAssessments,
-    retry: false,
-  });
 
   useEffect(() => {
     if (cvMetaQuery.data) setCvMeta(cvMetaQuery.data);
@@ -455,14 +449,6 @@ export default function ProfileBuilderPage() {
 
   const fullName = userQuery.data?.full_name ?? "Candidate";
   const loading = profileQuery.isLoading || userQuery.isLoading;
-  const assessmentStatuses = useMemo(() => {
-    const list = assessmentsQuery.data?.assessments ?? [];
-    const counts: Record<string, number> = {};
-    list.forEach((a) => {
-      counts[a.status] = (counts[a.status] ?? 0) + 1;
-    });
-    return { total: list.length, counts };
-  }, [assessmentsQuery.data]);
 
   const active = PROFILE_SECTIONS.find((section) => section.id === activeSection)!;
   const hasDraft = form.formState.isDirty || Boolean(photoFile);
@@ -492,10 +478,6 @@ export default function ProfileBuilderPage() {
       document.removeEventListener("click", onLinkClick, true);
     };
   }, [hasDraft]);
-  const assessmentSummary = Object.entries(assessmentStatuses.counts)
-    .map(([status, count]) => `${count} ${status.replace(/_/g, " ")}`)
-    .join(" · ");
-
   return (
     <PageContainer variant="wide" className={styles.profilePage}>
       <section className={styles.profileIntro} aria-labelledby="profile-heading">
@@ -539,11 +521,6 @@ export default function ProfileBuilderPage() {
               <div className={styles.statusValue}><FiFileText aria-hidden /><strong className={styles.statusText}>{hasCv ? "Ready to use" : "Add your CV"}</strong></div>
               <p className={styles.truncate}>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "PDF or DOCX · up to 5 MB"}</p>
               <button type="button" onClick={() => setActiveSection("documents")} className={styles.statusLink}>Manage CV <FiArrowRight aria-hidden /></button>
-            </div>
-            <div className={styles.statusItem}>
-              <span className={styles.statusLabel}>Assessments</span>
-              <div className={styles.statusValue}><strong>{assessmentStatuses.total}</strong><span>assigned</span></div>
-              <p>{assessmentsQuery.isLoading ? "Loading assessment activity" : assessmentSummary || "No assessments assigned yet."}</p>
             </div>
           </section>
 
