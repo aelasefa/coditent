@@ -140,6 +140,11 @@ async def execute_ai_job(
                 retryable=False,
             )
 
+        # SQLAlchemy expires ORM attributes on rollback even though this
+        # session factory uses expire_on_commit=False.  Error handling below
+        # must therefore use a plain value captured before a rollback instead
+        # of triggering an implicit async refresh through ``job.id``.
+        claimed_job_id = job.id
         stopped = asyncio.Event()
         lease_lost = asyncio.Event()
         heartbeat_task: asyncio.Task[None] | None = None
@@ -153,7 +158,7 @@ async def execute_ai_job(
                 heartbeat_task = asyncio.create_task(
                     _lease_heartbeat(
                         session_factory,
-                        job.id,
+                        claimed_job_id,
                         worker_id,
                         capacity_lease,
                         stopped,
@@ -171,12 +176,16 @@ async def execute_ai_job(
                     raise AIJobLeaseLostError("AI job lease was lost during execution")
 
             await db.flush()
-            fresh_fingerprint = await _fresh_source_fingerprint(session_factory, job.id)
+            fresh_fingerprint = await _fresh_source_fingerprint(
+                session_factory, claimed_job_id
+            )
             if fresh_fingerprint != job.source_fingerprint:
                 await db.rollback()
-                await mark_ai_job_stale(db, job.id, worker_id=worker_id)
+                await mark_ai_job_stale(db, claimed_job_id, worker_id=worker_id)
                 return "stale"
-            await complete_ai_job(db, job.id, worker_id=worker_id, result=result)
+            await complete_ai_job(
+                db, claimed_job_id, worker_id=worker_id, result=result
+            )
             return "completed"
         except AIJobLeaseLostError:
             await db.rollback()
@@ -186,7 +195,7 @@ async def execute_ai_job(
             try:
                 outcome = await fail_ai_job(
                     db,
-                    job.id,
+                    claimed_job_id,
                     worker_id=worker_id,
                     error_code=_safe_error_code(exc),
                     retryable=True,

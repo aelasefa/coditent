@@ -25,8 +25,10 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
-      DB_POOL_SIZE: "4"
-      DB_MAX_OVERFLOW: "1"
+      # Supabase session mode on the development plan allows only 15 clients.
+      # Keep API capacity bounded and leave room for workers and admin tools.
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "0"
       DB_POOL_TIMEOUT_SECONDS: "15"
       DB_POOL_RECYCLE_SECONDS: "300"
       READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-5}"

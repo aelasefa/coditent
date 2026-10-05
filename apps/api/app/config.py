@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # Example pooled:  postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true
     # Dashboard copy is postgresql:// — auto-upgraded to postgresql+asyncpg:// by database.py
     database_url: str
-    db_pool_size: int = Field(default=4, ge=1, le=20)
-    db_max_overflow: int = Field(default=1, ge=0, le=20)
+    db_pool_size: int = Field(default=2, ge=1, le=20)
+    db_max_overflow: int = Field(default=0, ge=0, le=20)
     db_pool_timeout_seconds: int = Field(default=15, ge=1, le=120)
     db_pool_recycle_seconds: int = Field(default=300, ge=30, le=3600)
     supabase_url: str | None = None
