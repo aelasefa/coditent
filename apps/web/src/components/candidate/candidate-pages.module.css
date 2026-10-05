@@ -14,15 +14,12 @@
   animation: candidate-panel-in 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.overviewHero::before {
-  position: absolute;
-  inset: -70% -18% auto auto;
-  width: 560px;
-  height: 560px;
-  border-radius: 50%;
-  background: repeating-radial-gradient(circle at center, transparent 0 11px, rgb(233 241 224 / 17%) 12px 13px, transparent 14px 23px);
-  content: "";
-  pointer-events: none;
+.overviewStars {
+  z-index: 0;
+  inset: 0 0 18% 48%;
+  opacity: 0.52;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 38%);
 }
 
 .heroCopy,
@@ -65,6 +62,8 @@
 .journeyItem:hover { background: #f2f6ef; }
 .journeyItem > span { color: #6a806f; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; }
 .journeyItem > strong { margin-top: 0.7rem; color: #194d38; font-family: Georgia, "Times New Roman", serif; font-size: 2.25rem; font-weight: 400; line-height: 1; }
+.journeyItem > .journeyCompleteMark { display: flex; height: 2.25rem; align-items: center; }
+.journeyCompleteMark svg { width: 2.35rem; height: 2.35rem; stroke-width: 1.8; }
 .journeyItem > p { margin: 0.35rem 0 0; color: #617369; font-size: 0.78rem; }
 .journeyItem .statusProgress { margin-top: auto; }
 .actionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
@@ -216,7 +215,7 @@
 .truncate { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 .editorShell { overflow: visible; border: 1px solid #dce6da; border-radius: 12px; background: #fffefa; }
-.profileTabs { position: sticky; z-index: 10; top: var(--candidate-header-height, 4.5rem); display: flex; gap: 0.25rem; overflow-x: auto; padding: 0.55rem clamp(1rem, 3vw, 2.2rem) 0; border-bottom: 1px solid #dce6da; background: rgb(255 254 250 / 96%); backdrop-filter: blur(12px); scrollbar-width: thin; }
+.profileTabs { position: sticky; z-index: 10; top: var(--candidate-header-height, 4.5rem); display: flex; gap: 0.25rem; padding: 0.55rem clamp(1rem, 3vw, 2.2rem) 0; border-bottom: 1px solid #dce6da; background: rgb(255 254 250 / 96%); backdrop-filter: blur(12px); scrollbar-width: thin; }
 .profileTab, .profileTabActive { flex: none; min-height: 46px; margin-bottom: -1px; padding: 0.55rem 0.95rem; border-bottom: 2px solid transparent; color: #617369; font-size: 0.84rem; font-weight: 650; transition: color 250ms ease, border-color 250ms ease, background-color 250ms ease; }
 .profileTab:hover { color: #194d38; background: #f4f7f0; }
 .profileTabActive { border-bottom-color: #194d38; color: #194d38; }
@@ -269,6 +268,49 @@
 
 @keyframes candidate-panel-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes candidate-save-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.discoverWorkspace { position: relative; isolation: isolate; }
+.discoverWorkspace > :not(.discoverArtwork) { position: relative; z-index: 1; }
+.discoverArtwork {
+  position: absolute;
+  z-index: 0;
+  top: -1rem;
+  right: -1.5rem;
+  width: min(78%, 62rem);
+  height: 20rem;
+  opacity: 0.86;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(ellipse 88% 96% at 79% 42%, #000 42%, rgb(0 0 0 / 82%) 68%, transparent 96%);
+  mask-image: radial-gradient(ellipse 88% 96% at 79% 42%, #000 42%, rgb(0 0 0 / 82%) 68%, transparent 96%);
+}
+.discoverArtwork img { object-fit: contain; object-position: right top; }
+
+.discoverIntro {
+  display: flex;
+  min-height: 16.5rem;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 1.5rem;
+  padding-block: 1.6rem;
+}
+
+.discoverHeadingGroup { max-width: 39rem; }
+.discoverTitle {
+  max-width: 10.5ch;
+  margin: 0;
+  color: var(--foreground);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: clamp(2.8rem, 4.6vw, 4.4rem);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+.discoverTitle span { color: var(--primary); }
+.discoverDescription { max-width: 44ch; margin: 1.05rem 0 0; color: #617369; font-size: 0.9rem; line-height: 1.58; }
+.discoverNote { max-width: 44ch; margin: 0.72rem 0 0; color: #4f6959; font-size: 0.76rem; font-weight: 650; line-height: 1.5; }
 
 .filterPanel {
   padding: clamp(1rem, 2vw, 1.6rem);
@@ -343,7 +385,7 @@
 
 @media (max-width: 767px) {
   .overviewHero { grid-template-columns: 1fr; gap: 1.3rem; min-height: 0; }
-  .overviewHero::before { right: -290px; top: -320px; }
+  .overviewStars { inset: 0 -4% 32% 36%; opacity: 0.42; }
   .journeyRail { grid-template-columns: 1fr; }
   .journeyItem { min-height: 0; padding: 1rem 1.2rem; }
   .journeyItem + .journeyItem { border-left: 0; border-top: 1px solid #e3e9df; }
@@ -367,6 +409,18 @@
   .formTwoColumns { grid-template-columns: 1fr; }
   .saveBar { bottom: calc(1rem + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; }
   .saveBar > div:last-child { justify-content: flex-end; }
+  .discoverWorkspace { padding-top: 8.5rem; }
+  .discoverArtwork {
+    top: -0.5rem;
+    right: -1rem;
+    width: calc(100% + 2rem);
+    height: 11rem;
+    opacity: 0.72;
+    -webkit-mask-image: radial-gradient(ellipse 96% 94% at 72% 42%, #000 38%, rgb(0 0 0 / 76%) 68%, transparent 98%);
+    mask-image: radial-gradient(ellipse 96% 94% at 72% 42%, #000 38%, rgb(0 0 0 / 76%) 68%, transparent 98%);
+  }
+  .discoverIntro { min-height: 0; align-items: start; justify-content: flex-start; padding-block: 1rem 0; }
+  .discoverTitle { max-width: none; font-size: clamp(2.55rem, 12vw, 3.5rem); }
   .discoverToolbar, .resultsLayout { grid-template-columns: 1fr; }
   .resultsHeading { margin-top: 2rem; }
 }

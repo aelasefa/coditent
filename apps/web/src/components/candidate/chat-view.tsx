@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { FiUser } from "react-icons/fi";
+import { useChatProfilePanel } from "./chat-workspace";
 import type { ChatMessage } from "@/lib/types";
 import styles from "./chat-workspace.module.css";
 
@@ -70,7 +72,7 @@ export function MessageList({
                     mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground"
                   )}
                 >
-                  <p>{m.content}</p>
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.content}</p>
                   <p suppressHydrationWarning className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
                     {timeLabel(m.created_at)}
                   </p>
@@ -155,7 +157,7 @@ export function Composer({
           disabled={disabled || pending}
           rows={2}
           aria-describedby={error ? "chat-composer-error" : undefined}
-          className="max-h-28 min-h-14 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+          className="max-h-28 min-h-14 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
         />
         <Button type="submit" disabled={disabled || pending || !value.trim()} loading={pending}>
           Send
@@ -186,6 +188,7 @@ export function ChatHeader({
   avatarSrc?: string | null;
   backHref: string;
 }) {
+  const profilePanel = useChatProfilePanel();
   return (
     <div className={styles.chatHeader}>
       <Link href={backHref} className={styles.chatBack}>← All messages</Link>
@@ -198,6 +201,19 @@ export function ChatHeader({
           {context ? <p className={styles.chatContext}>{context}</p> : null}
         </div>
         {status ? <span className={styles.chatStatus}>{status}</span> : null}
+        {profilePanel ? (
+          <button
+            type="button"
+            onClick={(event) => profilePanel.toggle(event.currentTarget)}
+            aria-label={`${profilePanel.open ? "Hide" : "View"} profile of ${title}`}
+            title={profilePanel.open ? "Hide profile" : "View profile"}
+            aria-expanded={profilePanel.open}
+            aria-controls={profilePanel.panelId}
+            className={styles.profileIconButton}
+          >
+            <FiUser aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </div>
   );
