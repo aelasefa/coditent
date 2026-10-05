@@ -1267,6 +1267,11 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   transform: translate(-50%, -50%);
 }
 
+.company-candidate-panel:has(.candidate-assessments-stack-wide) {
+  width: min(calc(100% - 2rem), 64rem);
+  max-width: 64rem;
+}
+
 .company-candidate-panel .sheet-header {
   min-height: 0;
   flex-shrink: 0;
@@ -1428,6 +1433,10 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   gap: 0.75rem;
 }
 
+.candidate-assessments-stack-wide {
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
+}
+
 .candidate-screening,
 .candidate-profile-skills,
 .candidate-resume,
@@ -1549,6 +1558,23 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   background: #f8faf6;
 }
 
+.candidate-screening-report-wide {
+  grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.candidate-screening-report-wide .candidate-screening-summary {
+  grid-column: auto;
+  padding: 0.7rem;
+  border-left: 3px solid #397451;
+  border-radius: 10px;
+  background: #fffefa;
+}
+
+.candidate-screening-report-wide .candidate-screening-summary p {
+  max-width: none;
+}
+
 .candidate-screening-summary {
   display: grid;
   grid-column: 1 / -1;
@@ -1573,6 +1599,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   color: #405147;
   font-size: 0.875rem;
   line-height: 1.5;
+  text-wrap: pretty;
   overflow-wrap: anywhere;
 }
 
@@ -1580,6 +1607,10 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   min-height: 100%;
   padding: 0.7rem;
   border-left-width: 3px;
+}
+
+@media (max-width: 900px) {
+  .candidate-assessments-stack-wide { grid-template-columns: 1fr; }
 }
 
 .candidate-screening-state { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 0.85rem; }
@@ -1759,6 +1790,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   .candidate-assessments-stack { grid-template-columns: 1fr; }
   .candidate-screening-report { grid-template-columns: 1fr; }
   .candidate-screening-summary { grid-column: auto; }
+  .candidate-screening-report-wide .candidate-screening-summary { grid-column: auto; }
   .candidate-screening-state { align-items: flex-start; flex-direction: column; }
   .candidate-profile-skills-heading,
   .candidate-resume-heading,

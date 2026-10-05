@@ -75,6 +75,16 @@ export function CandidateDetail({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const screening = parseScreeningReport(app.ai_report);
+  const screeningTextLength = screening
+    ? [screening.summary, ...screening.strengths, ...screening.gaps].join(" ").length
+    : 0;
+  const screeningNeedsWideLayout = Boolean(
+    screening &&
+      (screeningTextLength > 360 || screening.strengths.length + screening.gaps.length >= 4)
+  );
+  const screeningHasBothFindingGroups = Boolean(
+    screening && screening.strengths.length > 0 && screening.gaps.length > 0
+  );
   const screenMut = useMutation({
     mutationFn: () => retryApplicationScreening(app.id),
     onSuccess: () => {
@@ -238,7 +248,9 @@ export function CandidateDetail({
               id: "assessments",
               label: "Assessments",
               content: (
-                <div className="candidate-assessments-stack">
+                <div
+                  className={`candidate-assessments-stack${screeningNeedsWideLayout ? " candidate-assessments-stack-wide" : ""}`}
+                >
                   <section className="candidate-screening" aria-labelledby="candidate-screening-title">
                     <div className="candidate-screening-heading">
                       <div className="candidate-screening-heading-main">
@@ -263,7 +275,9 @@ export function CandidateDetail({
                       </div>
                     ) : null}
                     {screening ? (
-                      <div className="candidate-screening-report">
+                      <div
+                        className={`candidate-screening-report${screeningNeedsWideLayout && screeningHasBothFindingGroups ? " candidate-screening-report-wide" : ""}`}
+                      >
                         <div className="candidate-screening-summary">
                           <div>
                             <span>Screening summary</span>
