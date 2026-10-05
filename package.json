@@ -4,8 +4,8 @@
   "packageManager": "pnpm@10.5.2",
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:company": "NEXT_PUBLIC_COMPANY_PREVIEW=true npm --prefix apps/web run dev -- --port 3000",
     "build": "pnpm --filter web build",
     "start": "pnpm --filter web start"
   }
 }
-

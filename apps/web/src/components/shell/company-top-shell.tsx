@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SupportButton } from "@/components/support/support-button";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { FiChevronDown } from "react-icons/fi";
@@ -77,7 +78,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
             <Logo size="md" />
           </Link>
 
-          <nav aria-label="Company navigation" className={homeStyles.homeNavLinks}>
+          <nav aria-label="Company navigation" className={`${homeStyles.homeNavLinks} ${styles.companyNav}`}>
             {companyNavItems.map((item) => (
               <Link key={item.href} href={item.href} aria-current={isNavActive(pathname, item) ? "page" : undefined} className={isNavActive(pathname, item) ? styles.navLinkActive : styles.navLink}>
                 {item.label}
@@ -104,6 +105,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
 
       <>
         <main id="company-content" className={styles.content}>{children}</main>
+        <SupportButton />
       </>
     </div>
   );

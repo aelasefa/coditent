@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SupportButton } from "@/components/support/support-button";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { FiChevronDown, FiMenu, FiX } from "react-icons/fi";
@@ -130,6 +131,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
       <CandidateAvatarPreviewContext.Provider value={setAvatarPreview}>
         <main id="candidate-content" className={styles.content}>{children}</main>
       </CandidateAvatarPreviewContext.Provider>
+      <SupportButton />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { getMe } from "@/lib/api";
 import {
   FiActivity,
   FiGrid,
+  FiHelpCircle,
   FiMail,
   FiSettings,
   FiShield,
@@ -24,6 +25,7 @@ const NAV = [
   { label: "Companies", href: "/admin/companies", icon: FiShield },
   { label: "Company Invitations", href: "/admin/company-invitations", icon: FiMail },
   { label: "Users", href: "/admin/users", icon: FiUsers },
+  { label: "Support", href: "/admin/support", icon: FiHelpCircle },
   { label: "Platform Activity", href: "/admin/activity", icon: FiActivity },
   { label: "Settings", href: "/admin/settings", icon: FiSettings },
 ];

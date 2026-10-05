@@ -121,7 +121,7 @@ export function CompanyLogoSection({ company, canEdit }: CompanyLogoSectionProps
   return (
     <section
       aria-label="Company logo"
-      className="rounded-xl border border-border-subtle bg-surface p-5"
+      className="rounded-xl border border-border-subtle bg-surface p-5 shadow-sm sm:p-6"
     >
       <h3 className="text-sm font-semibold text-foreground">Company logo</h3>
       <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -177,7 +177,7 @@ export function CompanyLogoSection({ company, canEdit }: CompanyLogoSectionProps
               programmatic click can never leave the button dead. */}
           <label
             className={cn(
-              "inline-flex h-8 cursor-pointer select-none items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-3 text-[13px] font-medium text-foreground hover:bg-surface-secondary",
+              "inline-flex min-h-11 cursor-pointer select-none items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-secondary focus-within:ring-2 focus-within:ring-focus-ring focus-within:ring-offset-2",
               (saving || removing) && "pointer-events-none opacity-50"
             )}
             aria-disabled={saving || removing}
@@ -195,16 +195,16 @@ export function CompanyLogoSection({ company, canEdit }: CompanyLogoSectionProps
           </label>
           {pendingFile ? (
             <>
-              <Button type="button" size="sm" onClick={onSave} loading={saving}>
+              <Button type="button" size="md" onClick={onSave} loading={saving}>
                 Save logo
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={onCancelPreview} disabled={saving}>
+              <Button type="button" size="md" variant="ghost" onClick={onCancelPreview} disabled={saving}>
                 Cancel
               </Button>
             </>
           ) : null}
           {currentSrc && !pendingFile ? (
-            <Button type="button" size="sm" variant="ghost" onClick={onRemove} loading={removing}>
+            <Button type="button" size="md" variant="ghost" onClick={onRemove} loading={removing} className="text-danger hover:bg-danger-background hover:text-danger">
               Remove
             </Button>
           ) : null}

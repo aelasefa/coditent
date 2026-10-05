@@ -179,6 +179,10 @@ export default function TeamPage() {
               const isSelf = m.id === me?.id;
               const isOwner = m.company_role === "OWNER";
               const capabilities = ROLE_CAPABILITIES[m.company_role] ?? ["Hiring workspace access"];
+              const canEditMember = canChangeRoles && !isOwner && !isSelf;
+              const canRemoveMember = canRemoveEmployees && !isOwner && !isSelf;
+              const showAccountNotice = !isOwner && (isSelf || (!canChangeRoles && !canRemoveEmployees));
+              const showMemberControls = canEditMember || canRemoveMember || showAccountNotice;
               return (
                 <li key={m.id} className="flex min-h-full flex-col overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-sm transition-[border-color,box-shadow] hover:border-border hover:shadow-md">
                   <div className="p-4 sm:p-5">
@@ -199,26 +203,38 @@ export default function TeamPage() {
 
                   <div className="mt-5 flex-1 border-t border-border-subtle pt-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">Workspace permissions</p>
-                      <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-primary">
-                        {roleLabel(m.company_role)} access
+                      <p className="text-sm font-semibold text-foreground">Access and permissions</p>
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        {capabilities.length} permissions
                       </span>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2" role="list" aria-label={`${roleLabel(m.company_role)} permissions`}>
                       {capabilities.map((capability) => (
-                        <div key={capability} role="listitem" className="flex min-h-10 items-center gap-2.5 rounded-lg bg-surface-secondary/70 px-3 py-2 text-xs font-medium leading-5 text-foreground-secondary">
-                          <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                        <div key={capability} role="listitem" className="flex min-h-12 items-center gap-3 rounded-lg border border-border-subtle bg-surface-secondary/55 px-3 py-2.5 text-xs font-medium leading-5 text-foreground-secondary">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-surface text-primary shadow-sm">
                             <FiCheck aria-hidden className="h-3 w-3" />
                           </span>
                           <span>{capability}</span>
                         </div>
                       ))}
+                      {isOwner ? (
+                        <div role="listitem" className="flex min-h-14 items-center gap-3 rounded-lg border border-primary/20 bg-primary/[0.06] px-3 py-2.5 sm:col-span-2">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
+                            <FiShield aria-hidden className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0 text-xs leading-5 text-muted-foreground">
+                            <strong className="block font-semibold text-foreground">Owner role protected</strong>
+                            Ownership cannot be changed from the team page.
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   </div>
 
+                  {showMemberControls ? (
                   <div className="flex min-h-16 flex-wrap items-center gap-2 border-t border-border-subtle bg-surface-secondary/45 px-4 py-3 sm:px-5">
-                    {canChangeRoles && !isOwner && !isSelf && (
+                    {canEditMember && (
                       <label className="flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-muted-foreground">
                         <span className="shrink-0">Role</span>
                         <select
@@ -234,26 +250,27 @@ export default function TeamPage() {
                         </select>
                       </label>
                     )}
-                    {canRemoveEmployees && !isOwner && !isSelf && (
+                    {canRemoveMember && (
                       <Button size="md" variant="ghost" onClick={() => setRemoveTarget(m)} className="text-danger hover:bg-danger-background hover:text-danger">
                         <FiTrash2 aria-hidden className="h-4 w-4" />
                         Remove
                       </Button>
                     )}
-                    {(isOwner || isSelf || (!canChangeRoles && !canRemoveEmployees)) && (
+                    {showAccountNotice && (
                       <div className="flex min-w-0 items-center gap-2.5 text-xs text-muted-foreground">
                         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface text-primary shadow-sm">
                           <FiShield aria-hidden className="h-4 w-4" />
                         </span>
                         <span>
                           <strong className="block font-semibold text-foreground">
-                            {isOwner ? "Owner role protected" : isSelf ? "Your account" : "Read-only access"}
+                            {isSelf ? "Your account" : "Read-only access"}
                           </strong>
-                          <span>{isOwner ? "Ownership cannot be changed from the team page." : isSelf ? "Manage your own profile in settings." : "Your role cannot manage this member."}</span>
+                          <span>{isSelf ? "Manage your own profile in settings." : "Your role cannot manage this member."}</span>
                         </span>
                       </div>
                     )}
                   </div>
+                  ) : null}
                 </li>
               );
             })}

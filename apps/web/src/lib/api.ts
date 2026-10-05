@@ -3,6 +3,7 @@ import type { AxiosRequestConfig } from "axios";
 
 import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
+import { isCompanyPreviewEnabled } from "@/lib/company-preview";
 import type {
   AdminActivity,
   AdminStats,
@@ -20,6 +21,8 @@ import type {
 } from "@/lib/types";
 
 export function getApiBaseUrl(): string {
+  if (isCompanyPreviewEnabled()) return "/api-preview";
+
   if (typeof window !== "undefined") {
     const envUrl = process.env.NEXT_PUBLIC_API_URL || "/api-proxy";
     // When the browser is loaded over HTTPS (e.g. Vercel) and backend is insecure HTTP,

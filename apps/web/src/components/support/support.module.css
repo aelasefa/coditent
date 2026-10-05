@@ -1,0 +1,48 @@
+.trigger {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid #d4e2d8;
+  border-radius: 999px;
+  background: #194d38;
+  color: #fffefa;
+  box-shadow: 0 4px 16px rgb(25 77 56 / 16%);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.trigger:hover { background: #123e2d; }
+.trigger svg { width: 1rem; height: 1rem; }
+.trigger:focus-visible { outline: 3px solid #8eac90; outline-offset: 3px; }
+.spacer { height: 4.5rem; }
+.switcher { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+.form { display: grid; gap: 1rem; }
+.textarea {
+  display: block;
+  width: 100%;
+  min-height: 8rem;
+  margin-top: 0.375rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+.textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.report { padding: 1rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow-wrap: anywhere; }
+.reportHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.status { display: inline-flex; flex-shrink: 0; border-radius: 999px; padding: 0.25rem 0.625rem; font-size: 0.75rem; font-weight: 600; }
+.status[data-status="open"] { background: #edf1f6; color: #3b4f67; }
+.status[data-status="in_progress"] { background: #faf0df; color: #7b501b; }
+.status[data-status="resolved"] { background: #e8f1e5; color: #194d38; }
+.response { margin-top: 0.75rem; border-left: 3px solid #6d9774; padding: 0.75rem; background: #f0f5ee; color: #203d2e; border-radius: 0 8px 8px 0; }
+.body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.6; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 1rem; }
