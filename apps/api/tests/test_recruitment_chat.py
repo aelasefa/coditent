@@ -80,8 +80,8 @@ async def flow():
     data: dict = {}
 
     async def setup():
-        async with AsyncSessionLocal() as db:
-            company = Company(name=f"ChatCo-{suffix}")
+        db = AsyncSessionLocal()
+        company = Company(name=f"ChatCo-{suffix}")
         db.add(company)
         await db.flush()
 
@@ -159,6 +159,7 @@ async def flow():
             "other_company": other_company, "offer": offer,
             "other_offer": other_offer, "application": application,
         })
+        await db.close()
 
     await _with_db_retries("flow.setup", setup)
     yield data

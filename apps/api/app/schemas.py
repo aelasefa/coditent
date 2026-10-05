@@ -791,18 +791,57 @@ class CompanySubscriptionUpdate(APIModel):
         return _naive_utc(value)
 
 
+FriendRelationshipState = Literal[
+    "NONE", "PENDING_SENT", "PENDING_RECEIVED", "ACCEPTED", "BLOCKED"
+]
+
+
 class FriendOut(APIModel):
     id: uuid.UUID
     full_name: str
     avatar_url: str | None = None
-    role: str
-    online: bool
+    masked_email: str | None = None
+    headline: str | None = None
+    skills: str | None = None
+    bio: str | None = None
+    relationship_state: FriendRelationshipState = "NONE"
+    is_online: bool = False
+    # Compatibility alias consumed by the existing Friends page.
+    online: bool = False
     last_seen: datetime | None = None
 
 
 class FriendListOut(APIModel):
     friends: list[FriendOut]
     total: int
+
+
+class FriendRequestOut(APIModel):
+    id: uuid.UUID
+    status: Literal["PENDING", "ACCEPTED", "BLOCKED"]
+    requester_id: uuid.UUID
+    addressee_id: uuid.UUID
+    candidate: FriendOut
+    created_at: datetime
+    updated_at: datetime
+    responded_at: datetime | None = None
+
+
+class FriendRequestListOut(APIModel):
+    requests: list[FriendRequestOut]
+    total: int
+
+
+class PresenceHeartbeatIn(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
+    connection_id: str = Field(min_length=8, max_length=100)
+
+
+class PresenceOut(APIModel):
+    user_id: uuid.UUID
+    is_online: bool
+    last_seen: datetime | None = None
 
 
 MissionLevel = Literal["beginner", "intermediate", "advanced"]
@@ -1078,6 +1117,16 @@ class ChatMessageOut(APIModel):
     application_id: uuid.UUID | None = None
 
 
+class FriendChatContext(APIModel):
+    conversation_type: Literal["FRIEND"] = "FRIEND"
+    peer: FriendOut
+    relationship_state: FriendRelationshipState
+    can_message: bool
+    messages: list[ChatMessageOut] = []
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
 class RecruitmentMessagesReadOut(APIModel):
     message_ids: list[uuid.UUID]
     read_at: datetime | None = None
@@ -1093,6 +1142,25 @@ class RecruitmentPeer(APIModel):
     avatar_url: str | None = None
     role: str | None = None
     company_role: str | None = None
+
+
+class ConversationSummaryOut(APIModel):
+    conversation_type: Literal["FRIEND", "RECRUITMENT"]
+    conversation_id: str
+    href: str
+    peer: FriendOut | RecruitmentPeer | None = None
+    badge: Literal["Friend", "Recruiter", "Candidate"]
+    context: str
+    detail: str
+    status: str | None = None
+    last_message: str | None = None
+    last_at: datetime | None = None
+    unread_count: int = 0
+    can_message: bool = True
+
+
+class ConversationInboxOut(APIModel):
+    conversations: list[ConversationSummaryOut]
 
 
 class RecruitmentChatContext(APIModel):

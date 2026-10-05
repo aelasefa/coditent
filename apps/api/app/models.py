@@ -542,20 +542,37 @@ class RequestStatus(str, enum.Enum):
 class Friendship(Base):
     __tablename__ = "friendships"
     __table_args__ = (
-        UniqueConstraint("user_id", "friend_id", name="uq_friendships_pair"),
-        CheckConstraint("user_id <> friend_id", name="ck_friendships_not_self"),
-        Index("ix_friendships_user_id", "user_id"),
-        Index("ix_friendships_friend_id", "friend_id"),
+        UniqueConstraint("pair_low_id", "pair_high_id", name="uq_friendships_unordered_pair"),
+        CheckConstraint("requester_id <> addressee_id", name="ck_friendships_not_self"),
+        CheckConstraint("pair_low_id <> pair_high_id", name="ck_friendships_pair_not_self"),
+        CheckConstraint(
+            "status IN ('PENDING', 'ACCEPTED', 'BLOCKED')",
+            name="ck_friendships_status",
+        ),
+        Index("ix_friendships_requester_status", "requester_id", "status"),
+        Index("ix_friendships_addressee_status", "addressee_id", "status"),
+        Index("ix_friendships_pair", "pair_low_id", "pair_high_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    requester_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    friend_id: Mapped[uuid.UUID] = mapped_column(
+    addressee_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    pair_low_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    pair_high_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Company(Base):

@@ -258,7 +258,14 @@ async def execute_deletion(db: AsyncSession, request_id: UUID, worker_id: str) -
     await db.execute(update(CandidateRequest).where(CandidateRequest.candidate_id == user.id).values(message=None))
     for model in (OAuthAccount, PasswordRecovery, SavedRecommendation, Notification, NotificationPreference):
         await db.execute(delete(model).where(model.user_id == user.id) if hasattr(model, "user_id") else delete(model).where(model.candidate_id == user.id))
-    await db.execute(delete(Friendship).where(or_(Friendship.user_id == user.id, Friendship.friend_id == user.id)))
+    await db.execute(
+        delete(Friendship).where(
+            or_(
+                Friendship.requester_id == user.id,
+                Friendship.addressee_id == user.id,
+            )
+        )
+    )
 
     user.email = f"deleted+{user.id}@example.invalid"
     user.password_hash = "deleted:" + secrets.token_urlsafe(48)

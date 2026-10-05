@@ -81,6 +81,23 @@ async def test_redis_broker_fans_out_between_api_instances_without_echo() -> Non
     assert first._decode_remote_event(room, own_envelope) is None
 
 
+@pytest.mark.asyncio
+async def test_friend_broker_fans_out_between_api_instances() -> None:
+    bus = _FakeBus()
+    redis = _FakeRedis(bus)
+    first = RedisChatBroker(lambda: redis, instance_id="api-a")
+    second = RedisChatBroker(lambda: redis, instance_id="api-b")
+    pair = "11111111-1111-1111-1111-111111111111:22222222-2222-2222-2222-222222222222"
+    event = {"type": "relationship_revoked"}
+
+    stream = second.remote_friend_events(pair)
+    next_event = asyncio.create_task(anext(stream))
+    await asyncio.wait_for(bus.subscribed.wait(), timeout=1)
+    assert await first.publish_friend(pair, event) is True
+    assert await asyncio.wait_for(next_event, timeout=1) == event
+    await stream.aclose()
+
+
 def test_broker_rejects_wrong_room_and_oversized_payloads() -> None:
     broker = RedisChatBroker(lambda: None, instance_id="api-a")
     wrong_room = '{"v":1,"origin":"api-b","room":"other","event":{"type":"message"}}'

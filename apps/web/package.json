@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:friends": "node --test --experimental-strip-types tests/friend-ui.test.mts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

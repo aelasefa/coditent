@@ -25,6 +25,7 @@ class SocketTicket:
     application_id: UUID
     session_id: UUID
     expires_at: int
+    scope: str = "recruitment"
 
 
 def _ticket_key(ticket: str) -> str:
@@ -38,6 +39,7 @@ async def create_socket_ticket(
     application_id: UUID,
     session_id: str,
     expires_at: int,
+    scope: str = "recruitment",
 ) -> str:
     try:
         normalized_session_id = str(UUID(session_id))
@@ -45,6 +47,8 @@ async def create_socket_ticket(
         raise AuthenticationRejected("Invalid access session") from exc
     if isinstance(expires_at, bool) or not isinstance(expires_at, int) or expires_at <= 0:
         raise AuthenticationRejected("Invalid access session")
+    if scope not in {"recruitment", "friend"}:
+        raise AuthenticationRejected("Invalid socket scope")
 
     ticket = secrets.token_urlsafe(32)
     payload = json.dumps(
@@ -53,6 +57,7 @@ async def create_socket_ticket(
             "application_id": str(application_id),
             "session_id": normalized_session_id,
             "expires_at": expires_at,
+            "scope": scope,
         }
     )
     try:
@@ -69,7 +74,12 @@ async def create_socket_ticket(
     return ticket
 
 
-async def consume_socket_ticket(ticket: str, *, application_id: UUID) -> SocketTicket:
+async def consume_socket_ticket(
+    ticket: str,
+    *,
+    application_id: UUID,
+    scope: str = "recruitment",
+) -> SocketTicket:
     if not ticket or len(ticket) > 200:
         raise AuthenticationRejected("Invalid socket ticket")
     try:
@@ -85,10 +95,11 @@ async def consume_socket_ticket(ticket: str, *, application_id: UUID) -> SocketT
             application_id=UUID(str(payload["application_id"])),
             session_id=UUID(str(payload["session_id"])),
             expires_at=int(payload["expires_at"]),
+            scope=str(payload.get("scope") or "recruitment"),
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise AuthenticationRejected("Invalid socket ticket") from exc
-    if parsed.application_id != application_id:
+    if parsed.application_id != application_id or parsed.scope != scope:
         raise AuthenticationRejected("Socket ticket does not match this application")
     from time import time
 

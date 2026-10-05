@@ -25,6 +25,10 @@ def recruitment_channel(application_id: str) -> str:
     return f"chat:recruitment:{application_id}"
 
 
+def friend_channel(pair_key: str) -> str:
+    return f"chat:friend:{pair_key}"
+
+
 class RedisChatBroker:
     """Publish and subscribe to one room across independent API processes.
 
@@ -45,10 +49,20 @@ class RedisChatBroker:
         self.instance_id = instance_id or uuid.uuid4().hex
 
     async def publish(self, application_id: str, event: dict[str, Any]) -> bool:
+        return await self._publish(
+            recruitment_channel(application_id), application_id, event
+        )
+
+    async def publish_friend(self, pair_key: str, event: dict[str, Any]) -> bool:
+        return await self._publish(friend_channel(pair_key), pair_key, event)
+
+    async def _publish(
+        self, channel: str, room: str, event: dict[str, Any]
+    ) -> bool:
         envelope = {
             "v": BROKER_MESSAGE_VERSION,
             "origin": self.instance_id,
-            "room": application_id,
+            "room": room,
             "event": event,
         }
         encoded = json.dumps(envelope, separators=(",", ":"), default=str)
@@ -56,7 +70,7 @@ class RedisChatBroker:
             logger.warning("chat_broker_event_too_large")
             return False
         try:
-            await self._redis_factory().publish(recruitment_channel(application_id), encoded)
+            await self._redis_factory().publish(channel, encoded)
             return True
         except Exception as exc:  # Redis failure must not roll back a persisted message.
             logger.warning("chat_broker_publish_failed", exception_type=type(exc).__name__)
@@ -64,7 +78,18 @@ class RedisChatBroker:
 
     async def remote_events(self, application_id: str) -> AsyncIterator[dict[str, Any]]:
         """Yield validated events from other API processes, reconnecting safely."""
-        channel = recruitment_channel(application_id)
+        async for event in self._remote_events(
+            recruitment_channel(application_id), application_id
+        ):
+            yield event
+
+    async def remote_friend_events(self, pair_key: str) -> AsyncIterator[dict[str, Any]]:
+        async for event in self._remote_events(friend_channel(pair_key), pair_key):
+            yield event
+
+    async def _remote_events(
+        self, channel: str, room: str
+    ) -> AsyncIterator[dict[str, Any]]:
         while True:
             pubsub = None
             try:
@@ -78,7 +103,7 @@ class RedisChatBroker:
                     if message is None:
                         await asyncio.sleep(0)
                         continue
-                    event = self._decode_remote_event(application_id, message.get("data"))
+                    event = self._decode_remote_event(room, message.get("data"))
                     if event is not None:
                         yield event
             except asyncio.CancelledError:

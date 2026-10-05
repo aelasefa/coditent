@@ -592,8 +592,8 @@ export async function getConversationPage(
   userId: string,
   before?: string | null,
   limit = 50,
-): Promise<ChatMessagePage> {
-  const { data } = await api.get<ChatMessagePage>(`/chat/with/${userId}`, {
+): Promise<ChatMessagePage & Pick<import("@/lib/types").FriendChatContext, "peer" | "can_message" | "relationship_state" | "conversation_type">> {
+  const { data } = await api.get<ChatMessagePage & Pick<import("@/lib/types").FriendChatContext, "peer" | "can_message" | "relationship_state" | "conversation_type">>(`/chat/with/${userId}`, {
     params: { before: before ?? undefined, limit },
   });
   return data;
@@ -606,6 +606,29 @@ export async function getConversation(userId: string): Promise<import("@/lib/typ
 export async function getConversations(): Promise<{ user: import("@/lib/types").User; last_message: string; last_at: string }[]> {
   const { data } = await api.get<{ conversations: { user: import("@/lib/types").User; last_message: string; last_at: string }[] }>("/chat/conversations");
   return data.conversations;
+}
+
+export async function getCombinedInbox(): Promise<import("@/lib/types").ConversationSummary[]> {
+  const { data } = await api.get<{ conversations: import("@/lib/types").ConversationSummary[] }>("/chat/inbox");
+  return data.conversations;
+}
+
+export async function markFriendMessagesRead(peerId: string): Promise<{ message_ids: string[]; read_at: string | null }> {
+  const { data } = await api.post(`/chat/friends/${peerId}/read`);
+  return data;
+}
+
+export async function createFriendSocketTicket(peerId: string): Promise<{ ticket: string; expires_in_seconds: number }> {
+  const { data } = await api.post(`/chat/friends/${peerId}/socket-ticket`);
+  return data;
+}
+
+export function getFriendWsUrl(peerId: string, ticket: string): string {
+  const base = getApiBaseUrl();
+  const wsBase = base.startsWith("/")
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
+    : base.replace(/^http/, "ws");
+  return `${wsBase}/chat/friends/${peerId}/ws?ticket=${encodeURIComponent(ticket)}`;
 }
 
 export interface CompanyInvitationPayload {
@@ -712,22 +735,65 @@ export async function listFriends(sort: "name" | "recent" = "name"): Promise<{ f
   return data;
 }
 
-export async function searchPeople(query: string): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
-  const { data } = await api.get("/friends/search", { params: { q: query } });
+export async function searchPeople(query: string, offset = 0): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends/search", { params: { q: query, limit: 20, offset } });
   return data;
 }
 
-export async function addFriend(friendId: string): Promise<import("@/lib/types").FriendItem> {
-  const { data } = await api.post(`/friends/${friendId}`);
+export async function sendFriendRequest(friendId: string): Promise<import("@/lib/types").FriendRequest> {
+  const { data } = await api.post(`/friends/requests/${friendId}`);
   return data;
+}
+
+export const addFriend = sendFriendRequest;
+
+export async function listIncomingFriendRequests(): Promise<{ requests: import("@/lib/types").FriendRequest[]; total: number }> {
+  const { data } = await api.get("/friends/requests/incoming");
+  return data;
+}
+
+export async function listSentFriendRequests(): Promise<{ requests: import("@/lib/types").FriendRequest[]; total: number }> {
+  const { data } = await api.get("/friends/requests/sent");
+  return data;
+}
+
+export async function listBlockedCandidates(): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends/blocked");
+  return data;
+}
+
+export async function acceptFriendRequest(requestId: string): Promise<import("@/lib/types").FriendRequest> {
+  const { data } = await api.post(`/friends/requests/${requestId}/accept`);
+  return data;
+}
+
+export async function declineFriendRequest(requestId: string): Promise<void> {
+  await api.delete(`/friends/requests/${requestId}/decline`);
+}
+
+export async function cancelFriendRequest(requestId: string): Promise<void> {
+  await api.delete(`/friends/requests/${requestId}/cancel`);
 }
 
 export async function removeFriend(friendId: string): Promise<void> {
   await api.delete(`/friends/${friendId}`);
 }
 
-export async function sendPresenceHeartbeat(): Promise<void> {
-  await api.post("/friends/presence/heartbeat");
+export async function blockCandidate(friendId: string): Promise<void> {
+  await api.post(`/friends/${friendId}/block`);
+}
+
+export async function unblockCandidate(friendId: string): Promise<void> {
+  await api.delete(`/friends/${friendId}/block`);
+}
+
+export async function getPublicCandidateProfile(candidateId: string): Promise<import("@/lib/types").FriendItem> {
+  const { data } = await api.get(`/friends/${candidateId}/profile`);
+  return data;
+}
+
+export async function sendPresenceHeartbeat(connectionId: string): Promise<void> {
+  await api.post("/friends/presence/heartbeat", { connection_id: connectionId });
 }
 
 export async function listMissions(filters?: { field?: string; level?: string }): Promise<import("@/lib/types").PracticeMission[]> {

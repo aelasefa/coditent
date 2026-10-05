@@ -83,3 +83,30 @@ async def test_socket_ticket_rejects_wrong_application_and_expired_session(monke
             revoked_ticket,
             application_id=application_id,
         )
+
+
+@pytest.mark.asyncio
+async def test_friend_socket_ticket_is_scope_bound(monkeypatch) -> None:
+    redis = _FakeRedis()
+    monkeypatch.setattr(socket_tickets, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(socket_tickets, "ensure_access_session_active", AsyncMock())
+    peer_id = uuid.uuid4()
+    common = {
+        "user_id": uuid.uuid4(),
+        "application_id": peer_id,
+        "session_id": str(uuid.uuid4()),
+        "expires_at": int(time.time()) + 60,
+        "scope": "friend",
+    }
+
+    wrong_scope = await socket_tickets.create_socket_ticket(**common)
+    with pytest.raises(AuthenticationRejected, match="does not match"):
+        await socket_tickets.consume_socket_ticket(
+            wrong_scope, application_id=peer_id, scope="recruitment"
+        )
+
+    valid = await socket_tickets.create_socket_ticket(**common)
+    parsed = await socket_tickets.consume_socket_ticket(
+        valid, application_id=peer_id, scope="friend"
+    )
+    assert parsed.scope == "friend"

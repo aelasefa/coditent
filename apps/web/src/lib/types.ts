@@ -248,6 +248,7 @@ export interface ChatMessage {
   created_at: string;
   read_at?: string | null;
   sender?: User;
+  application_id?: string | null;
 }
 
 export interface CandidateSnapshot {
@@ -328,6 +329,7 @@ export interface RecruitmentChatContext {
 }
 
 export interface RecruitmentChatListItem {
+  conversation_type?: "RECRUITMENT";
   application_id: string;
   status: string;
   chat_enabled: boolean;
@@ -339,6 +341,7 @@ export interface RecruitmentChatListItem {
   peer?: RecruitmentPeer | null;
   last_message?: string | null;
   last_at?: string | null;
+  unread_count?: number;
 }
 
 export interface EmployeeInvitation {
@@ -350,13 +353,56 @@ export interface EmployeeInvitation {
   email_delivery_status?: "pending" | "processing" | "retry" | "sent" | "failed" | null;
 }
 
+export type FriendRelationshipState = "NONE" | "PENDING_SENT" | "PENDING_RECEIVED" | "ACCEPTED" | "BLOCKED";
+
 export interface FriendItem {
   id: string;
   full_name: string;
   avatar_url?: string | null;
-  role: string;
+  masked_email?: string | null;
+  headline?: string | null;
+  skills?: string | null;
+  bio?: string | null;
+  relationship_state: FriendRelationshipState;
+  is_online: boolean;
   online: boolean;
   last_seen?: string | null;
+}
+
+export interface FriendRequest {
+  id: string;
+  status: "PENDING" | "ACCEPTED" | "BLOCKED";
+  requester_id: string;
+  addressee_id: string;
+  candidate: FriendItem;
+  created_at: string;
+  updated_at: string;
+  responded_at?: string | null;
+}
+
+export interface FriendChatContext {
+  conversation_type: "FRIEND";
+  peer: FriendItem;
+  relationship_state: FriendRelationshipState;
+  can_message: boolean;
+  messages: ChatMessage[];
+  next_cursor?: string | null;
+  has_more?: boolean;
+}
+
+export interface ConversationSummary {
+  conversation_type: "FRIEND" | "RECRUITMENT";
+  conversation_id: string;
+  href: string;
+  peer?: FriendItem | RecruitmentPeer | null;
+  badge: "Friend" | "Recruiter" | "Candidate";
+  context: string;
+  detail: string;
+  status?: string | null;
+  last_message?: string | null;
+  last_at?: string | null;
+  unread_count: number;
+  can_message: boolean;
 }
 
 export interface MissionAttempt {

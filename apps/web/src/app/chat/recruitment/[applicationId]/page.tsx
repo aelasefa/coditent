@@ -33,6 +33,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       return { ...previous, messages: [...previous.messages, message] };
     });
     qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
+    qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
   }, [applicationId, qc]);
 
   const handleMessagesRead = useCallback((messageIds: string[], readAt: string) => {
@@ -41,6 +42,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       ...previous,
       messages: previous.messages.map((message) => ids.has(message.id) ? { ...message, read_at: readAt } : message),
     } : previous);
+    void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
   }, [applicationId, qc]);
 
   const {
@@ -113,6 +115,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
     onSuccess: (created) => {
       if (created) qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
       qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
+      qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
     onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
   });
@@ -144,7 +147,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
           subtitle={ctx?.offer_title}
           context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
           avatarSrc={ctx?.peer?.avatar_url ?? companyLogo}
-          status={ctx ? `${recruitmentLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
+          status={ctx ? `${peerRole} · ${recruitmentLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />
 
