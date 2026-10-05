@@ -14,8 +14,8 @@ import type { ApplicationItem, AssessmentItem, InterviewRecommendation } from "@
 
 const NEXT_STAGES: Record<string, string[]> = {
   applied: ["under_review", "rejected"],
-  under_review: ["shortlisted", "assessment_required", "interview", "rejected"],
-  shortlisted: ["assessment_required", "interview", "rejected"],
+  under_review: ["shortlisted", "interview", "rejected"],
+  shortlisted: ["interview", "rejected"],
   assessment_required: ["assessment_completed", "rejected"],
   assessment_completed: ["interview", "accepted", "rejected"],
   interview: ["accepted", "rejected"],

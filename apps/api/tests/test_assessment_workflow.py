@@ -21,8 +21,13 @@ from app.models import (
     User,
     UserRole,
 )
-from app.routers import assessments
-from app.schemas import AssessmentCreate, AssessmentReview, AssessmentSubmit
+from app.routers import applications, assessments
+from app.schemas import (
+    ApplicationStatusUpdate,
+    AssessmentCreate,
+    AssessmentReview,
+    AssessmentSubmit,
+)
 from app.services import assessment_grading
 
 
@@ -91,6 +96,28 @@ async def _seed(db: AsyncSession):
 
 async def _no_audit(*_args, **_kwargs):
     return None
+
+
+@pytest.mark.asyncio
+async def test_assessment_stage_requires_an_actual_assignment(db):
+    reviewer, _candidate, application = await _seed(db)
+
+    with pytest.raises(HTTPException) as caught:
+        await applications.update_application_status(
+            application.id,
+            ApplicationStatusUpdate(
+                status="assessment_required",
+                expected_version=application.stage_version,
+            ),
+            reviewer,
+            db,
+        )
+
+    assert caught.value.status_code == 409
+    assert "Assign an assessment" in str(caught.value.detail)
+    await db.refresh(application)
+    assert application.status == "under_review"
+    assert application.stage_version == 1
 
 
 @pytest.mark.asyncio

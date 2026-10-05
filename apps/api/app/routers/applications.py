@@ -472,9 +472,9 @@ async def retry_application_screening(
 _ALLOWED_STAGE_TRANSITIONS: dict[str, frozenset[str]] = {
     "applied": frozenset({"under_review", "rejected"}),
     "under_review": frozenset(
-        {"shortlisted", "assessment_required", "interview", "rejected"}
+        {"shortlisted", "interview", "rejected"}
     ),
-    "shortlisted": frozenset({"assessment_required", "interview", "rejected"}),
+    "shortlisted": frozenset({"interview", "rejected"}),
     "assessment_required": frozenset({"assessment_completed", "rejected"}),
     "assessment_completed": frozenset({"interview", "accepted", "rejected"}),
     "interview": frozenset({"accepted", "rejected"}),
@@ -550,6 +550,11 @@ async def update_application_status(
             status=app.status,
             stage_version=app.stage_version,
             chat_enabled=is_chat_enabled_for_status(app.status),
+        )
+    if new_status == "assessment_required":
+        raise HTTPException(
+            status_code=409,
+            detail="Assign an assessment to move the application into the assessment stage",
         )
     allowed = _ALLOWED_STAGE_TRANSITIONS.get(app.status, frozenset())
     if new_status not in allowed:

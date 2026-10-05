@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { FiArrowRight, FiBriefcase, FiCheckSquare, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
-import { api, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
+import { api, getAssessments, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
 import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +13,7 @@ import { JobCard } from "@/components/candidate/job-card";
 import { ApplicationStage } from "@/components/candidate/application-stage";
 import { NextActionCard, type NextAction } from "@/components/candidate/next-action-card";
 import { getProfileCompletion } from "@/components/candidate/profile-completion";
-import type { ApplicationItem } from "@/lib/types";
+import type { ApplicationItem, AssessmentItem } from "@/lib/types";
 import styles from "@/components/candidate/candidate-pages.module.css";
 
 function greeting(): string {
@@ -36,14 +36,19 @@ export default function DashboardPage() {
       return data.applications;
     },
   });
+  const assessmentsQuery = useQuery({
+    queryKey: ["assessments"],
+    queryFn: async () => (await getAssessments()).assessments as AssessmentItem[],
+  });
   const chatsQuery = useQuery({ queryKey: ["my-recruitment-chats"], queryFn: listRecruitmentChats });
 
   const me = meQuery.data;
   const profile = profileQuery.data;
   const recs = recsQuery.data ?? [];
   const apps = appsQuery.data ?? [];
+  const assessments = assessmentsQuery.data ?? [];
   const chats = chatsQuery.data ?? [];
-  const loading = meQuery.isLoading || profileQuery.isLoading || recsQuery.isLoading || appsQuery.isLoading;
+  const loading = meQuery.isLoading || profileQuery.isLoading || recsQuery.isLoading || appsQuery.isLoading || assessmentsQuery.isLoading;
 
   const firstName = (me?.full_name ?? "").split(" ")[0] || null;
   const completion = getProfileCompletion(profile, me?.avatar_url);
@@ -58,14 +63,14 @@ export default function DashboardPage() {
       href: "/profile",
     });
   }
-  const assessmentApps = apps.filter((a) => a.status === "assessment_required");
-  if (assessmentApps.length > 0) {
+  const pendingAssessments = assessments.filter((item) => ["assigned", "pending"].includes(item.status));
+  if (pendingAssessments.length > 0) {
     actions.push({
       icon: FiCheckSquare,
-      title: "Assessment requested",
-      context: `${assessmentApps.length} application${assessmentApps.length > 1 ? "s" : ""} waiting on assessment stage.`,
-      cta: "View applications",
-      href: "/dashboard/applications",
+      title: "Assessment ready",
+      context: `${pendingAssessments.length} assessment${pendingAssessments.length > 1 ? "s are" : " is"} ready to complete.`,
+      cta: "Open assessments",
+      href: "/dashboard/assessments",
     });
   }
   if (!recsQuery.isLoading && recs.length === 0) {
