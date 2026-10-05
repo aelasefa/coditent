@@ -3,6 +3,7 @@ Run: DATABASE_URL=... JWT_SECRET=... GEMINI_API_KEY=... python -m pytest apps/ap
 """
 import base64
 import hashlib
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -16,7 +17,7 @@ from app.database import AsyncSessionLocal, engine
 from app.models import User
 from app.routers import invitations
 
-BASE = "http://localhost:8001"
+BASE = os.getenv("API_TEST_BASE_URL", "http://localhost:8001")
 
 
 def test_employee_invite_email_uses_new_theme_and_escapes_dynamic_values():
@@ -161,12 +162,12 @@ async def test_token_security_invalid_expired_revoked_reuse():
                          {"id": inv_rev_id, "cid": str(owner.company_id), "email": "revoked@example.com", "role": "HR", "hash": h_rev, "by": str(owner.id), "exp": exp_fut})
         await db.commit()
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/invites/employee/accept", json={"token": "totally-invalid-token-xyz", "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": "totally-invalid-token-xyz", "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
-        r = await c.post("/invites/employee/accept", json={"token": token_exp, "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": token_exp, "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
         assert "expired" in r.text.lower()
-        r = await c.post("/invites/employee/accept", json={"token": token_rev, "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": token_rev, "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
     # cleanup
     async with AsyncSessionLocal() as db:
@@ -196,7 +197,7 @@ async def test_new_user_account_creation_and_role_protection():
         owner = (await db.execute(select(User).where(User.email == "owner@coditent.com"))).scalar_one()
         assert str(user.company_id) == str(owner.company_id)
         assert user.password_hash != "SecurePass123!"
-        assert user.password_hash.startswith("$2b$")
+        assert user.password_hash.startswith("$argon2id$")
         await db.execute(text("DELETE FROM users WHERE email=:e"), {"e": email})
         await db.execute(text("DELETE FROM employee_invitations WHERE token_hash=:h"), {"h": h})
         await db.commit()
@@ -296,7 +297,7 @@ async def test_resend_invalidates_old():
     async with httpx.AsyncClient(base_url=BASE) as c:
         r = await c.post("/invites/employee/resend", json={"invitation_id": inv_id}, headers={"Authorization": f"Bearer {tok}"})
         assert r.status_code == 200
-        r = await c.post("/invites/employee/accept", json={"token": token_old, "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": token_old, "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
     async with AsyncSessionLocal() as db:
         row = await db.execute(text("SELECT status FROM employee_invitations WHERE id=:id"), {"id": inv_id})

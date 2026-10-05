@@ -3,7 +3,7 @@
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ app_dir }}"
-    version: "{{ repo_branch }}"
+    version: "{{ deploy_commit }}"
     force: "{{ repo_force | default(yes) }}"
   register: git_result
 
@@ -16,4 +16,4 @@
 
 - name: Display deployed Git commit
   ansible.builtin.debug:
-    msg: "Deployed commit {{ current_commit.stdout }} on branch {{ repo_branch }}"
+    msg: "Deployed commit {{ current_commit.stdout }} from requested revision {{ deploy_commit }}"

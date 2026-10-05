@@ -16,6 +16,7 @@ import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/
 import { can } from "@/lib/permissions";
 import { FiCheck } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
+import { AccountDataControls } from "@/components/security/account-data-controls";
 
 // Mirrors apps/api/app/core/permissions.py via lib/permissions.ts. Backend remains authority.
 const MATRIX: Array<{ capability: string; roles: string[] }> = [
@@ -27,7 +28,7 @@ const MATRIX: Array<{ capability: string; roles: string[] }> = [
   { capability: "Edit job offers", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
   { capability: "Delete job offers", roles: ["OWNER", "ADMIN"] },
   { capability: "Review and advance candidates", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
-  { capability: "View assessments and insights", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
+  { capability: "View candidates and insights", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
   { capability: "Manage subscription", roles: ["OWNER"] },
 ];
 
@@ -213,29 +214,34 @@ export default function SettingsPage() {
                       <Button size="sm" variant="outline" onClick={() => subQ.refetch()} className="mt-3">Retry</Button>
                     </div>
                   ) : (
-                    <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Status</dt>
-                        <dd className="font-semibold text-foreground">{String((subQ.data as { status?: string }).status ?? "Unknown")}</dd>
+                        <dt className="text-xs text-muted-foreground">Plan</dt>
+                        <dd className="font-semibold capitalize text-foreground">{subQ.data.plan}</dd>
                       </div>
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Company</dt>
-                        <dd className="font-semibold text-foreground">{company?.name ?? "—"}</dd>
+                        <dt className="text-xs text-muted-foreground">Subscription</dt>
+                        <dd className="font-semibold capitalize text-foreground">{subQ.data.subscription_status.replace("_", " ")}</dd>
                       </div>
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Account</dt>
-                        <dd className="truncate font-semibold text-foreground">{me?.email ?? "—"}</dd>
+                        <dt className="text-xs text-muted-foreground">Active offers</dt>
+                        <dd className="font-semibold text-foreground">{subQ.data.usage.active_offers} / {subQ.data.limits.active_offers}</dd>
+                      </div>
+                      <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
+                        <dt className="text-xs text-muted-foreground">Member seats</dt>
+                        <dd className="font-semibold text-foreground">{subQ.data.usage.reserved_members} / {subQ.data.limits.members}</dd>
+                        {subQ.data.usage.pending_invitations > 0 && <p className="text-[11px] text-muted-foreground">Includes {subQ.data.usage.pending_invitations} pending invite(s)</p>}
                       </div>
                     </dl>
                   )}
-                  <p className="mt-3 text-xs text-muted-foreground">Plan changes are handled outside this panel. Only Owner manages subscription per platform policy.</p>
+                  <p className="mt-3 text-xs text-muted-foreground">Limits are enforced by the backend under concurrent offer and invitation requests. Plan assignments are managed by a platform administrator; no payment is charged in this development adapter.</p>
                 </div>
               ),
             },
             {
               id: "security",
               label: "Security",
-              content: <TwoFactorSecurity />,
+              content: <div className="space-y-5"><TwoFactorSecurity /><AccountDataControls /></div>,
             },
           ]}
         />

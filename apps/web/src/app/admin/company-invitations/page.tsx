@@ -60,8 +60,9 @@ export default function AdminCompanyInvitationsPage() {
       setModalOpen(false);
       setForm({ company_name: "", email: "", contact_name: "", contact_role: "" });
       setFormError(undefined);
-      toast(res.email_sent ? "Invitation sent" : "Invitation created, email failed", {
-        description: res.email_sent ? undefined : res.email_error || "Copy the link and share it manually.",
+      const queued = ["pending", "processing", "retry"].includes(res.delivery_status);
+      toast(res.email_sent ? "Invitation sent" : queued ? "Invitation queued" : "Invitation created, email failed", {
+        description: res.email_sent ? undefined : queued ? "Delivery will retry automatically; the manual link is available." : res.email_error || "Copy the link and share it manually.",
         variant: res.email_sent ? "success" : "warning",
       });
     },
@@ -80,7 +81,11 @@ export default function AdminCompanyInvitationsPage() {
         setIssuedUrls((m) => ({ ...m, [res.invitation_id]: res.invitation_url }));
         void navigator.clipboard?.writeText(res.invitation_url).catch(() => undefined);
       }
-      toast("Invitation sent successfully.", { variant: "success" });
+      const queued = ["pending", "processing", "retry"].includes(res.delivery_status);
+      toast(res.email_sent ? "Invitation sent successfully." : queued ? "Invitation queued" : "Invitation created, email failed", {
+        description: res.email_sent ? "The old link was invalidated." : queued ? "The old link was invalidated and delivery will retry automatically." : res.email_error || "Copy the new link and share it securely.",
+        variant: res.email_sent ? "success" : "warning",
+      });
     },
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Resend failed";
@@ -179,6 +184,7 @@ export default function AdminCompanyInvitationsPage() {
                     </p>
                   </div>
                   <StatusBadge status={inv.status} size="sm" />
+                  {inv.email_delivery_status && <StatusBadge status={`email ${inv.email_delivery_status}`} size="sm" showDot={false} />}
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {inv.status === "pending" && (

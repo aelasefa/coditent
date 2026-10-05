@@ -2,10 +2,11 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { validateEmployeeInvite, acceptEmployeeInvite, acceptEmployeeInviteExisting, getMe } from "@/lib/api";
+import { validateEmployeeInvite, acceptEmployeeInvite, acceptEmployeeInviteExisting, getMe, logoutSession } from "@/lib/api";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PASSWORD_MAX_LENGTH, passwordPolicyError, passwordRequirements } from "@/lib/password-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -108,8 +109,9 @@ function EmployeeInviteInner() {
     e.preventDefault();
     setMsg(null);
     setIsError(false);
-    if (password.length < 8) {
-      setMsg("Password must be at least 8 characters");
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      setMsg(policyError);
       setIsError(true);
       return;
     }
@@ -165,7 +167,7 @@ function EmployeeInviteInner() {
       {isLoggedInAsOther && (
         <p role="alert" className="mt-3 rounded-xl border border-warning/30 bg-warning-background p-3 text-[13px]">
           Logged in as <strong>{me?.email}</strong>, invite is for <strong>{invite.email}</strong>.{" "}
-          <button type="button" onClick={() => { localStorage.removeItem("coditent_token"); location.reload(); }} className="font-semibold underline">
+          <button type="button" onClick={() => { void logoutSession().finally(() => location.reload()); }} className="font-semibold underline">
             Log out
           </button>{" "}
           and retry.
@@ -184,10 +186,21 @@ function EmployeeInviteInner() {
           <Input label="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" required autoComplete="name" />
           <Input label="Email (from invitation)" value={invite.email} disabled />
           <div>
-            <Input label="Password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" required autoComplete="new-password" />
+            <Input label="Password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" required autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} aria-describedby="employee-password-requirements" />
             <button type="button" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword} aria-label={showPassword ? "Hide password" : "Show password"} className="mt-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground">
               {showPassword ? "Hide password" : "Show password"}
             </button>
+            <ul id="employee-password-requirements" className="mt-2 grid gap-1 text-xs" aria-label="Password requirements">
+              {passwordRequirements.map((requirement) => {
+                const isMet = requirement.test(password);
+                return (
+                  <li key={requirement.label} className={`flex items-center gap-1.5 ${isMet ? "text-primary" : "text-muted-foreground"}`}>
+                    <span aria-hidden="true">{isMet ? "✓" : "○"}</span>
+                    {requirement.label}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
           <Input label="Confirm password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" required autoComplete="new-password" />
           <Button type="submit" loading={submitting} disabled={Boolean(isLoggedInAsOther)} className="w-full">

@@ -11,6 +11,28 @@ jobs:
   # ========================================================
   # STAGE 1: CI (Lint & Test Web + API)
   # ========================================================
+  secret-scan:
+    name: CI - Prevent New Secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out complete commit range
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # v3 uses the supported Node 24 runtime. Pin the immutable release
+      # commit, and pin the scanner below the known v8.30.1 rule regression.
+      - name: Scan pushed or proposed commits with redacted output
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.29.1
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "false"
+
   ci-web:
     name: CI - Lint & Test Frontend
     runs-on: ubuntu-latest
@@ -21,10 +43,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
           cache-dependency-path: apps/web/package-lock.json
 
@@ -34,14 +56,43 @@ jobs:
       - name: Run linter
         run: npm run lint
 
+      - name: Type-check source
+        run: npx tsc --noEmit
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Test production build
         env:
           NEXT_PUBLIC_API_URL: http://34.205.255.37
         run: npm run build
 
   ci-api:
-    name: CI - Test Backend Imports
+    name: CI - Test Backend
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     defaults:
       run:
         working-directory: apps/api
@@ -54,29 +105,125 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-          cache-dependency-path: apps/api/requirements.txt
+          cache-dependency-path: apps/api/requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Generate ephemeral CI-only signing keys
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          from cryptography.fernet import Fernet
+          print(f"CI_JWT_SECRET={secrets.token_urlsafe(48)}")
+          print(f"CI_TOTP_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
+          PY
 
       - name: Sanity check imports (Supabase-only, no local DB)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6380/0' }}
           FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
         run: |
           python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"
 
+      - name: Run deterministic API regression suites
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
+          GEMINI_API_KEY: ci-placeholder
+          REDIS_URL: redis://localhost:6379/0
+          FRONTEND_URL: http://localhost:3000
+        run: |
+          alembic upgrade head
+          for test_file in \
+            tests/test_account_data_lifecycle.py \
+            tests/test_account_recovery.py \
+            tests/test_admin_lifecycle.py \
+            tests/test_ai_jobs.py \
+            tests/test_avatar_storage.py \
+            tests/test_chat_history.py \
+            tests/test_chat_realtime.py \
+            tests/test_company_logo.py \
+            tests/test_cv_asset_lifecycle.py \
+            tests/test_cv_upload.py \
+            tests/test_database_url.py \
+            tests/test_email_otp.py \
+            tests/test_email_outbox.py \
+            tests/test_entitlements.py \
+            tests/test_health_readiness.py \
+            tests/test_institutions.py \
+            tests/test_interview_feedback.py \
+            tests/test_invitation_routes_unit.py \
+            tests/test_match_scoring.py \
+            tests/test_oauth_popup.py \
+            tests/test_observability.py \
+            tests/test_passwords.py \
+            tests/test_production_boundary.py \
+            tests/test_rbac.py \
+            tests/test_recruiter_candidate_data.py \
+            tests/test_recruitment_chat.py \
+            tests/test_recruitment_no_duplicates.py \
+            tests/test_recruitment_read_events.py \
+            tests/test_secret_configuration.py \
+            tests/test_social_missions.py \
+            tests/test_socket_tickets.py \
+            tests/test_two_factor.py \
+            tests/test_upload_limits.py \
+            tests/test_upload_routes.py
+          do
+            pytest -q "$test_file"
+          done
+
+      - name: Prove backup and restore against disposable PostgreSQL
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          RESTORE_DATABASE_URL: postgresql://test:test@localhost:5432/restore_test
+          PGPASSWORD: test
+        working-directory: .
+        run: |
+          createdb -h localhost -U test restore_test
+          scripts/test-backup-restore.sh
+
+  ci-ansible:
+    name: CI - Validate Ansible
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible and declared collections
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ansible-core==2.17.14
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Syntax-check playbooks
+        run: bash deploy.sh check
+
   # ========================================================
   # STAGE 2: CD (Deploy to AWS EC2 via Ansible - On push to main)
   # ========================================================
   deploy:
     name: CD - Deploy to AWS EC2 (Ansible)
-    needs: [ci-web, ci-api]
+    needs: [secret-scan, ci-web, ci-api, ci-ansible]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
@@ -84,19 +231,43 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure SSH Private Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          chmod 600 ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null
 
       - name: Execute Deployment Script on EC2
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          TESTED_COMMIT: ${{ github.sha }}
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "/opt/coditent/deploy.sh"
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -i "$HOME/.ssh/id_rsa" \
+            "$SSH_USER@$SSH_HOST" \
+            "/opt/coditent/deploy.sh '$TESTED_COMMIT'"
 
-      - name: Verify Live Public Health Endpoint
+      - name: Verify Live Public Readiness Endpoint
+        env:
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
         run: |
-          echo "Verifying public endpoint http://${{ secrets.EC2_HOST }}/health ..."
-          curl -s -f --retry 5 --retry-delay 3 http://${{ secrets.EC2_HOST }}/health
-          echo "Health check passed!"
-
+          set -euo pipefail
+          case "$PUBLIC_BASE_URL" in
+            https://*) ;;
+            *) echo "PUBLIC_BASE_URL must use HTTPS" >&2; exit 1 ;;
+          esac
+          echo "Verifying public readiness endpoint ..."
+          curl --proto '=https' --tlsv1.2 --silent --show-error --fail \
+            --retry 5 --retry-delay 3 "${PUBLIC_BASE_URL%/}/ready"
+          echo "Readiness check passed!"

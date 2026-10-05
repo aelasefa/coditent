@@ -68,5 +68,13 @@ def delete_cv(path: str) -> None:
 
 
 def assert_owns_path(path: str, user_id: str) -> None:
-    if not path.startswith(f"{user_id}/"):
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+    if (
+        normalized != path
+        or len(parts) < 2
+        or parts[0] != user_id
+        or any(part in {"", ".", ".."} for part in parts)
+        or any(ord(character) < 32 or ord(character) == 127 for character in path)
+    ):
         raise CVStorageError("Forbidden")

@@ -203,129 +203,122 @@
     "file": "svg/29-company-candidates.svg"
   },
   {
-    "route": "/company/assessments",
-    "title": "Skill rings",
-    "group": "Company",
-    "concept": "Practical skills are measured with care and clarity.",
-    "file": "svg/30-company-assessments.svg"
-  },
-  {
     "route": "/company/messages",
     "title": "Conversation bridge",
     "group": "Company",
     "concept": "Messages bridge candidates and hiring teams.",
-    "file": "svg/31-company-messages.svg"
+    "file": "svg/30-company-messages.svg"
   },
   {
     "route": "/company/invitations",
     "title": "Opening circle",
     "group": "Company",
     "concept": "Each invitation adds another person to the team.",
-    "file": "svg/32-company-invitations.svg"
+    "file": "svg/31-company-invitations.svg"
   },
   {
     "route": "/company/team",
     "title": "Collective canopy",
     "group": "Company",
     "concept": "People share responsibility beneath a common canopy.",
-    "file": "svg/33-company-team.svg"
+    "file": "svg/32-company-team.svg"
   },
   {
     "route": "/company/analytics",
     "title": "Data terrain",
     "group": "Company",
     "concept": "Hiring outcomes rise from quiet topographic curves.",
-    "file": "svg/34-company-analytics.svg"
+    "file": "svg/33-company-analytics.svg"
   },
   {
     "route": "/company/settings",
     "title": "Control garden",
     "group": "Company",
     "concept": "Organization settings are stable dials within a living system.",
-    "file": "svg/35-company-settings.svg"
+    "file": "svg/34-company-settings.svg"
   },
   {
     "route": "/admin",
     "title": "Systems map",
     "group": "Admin",
     "concept": "Platform areas connect through a readable oversight map.",
-    "file": "svg/36-admin.svg"
+    "file": "svg/35-admin.svg"
   },
   {
     "route": "/admin/login",
     "title": "Secure portal",
     "group": "Admin",
     "concept": "An uncluttered entrance protects platform operations.",
-    "file": "svg/37-admin-login.svg"
+    "file": "svg/36-admin-login.svg"
   },
   {
     "route": "/admin/users",
     "title": "Community lattice",
     "group": "Admin",
     "concept": "Many individual accounts form a legible community.",
-    "file": "svg/38-admin-users.svg"
+    "file": "svg/37-admin-users.svg"
   },
   {
     "route": "/admin/offers",
     "title": "Role archive",
     "group": "Admin",
     "concept": "Published opportunities are organized as clear records.",
-    "file": "svg/39-admin-offers.svg"
+    "file": "svg/38-admin-offers.svg"
   },
   {
     "route": "/admin/recruiters",
     "title": "Review lens",
     "group": "Admin",
     "concept": "A fair review focuses on the person and their work.",
-    "file": "svg/40-admin-recruiters.svg"
+    "file": "svg/39-admin-recruiters.svg"
   },
   {
     "route": "/admin/activity",
     "title": "Audit current",
     "group": "Admin",
     "concept": "Recorded events flow along a visible timeline.",
-    "file": "svg/41-admin-activity.svg"
+    "file": "svg/40-admin-activity.svg"
   },
   {
     "route": "/admin/companies",
     "title": "Organization landscape",
     "group": "Admin",
     "concept": "Distinct companies sit in one accountable platform view.",
-    "file": "svg/42-admin-companies.svg"
+    "file": "svg/41-admin-companies.svg"
   },
   {
     "route": "/admin/company-invitations",
     "title": "Invitations in flight",
     "group": "Admin",
     "concept": "Company invitations move toward new workspaces.",
-    "file": "svg/43-admin-company-invitations.svg"
+    "file": "svg/42-admin-company-invitations.svg"
   },
   {
     "route": "/admin/settings",
     "title": "Steady controls",
     "group": "Admin",
     "concept": "Administrator controls remain calm and intentional.",
-    "file": "svg/44-admin-settings.svg"
+    "file": "svg/43-admin-settings.svg"
   },
   {
     "route": "/company/invite/accept",
     "title": "Owner threshold",
     "group": "Company",
     "concept": "A new owner enters a protected company workspace.",
-    "file": "svg/45-company-invite-accept.svg"
+    "file": "svg/44-company-invite-accept.svg"
   },
   {
     "route": "/company/onboarding",
     "title": "Workspace roots",
     "group": "Company",
     "concept": "Company details establish roots for a growing team.",
-    "file": "svg/46-company-onboarding.svg"
+    "file": "svg/45-company-onboarding.svg"
   },
   {
     "route": "/verify-email",
     "title": "Proof of arrival",
     "group": "Access",
     "concept": "A secure email check opens the next career step.",
-    "file": "svg/47-verify-email.svg"
+    "file": "svg/46-verify-email.svg"
   }
 ]

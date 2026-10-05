@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import hashlib
 import json
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -19,6 +20,7 @@ from app.observability import get_logger
 
 oauth_state_expire_minutes = 10
 oauth_handoff_expire_seconds = 90
+oauth_attempt_expire_seconds = oauth_state_expire_minutes * 60
 
 logger = get_logger("oauth")
 
@@ -32,6 +34,7 @@ class OAuthProvider:
     token_url: str
     userinfo_url: str
     scopes: tuple[str, ...]
+    issuer: str
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,18 @@ class OAuthIdentity:
     oauth_id: str
     avatar_url: str | None
     provider: str
+    issuer: str = ""
+    email_verified: bool = False
+
+
+@dataclass(frozen=True)
+class OAuthAttempt:
+    state: str
+    browser_id: str
+    code_verifier: str
+    nonce: str
+    popup_origin: str
+    attempt_id: str
 
 
 def get_oauth_provider(provider: str) -> OAuthProvider:
@@ -55,6 +70,7 @@ def get_oauth_provider(provider: str) -> OAuthProvider:
             token_url="https://oauth2.googleapis.com/token",
             userinfo_url="https://www.googleapis.com/oauth2/v3/userinfo",
             scopes=("openid", "email", "profile"),
+            issuer="https://accounts.google.com",
         )
     elif normalized_provider == "linkedin":
         config = OAuthProvider(
@@ -65,6 +81,7 @@ def get_oauth_provider(provider: str) -> OAuthProvider:
             token_url="https://www.linkedin.com/oauth/v2/accessToken",
             userinfo_url="https://api.linkedin.com/v2/userinfo",
             scopes=("openid", "profile", "email"),
+            issuer="https://www.linkedin.com",
         )
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sso_provider_not_supported")
@@ -97,7 +114,22 @@ def validate_popup_origin(origin: str | None) -> str:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_origin")
 
 
-def create_oauth_state(provider: str, popup_origin: str, attempt_id: str) -> str:
+def _browser_binding(browser_id: str) -> str:
+    return hashlib.sha256(browser_id.encode("utf-8")).hexdigest()
+
+
+def _oauth_state_key(state_id: str) -> str:
+    return f"oauth:state:{hashlib.sha256(state_id.encode()).hexdigest()}"
+
+
+def create_oauth_state(
+    provider: str,
+    popup_origin: str,
+    attempt_id: str,
+    *,
+    browser_id: str | None = None,
+    state_id: str | None = None,
+) -> str:
     validated_origin = validate_popup_origin(popup_origin)
     if not attempt_id or len(attempt_id) > 120:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_attempt")
@@ -107,12 +139,14 @@ def create_oauth_state(provider: str, popup_origin: str, attempt_id: str) -> str
         "csrf": secrets.token_urlsafe(24),
         "popup_origin": validated_origin,
         "attempt_id": attempt_id,
+        "state_id": state_id or secrets.token_urlsafe(24),
+        "browser": _browser_binding(browser_id) if browser_id else None,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=oauth_state_expire_minutes),
     }
     return jwt.encode(state_payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def verify_oauth_state(state_token: str, provider: str) -> tuple[str, str]:
+def _decode_oauth_state(state_token: str, provider: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(state_token, settings.secret_key, algorithms=[settings.algorithm])
     except JWTError as exc:
@@ -126,7 +160,117 @@ def verify_oauth_state(state_token: str, provider: str) -> tuple[str, str]:
     attempt_id = str(payload.get("attempt_id") or "")
     if not attempt_id or len(attempt_id) > 120:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
-    return popup_origin, attempt_id
+    payload["popup_origin"] = popup_origin
+    payload["attempt_id"] = attempt_id
+    return payload
+
+
+def verify_oauth_state(state_token: str, provider: str) -> tuple[str, str]:
+    """Verify the signed envelope (compatibility helper for error rendering/tests)."""
+    payload = _decode_oauth_state(state_token, provider)
+    return str(payload["popup_origin"]), str(payload["attempt_id"])
+
+
+async def create_oauth_attempt(
+    provider: str,
+    popup_origin: str,
+    attempt_id: str,
+    browser_id: str | None,
+) -> OAuthAttempt:
+    resolved_browser_id = browser_id or secrets.token_urlsafe(32)
+    state_id = secrets.token_urlsafe(32)
+    code_verifier = secrets.token_urlsafe(64)
+    nonce = secrets.token_urlsafe(32)
+    state = create_oauth_state(
+        provider,
+        popup_origin,
+        attempt_id,
+        browser_id=resolved_browser_id,
+        state_id=state_id,
+    )
+    payload = {
+        "provider": provider,
+        "browser": _browser_binding(resolved_browser_id),
+        "code_verifier": code_verifier,
+        "nonce": nonce,
+        "popup_origin": validate_popup_origin(popup_origin),
+        "attempt_id": attempt_id,
+    }
+    try:
+        stored = await get_async_redis().set(
+            _oauth_state_key(state_id),
+            json.dumps(payload),
+            ex=oauth_attempt_expire_seconds,
+            nx=True,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="sso_state_store_unavailable",
+        ) from exc
+    if not stored:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="sso_state_store_unavailable",
+        )
+    return OAuthAttempt(
+        state=state,
+        browser_id=resolved_browser_id,
+        code_verifier=code_verifier,
+        nonce=nonce,
+        popup_origin=str(payload["popup_origin"]),
+        attempt_id=attempt_id,
+    )
+
+
+async def consume_oauth_attempt(
+    state_token: str,
+    provider: str,
+    browser_id: str | None,
+) -> OAuthAttempt:
+    payload = _decode_oauth_state(state_token, provider)
+    state_id = str(payload.get("state_id") or "")
+    browser_binding = str(payload.get("browser") or "")
+    if (
+        not state_id
+        or not browser_id
+        or not browser_binding
+        or not secrets.compare_digest(browser_binding, _browser_binding(browser_id))
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    try:
+        encoded = await get_async_redis().getdel(_oauth_state_key(state_id))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="sso_state_store_unavailable",
+        ) from exc
+    if not encoded:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    try:
+        stored = json.loads(encoded)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state") from exc
+    expected = {
+        "provider": provider,
+        "browser": browser_binding,
+        "popup_origin": payload["popup_origin"],
+        "attempt_id": payload["attempt_id"],
+    }
+    if any(stored.get(key) != value for key, value in expected.items()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    verifier = str(stored.get("code_verifier") or "")
+    nonce = str(stored.get("nonce") or "")
+    if len(verifier) < 43 or not nonce:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    return OAuthAttempt(
+        state=state_token,
+        browser_id=browser_id,
+        code_verifier=verifier,
+        nonce=nonce,
+        popup_origin=str(payload["popup_origin"]),
+        attempt_id=str(payload["attempt_id"]),
+    )
 
 
 def _handoff_key(code: str) -> str:
@@ -134,10 +278,21 @@ def _handoff_key(code: str) -> str:
     return f"oauth:handoff:{digest}"
 
 
-async def create_oauth_handoff(token: str, user_id: str, is_new_registration: bool) -> str:
+async def create_oauth_handoff(
+    token: str,
+    user_id: str,
+    is_new_registration: bool,
+    *,
+    requires_2fa: bool = False,
+) -> str:
     code = secrets.token_urlsafe(32)
     payload = json.dumps(
-        {"token": token, "user_id": user_id, "is_new_registration": is_new_registration}
+        {
+            "token": token,
+            "user_id": user_id,
+            "is_new_registration": is_new_registration,
+            "requires_2fa": requires_2fa,
+        }
     )
     stored = await get_async_redis().set(
         _handoff_key(code), payload, ex=oauth_handoff_expire_seconds, nx=True
@@ -159,10 +314,19 @@ async def consume_oauth_handoff(code: str) -> dict[str, str | bool]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff") from exc
     if not isinstance(data.get("token"), str) or not isinstance(data.get("user_id"), str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
+    if not isinstance(data.get("requires_2fa", False), bool):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
     return data
 
 
-def build_oauth_authorize_url(provider: OAuthProvider, redirect_uri: str, state_token: str) -> str:
+def build_oauth_authorize_url(
+    provider: OAuthProvider,
+    redirect_uri: str,
+    state_token: str,
+    *,
+    code_verifier: str | None = None,
+    nonce: str | None = None,
+) -> str:
     query_params: dict[str, str] = {
         "client_id": provider.client_id or "",
         "redirect_uri": redirect_uri,
@@ -170,6 +334,13 @@ def build_oauth_authorize_url(provider: OAuthProvider, redirect_uri: str, state_
         "scope": " ".join(provider.scopes),
         "state": state_token,
     }
+
+    if code_verifier:
+        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+        query_params["code_challenge"] = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+        query_params["code_challenge_method"] = "S256"
+    if nonce:
+        query_params["nonce"] = nonce
 
     if provider.name == "google":
         logger.info("google_oauth_authorize", redirect_uri=redirect_uri)
@@ -190,6 +361,8 @@ async def exchange_code_for_access_token(
     provider: OAuthProvider,
     code: str,
     redirect_uri: str,
+    *,
+    code_verifier: str,
 ) -> str:
     payload = {
         "grant_type": "authorization_code",
@@ -197,6 +370,7 @@ async def exchange_code_for_access_token(
         "client_id": provider.client_id,
         "client_secret": provider.client_secret,
         "redirect_uri": redirect_uri,
+        "code_verifier": code_verifier,
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
@@ -260,13 +434,21 @@ def _name_from_email(email: str) -> str:
     return " ".join(words) or email
 
 
-def _parse_identity_payload(provider: str, payload: dict[str, Any]) -> OAuthIdentity:
+def _parse_identity_payload(provider: OAuthProvider, payload: dict[str, Any]) -> OAuthIdentity:
     email = str(payload.get("email") or "").strip().lower()
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_email_missing")
+    verified_value = payload.get("email_verified")
+    email_verified = verified_value is True or str(verified_value).lower() in {"1", "true"}
+    if not email_verified:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_email_unverified")
+
+    issuer = str(payload.get("iss") or provider.issuer).strip().rstrip("/")
+    if issuer != provider.issuer.rstrip("/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_issuer_invalid")
 
     full_name = str(payload.get("name") or "").strip()
-    if not full_name and provider == "linkedin":
+    if not full_name and provider.name == "linkedin":
         given_name = str(payload.get("given_name") or "").strip()
         family_name = str(payload.get("family_name") or "").strip()
         full_name = " ".join([value for value in [given_name, family_name] if value]).strip()
@@ -274,9 +456,9 @@ def _parse_identity_payload(provider: str, payload: dict[str, Any]) -> OAuthIden
     if not full_name:
         full_name = _name_from_email(email)
 
-    oauth_id = str(payload.get("sub") or payload.get("id") or "").strip()
+    oauth_id = str(payload.get("sub") or "").strip()
     if not oauth_id:
-        oauth_id = email
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_subject_missing")
 
     avatar_url = payload.get("picture") or payload.get("picture_url") or None
     if avatar_url is not None:
@@ -287,7 +469,9 @@ def _parse_identity_payload(provider: str, payload: dict[str, Any]) -> OAuthIden
         full_name=full_name,
         oauth_id=oauth_id,
         avatar_url=avatar_url,
-        provider=provider,
+        provider=provider.name,
+        issuer=provider.issuer,
+        email_verified=True,
     )
 
 
@@ -311,4 +495,4 @@ async def fetch_user_identity(provider: OAuthProvider, access_token: str) -> OAu
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_profile_parse_failed") from exc
 
-    return _parse_identity_payload(provider.name, profile_payload)
+    return _parse_identity_payload(provider, profile_payload)

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, getAssessments, setResponsibleHr, offerLogoSrc } from "@/lib/api";
+import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, setResponsibleHr, offerLogoSrc } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
@@ -84,11 +84,6 @@ export default function CompanyJobsPage() {
     queryFn: async () => (await getApplications()).applications,
     enabled: !!me,
   });
-  const assQ = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => (await getAssessments()).assessments,
-    enabled: !!me,
-  });
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
@@ -101,7 +96,6 @@ export default function CompanyJobsPage() {
   const [responsibleHrId, setResponsibleHrId] = useState("");
 
   const apps = (appsQ.data ?? []) as unknown as Array<{ opportunity_id: string; status: string }>;
-  const assessments = (assQ.data ?? []) as Array<{ id: string }>;
   const appsByOffer = useMemo(() => {
     const m = new Map<string, number>();
     apps.forEach((a) => m.set(a.opportunity_id, (m.get(a.opportunity_id) ?? 0) + 1));
@@ -310,7 +304,6 @@ export default function CompanyJobsPage() {
                       )}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {appsByOffer.get(o.id) ?? 0} applicants
-                        {assQ.data ? ` · ${assessments.length} assessments in workspace` : ""}
                       </p>
                     </div>
                   </div>

@@ -1,25 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { PageHeader } from "@/components/company/PageHeader";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { EmptyState } from "@/components/company/EmptyState";
 import { Drawer } from "@/components/company/Drawer";
+import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { getAdminOffers, getCompanies, getCompany, getCompanyRecruiters } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
+import { archiveAdminCompany, getAdminCompanies, getAdminOffers, getCompanyRecruiters, updateAdminCompanySubscription } from "@/lib/api";
 import type { Company } from "@/lib/types";
 import { FiSearch, FiShield } from "react-icons/fi";
 
 export default function AdminCompaniesPage() {
-  const companiesQ = useQuery({ queryKey: ["companies"], queryFn: getCompanies });
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const companiesQ = useQuery({ queryKey: ["admin-companies"], queryFn: getAdminCompanies });
   const offersQ = useQuery({ queryKey: ["admin-offers"], queryFn: getAdminOffers });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<Company | null>(null);
+  const [plan, setPlan] = useState<"free" | "pro" | "enterprise">("free");
+  const [subscriptionStatus, setSubscriptionStatus] = useState<"trialing" | "active" | "past_due" | "canceled">("active");
 
   const companies = companiesQ.data ?? [];
   const filtered = useMemo(() => {
@@ -33,11 +40,6 @@ export default function AdminCompaniesPage() {
   }, [companies, search, statusFilter]);
 
   const selected = companies.find((c) => c.id === selectedId) ?? null;
-  const detailQ = useQuery({
-    queryKey: ["company", selectedId],
-    queryFn: () => getCompany(selectedId as string),
-    enabled: !!selectedId,
-  });
   const membersQ = useQuery({
     queryKey: ["company-recruiters", selectedId],
     queryFn: () => getCompanyRecruiters(selectedId as string),
@@ -47,6 +49,36 @@ export default function AdminCompaniesPage() {
     () => (offersQ.data ?? []).filter((o) => o.company_id === selectedId),
     [offersQ.data, selectedId]
   );
+  useEffect(() => {
+    if (!selected) return;
+    setPlan(selected.subscription_plan ?? "free");
+    setSubscriptionStatus(selected.subscription_status ?? "active");
+  }, [selected]);
+  const subscriptionMut = useMutation({
+    mutationFn: () => {
+      if (!selected) throw new Error("No organization selected");
+      return updateAdminCompanySubscription(selected.id, { plan, subscription_status: subscriptionStatus, expires_at: selected.subscription_expires_at ?? null });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-companies"] });
+      toast("Subscription entitlements updated", { variant: "success" });
+    },
+    onError: () => toast("Subscription could not be updated", { variant: "error" }),
+  });
+  const archiveMut = useMutation({
+    mutationFn: archiveAdminCompany,
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-companies"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-offers"] });
+      setArchiveTarget(null);
+      setSelectedId(null);
+      toast(`Organization archived. ${result.affected_users} member accounts deactivated and ${result.closed_offers} offers closed.`, { variant: "success" });
+    },
+    onError: (error) => {
+      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      toast(typeof detail === "string" ? detail : "Organization could not be archived", { variant: "error" });
+    },
+  });
 
   return (
     <AdminShell>
@@ -122,10 +154,10 @@ export default function AdminCompaniesPage() {
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
                 {[
                   ["Status", selected.status || "active"],
-                  ["Region", detailQ.data?.region || selected.region || "—"],
-                  ["Website", detailQ.data?.website || selected.website || "—"],
-                  ["Size", detailQ.data?.company_size || selected.company_size || "—"],
-                  ["Contact", detailQ.data?.contact_email || selected.contact_email || "—"],
+                  ["Region", selected.region || "—"],
+                  ["Website", selected.website || "—"],
+                  ["Size", selected.company_size || "—"],
+                  ["Contact", selected.contact_email || "—"],
                   ["Offers", String(companyOffers.length)],
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-lg bg-surface-secondary/50 px-3 py-2">
@@ -166,9 +198,33 @@ export default function AdminCompaniesPage() {
                   {companyOffers.length === 0 && <li className="text-[13px] text-muted-foreground">No offers published.</li>}
                 </ul>
               </section>
+              <section aria-label="Subscription" className="rounded-xl border border-border-subtle p-4">
+                <h3 className="text-sm font-semibold text-foreground">Subscription entitlements</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Assignments only; this does not charge a payment method.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <label className="text-xs font-medium">Plan<select className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-2" value={plan} onChange={(event) => setPlan(event.target.value as typeof plan)}><option value="free">Free</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option></select></label>
+                  <label className="text-xs font-medium">Status<select className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-2" value={subscriptionStatus} onChange={(event) => setSubscriptionStatus(event.target.value as typeof subscriptionStatus)}><option value="trialing">Trialing</option><option value="active">Active</option><option value="past_due">Past due</option><option value="canceled">Canceled</option></select></label>
+                </div>
+                <Button size="sm" className="mt-3" loading={subscriptionMut.isPending} onClick={() => subscriptionMut.mutate()}>Save entitlements</Button>
+              </section>
+              {(selected.status || "active") === "active" && (
+                <div className="border-t border-border-subtle pt-4">
+                  <Button variant="danger" onClick={() => setArchiveTarget(selected)}>Archive organization</Button>
+                  <p className="mt-2 text-xs text-muted-foreground">This closes active offers, revokes pending employee invitations, deactivates members, and preserves hiring history.</p>
+                </div>
+              )}
             </div>
           )}
         </Drawer>
+        <ConfirmDialog
+          isOpen={!!archiveTarget}
+          onClose={() => setArchiveTarget(null)}
+          onConfirm={() => archiveTarget && archiveMut.mutate(archiveTarget.id)}
+          title="Archive organization?"
+          message="All member sessions will be invalidated, active offers will close, and pending employee invitations will be revoked. Applications and audit evidence will be retained."
+          confirmLabel="Archive organization"
+          isLoading={archiveMut.isPending}
+        />
       </div>
     </AdminShell>
   );

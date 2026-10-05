@@ -9,7 +9,7 @@ import { Logo } from "@/components/ui/logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Sheet } from "@/components/ui/sheet";
 import { PageContainer } from "@/components/shell/page-container";
-import { getMe } from "@/lib/api";
+import { getMe, logoutSession } from "@/lib/api";
 import {
   FiActivity,
   FiGrid,
@@ -17,6 +17,8 @@ import {
   FiSettings,
   FiShield,
   FiUsers,
+  FiBookOpen,
+  FiAward,
 } from "react-icons/fi";
 
 const NAV = [
@@ -24,14 +26,15 @@ const NAV = [
   { label: "Companies", href: "/admin/companies", icon: FiShield },
   { label: "Company Invitations", href: "/admin/company-invitations", icon: FiMail },
   { label: "Users", href: "/admin/users", icon: FiUsers },
+  { label: "Institutions", href: "/admin/institutions", icon: FiBookOpen },
+  { label: "Practice Missions", href: "/admin/missions", icon: FiAward },
   { label: "Platform Activity", href: "/admin/activity", icon: FiActivity },
   { label: "Settings", href: "/admin/settings", icon: FiSettings },
 ];
 
-function logout() {
+async function logout() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("coditent_token");
-    document.cookie = "coditent_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    await logoutSession().catch(() => undefined);
     window.location.href = "/admin/login";
   }
 }

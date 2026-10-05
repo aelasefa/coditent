@@ -4,6 +4,7 @@ import axios from "axios";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
+import { AccountDataControls } from "@/components/security/account-data-controls";
 import { PageContainer, PageHeader } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import {
   updateAccountName,
 } from "@/lib/api";
 import { saveToken } from "@/lib/auth";
+import { PASSWORD_MAX_LENGTH, passwordPolicyError, passwordRequirements } from "@/lib/password-policy";
 
 function errorText(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -76,7 +78,8 @@ export default function CandidateSettingsPage() {
 
   async function savePassword(event: React.FormEvent) {
     event.preventDefault(); clearMessage();
-    if (newPassword.length < 8) { setError("New password must contain at least eight characters."); return; }
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) { setError(policyError); return; }
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
     setBusy("password");
     try {
@@ -113,14 +116,16 @@ export default function CandidateSettingsPage() {
         </form>
 
         <form onSubmit={savePassword} className="space-y-4 rounded-xl border border-border-subtle bg-surface p-5">
-          <div><h2 className="font-semibold text-foreground">Password</h2><p className="text-sm text-muted-foreground">Choose a new password with at least eight characters.</p></div>
+          <div><h2 className="font-semibold text-foreground">Password</h2><p className="text-sm text-muted-foreground">Use 12–128 characters with lowercase, uppercase, a number, and a symbol.</p></div>
           <Input label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-          <div className="grid gap-3 sm:grid-cols-2"><Input label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /><Input label="Confirm new password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Input label="New password" type="password" autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /><Input label="Confirm new password" type="password" autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
+          <ul className="grid grid-cols-2 gap-1 text-xs text-muted-foreground" aria-label="Password requirements">{passwordRequirements.map((requirement) => <li key={requirement.label} className={requirement.test(newPassword) ? "text-success" : ""}>{requirement.test(newPassword) ? "✓" : "○"} {requirement.label}</li>)}</ul>
           {twoFactorEnabled ? <Input label="Authenticator or recovery code" autoComplete="one-time-code" value={password2fa} onChange={(e) => setPassword2fa(e.target.value.slice(0, 20))} required /> : null}
           <Button type="submit" loading={busy === "password"}>Change password</Button>
         </form>
 
         <TwoFactorSecurity />
+        <AccountDataControls />
       </div>
     </PageContainer>
   );

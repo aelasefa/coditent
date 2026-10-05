@@ -217,6 +217,9 @@ function LoginInner() {
                       {showPassword ? "Hide password" : "Show password"}
                     </button>
                   </div>
+                  <p className={styles.registerPrompt}>
+                    <Link href="/forgot-password">Forgot your password?</Link>
+                  </p>
                   {errorMessage ? (
                     <p id="login-error" role="alert" className={styles.error}>
                       {errorMessage}

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { FiArrowRight, FiBriefcase, FiCheck, FiCheckSquare, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiCheck, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
 import { api, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
 import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,16 +57,6 @@ export default function DashboardPage() {
       context: `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} to complete before your profile is ready.`,
       cta: "Open profile",
       href: "/profile",
-    });
-  }
-  const assessmentApps = apps.filter((a) => a.status === "assessment_required");
-  if (assessmentApps.length > 0) {
-    actions.push({
-      icon: FiCheckSquare,
-      title: "Assessment requested",
-      context: `${assessmentApps.length} application${assessmentApps.length > 1 ? "s" : ""} waiting on assessment stage.`,
-      cta: "View applications",
-      href: "/dashboard/applications",
     });
   }
   if (!recsQuery.isLoading && recs.length === 0) {

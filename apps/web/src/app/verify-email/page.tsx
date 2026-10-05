@@ -18,6 +18,7 @@ function VerifyInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
+  const registrationId = searchParams.get("registration_id") || "";
   const [otp, setOtp] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -47,7 +48,11 @@ function VerifyInner() {
     setErrorMessage(null);
     setInfoMessage(null);
     try {
-      const data = await verifyEmail({ email, otp: code });
+      const data = await verifyEmail({
+        email,
+        registration_id: registrationId,
+        otp: code,
+      });
       saveToken(data.token);
       router.push("/get-started");
     } catch (error) {
@@ -72,7 +77,7 @@ function VerifyInner() {
     setErrorMessage(null);
     setInfoMessage(null);
     try {
-      await resendVerification(email);
+      await resendVerification(email, registrationId);
       setCooldown(RESEND_COOLDOWN_SECONDS);
       setInfoMessage("A new code was sent to your email.");
     } catch (error) {
@@ -138,7 +143,7 @@ function VerifyInner() {
               </p>
 
               <div id="auth-form" className={`${authStyles.formArea} ${styles.formArea}`}>
-                {email ? (
+                {email && registrationId ? (
                   <>
                     <div className={styles.expiryNotice}>
                       <span className={styles.noticeDot} aria-hidden="true" />
@@ -182,7 +187,7 @@ function VerifyInner() {
                   </>
                 ) : (
                   <div className={styles.missingEmail}>
-                    <p>We need your email address before we can verify your account.</p>
+                    <p>This registration attempt is missing or invalid. Start registration again to receive a fresh code.</p>
                     <Link href="/register" className={styles.primaryLink}>Back to registration</Link>
                   </div>
                 )}

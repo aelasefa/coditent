@@ -4,8 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { safeNextDestination } from "@/lib/auth-redirect";
-import { exchangeOAuthHandoff, getApiBaseUrl, getMe } from "@/lib/api";
-import { removeToken, saveToken } from "@/lib/auth";
+import { exchangeOAuthHandoff, getMe, getOAuthBaseUrl, logoutSession, verifyTwoFactor } from "@/lib/api";
+import { removeToken, saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
   isOAuthPopupResult,
@@ -67,7 +67,10 @@ export function SocialLoginButtons({
   const channelRef = useRef<BroadcastChannel | null>(null);
   const handledRef = useRef(false);
   const [popupError, setPopupError] = useState<string | null>(null);
-  const ssoBaseUrl = getApiBaseUrl();
+  const [oauthMfa, setOauthMfa] = useState<{ token: string; isNewRegistration: boolean } | null>(null);
+  const [oauthMfaCode, setOauthMfaCode] = useState("");
+  const [oauthMfaBusy, setOauthMfaBusy] = useState(false);
+  const ssoBaseUrl = getOAuthBaseUrl();
   const baseButtonClass =
     "inline-flex h-11 w-full items-center justify-center gap-3 rounded-full px-4 text-sm font-semibold transition-all duration-300 ease-md active:scale-95";
 
@@ -116,15 +119,23 @@ export function SocialLoginButtons({
 
       try {
         const session = await exchangeOAuthHandoff(result.handoffCode);
-        saveToken(session.token);
-        const user = await getMe();
-        localStorage.setItem("user", JSON.stringify(user));
-        const next = safeNextDestination(searchParams.get("next"));
         acknowledge(result.attemptId);
         window.setTimeout(() => {
           popupRef.current = null;
           closeChannel();
         }, 700);
+        if ("require_2fa" in session) {
+          setOauthMfa({
+            token: session.mfa_token,
+            isNewRegistration: Boolean(session.is_new_registration),
+          });
+          setOauthMfaCode("");
+          return;
+        }
+        saveToken(session.token);
+        const user = await getMe();
+        localStorage.setItem("user", JSON.stringify(user));
+        const next = safeNextDestination(searchParams.get("next"));
         router.replace(
           await getPostAuthDestination(queryClient, user, {
             next,
@@ -135,7 +146,7 @@ export function SocialLoginButtons({
         acknowledge(result.attemptId);
         popupRef.current = null;
         closeChannel();
-        removeToken();
+        await logoutSession().catch(() => removeToken());
         setPopupError("Authentication completed, but the Coditent session could not be verified. Please try again.");
       }
     }
@@ -157,6 +168,8 @@ export function SocialLoginButtons({
 
   function openOAuthPopup(provider: "google" | "linkedin") {
     setPopupError(null);
+    setOauthMfa(null);
+    setOauthMfaCode("");
     handledRef.current = false;
 
     if (popupRef.current && !popupRef.current.closed) {
@@ -235,8 +248,59 @@ export function SocialLoginButtons({
     }, 120_000);
   }
 
+  async function submitOauthMfa(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!oauthMfa || oauthMfaBusy) return;
+    const code = oauthMfaCode.trim();
+    if (!/^\d{6}$/.test(code) && !/^[A-Fa-f0-9]{4}-?[A-Fa-f0-9]{4}$/.test(code)) {
+      setPopupError("Enter a six-digit authenticator code or a valid recovery code.");
+      return;
+    }
+    setOauthMfaBusy(true);
+    setPopupError(null);
+    try {
+      const session = await verifyTwoFactor(oauthMfa.token, code);
+      saveToken(session.token);
+      if (session.trusted_device_token) saveTrustedDevice(session.trusted_device_token);
+      localStorage.setItem("user", JSON.stringify(session.user));
+      const next = safeNextDestination(searchParams.get("next"));
+      router.replace(
+        await getPostAuthDestination(queryClient, session.user, {
+          next,
+          isNewRegistration: oauthMfa.isNewRegistration,
+        })
+      );
+    } catch {
+      setPopupError("The authenticator or recovery code was invalid, or the challenge expired.");
+    } finally {
+      setOauthMfaBusy(false);
+    }
+  }
+
   return (
     <div className={className}>
+      {oauthMfa ? (
+        <form className="grid gap-3" onSubmit={submitOauthMfa}>
+          <label className="text-sm font-medium text-foreground" htmlFor="oauth-mfa-code">
+            Authenticator or recovery code
+          </label>
+          <input
+            id="oauth-mfa-code"
+            autoComplete="one-time-code"
+            className="h-11 rounded-full border border-md-outline/30 bg-white px-4 text-slate-900"
+            value={oauthMfaCode}
+            onChange={(event) => setOauthMfaCode(event.target.value.slice(0, 20))}
+            required
+          />
+          <button
+            type="submit"
+            disabled={oauthMfaBusy}
+            className={`${baseButtonClass} bg-md-primary text-white disabled:opacity-60`}
+          >
+            {oauthMfaBusy ? "Verifying…" : "Verify and continue"}
+          </button>
+        </form>
+      ) : (
       <div className="grid gap-3">
         <button
           type="button"
@@ -259,6 +323,7 @@ export function SocialLoginButtons({
           Continue with LinkedIn
         </button>
       </div>
+      )}
 
       {popupError ? (
         <p role="alert" className="mt-3 text-sm font-medium text-danger">
@@ -283,6 +348,9 @@ function readableOAuthError(error: string): string {
     invalid_sso_state: "The sign-in session was invalid or expired. Please try again.",
     sso_provider_error: "The provider did not complete sign-in. Please try again.",
     sso_code_or_state_missing: "The provider returned an incomplete sign-in response. Please try again.",
+    google_token_exchange_failed: "Google could not validate this sign-in code. Please start a new sign-in.",
+    sso_invalid_code: "The sign-in code expired or was already used. Please start again.",
+    sso_token_exchange_failed: "The sign-in provider is temporarily unavailable. Please try again.",
   };
   return messages[error] ?? "Social sign-in failed. Please try again.";
 }

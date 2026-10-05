@@ -1,9 +1,9 @@
-import hashlib
+from datetime import timedelta
 from typing import Annotated
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from passlib.context import CryptContext
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -20,33 +20,36 @@ from app.schemas import (
     UserOut,
 )
 from app.services.two_factor import (
+    TotpSecretUnavailable,
+    consume_second_factor,
+    decrypt_totp_secret,
+    encrypt_totp_secret,
     generate_backup_codes,
     generate_qr_code_base64,
     generate_totp_secret,
     get_totp_uri,
-    verify_and_consume_backup_code,
-    verify_totp_code,
+    matching_totp_step,
 )
-from app.utils.jwt import create_access_token, verify_token
+from app.services.passwords import verify_password
+from app.services.auth_cookies import (
+    clear_auth_cookies,
+    set_access_cookie,
+    set_trusted_device_cookie,
+)
+from app.services.authentication import (
+    AuthenticationRejected,
+    AuthenticationStoreUnavailable,
+    consume_mfa_challenge,
+    ensure_account_can_authenticate,
+    ensure_credential_matches_account,
+    ensure_mfa_challenge_active,
+    factor_fingerprint,
+    issue_access_token,
+)
+from app.utils.jwt import create_trusted_device_token, verify_mfa_token
 
 router = APIRouter()
 logger = get_logger("two_factor")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-
-def _set_access_cookie(response: Response, token: str) -> None:
-    from app.config import settings
-
-    response.set_cookie(
-        key=settings.access_token_cookie_name,
-        value=token,
-        httponly=True,
-        secure=settings.access_token_cookie_secure,
-        samesite=settings.access_token_cookie_samesite,
-        max_age=settings.access_token_expire_minutes * 60,
-        path="/",
-    )
 
 
 @router.get("/status")
@@ -65,17 +68,27 @@ async def two_factor_setup(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TwoFactorSetupOut:
     """Generate TOTP secret and QR code for initial 2FA setup."""
-    if current_user.is_2fa_enabled:
+    user = (
+        await db.execute(select(User).where(User.id == current_user.id).with_for_update())
+    ).scalar_one()
+    if user.is_2fa_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Two-factor authentication is already enabled for this account.",
         )
 
     secret = generate_totp_secret()
-    current_user.totp_secret = secret
+    try:
+        user.totp_secret_encrypted = encrypt_totp_secret(secret)
+    except TotpSecretUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Two-factor authentication is temporarily unavailable.",
+        ) from exc
+    user.totp_last_used_step = None
     await db.commit()
 
-    otpauth_uri = get_totp_uri(secret, current_user.email)
+    otpauth_uri = get_totp_uri(secret, user.email)
     qr_code_b64 = generate_qr_code_base64(otpauth_uri)
 
     logger.info("2fa_setup_initiated", user_id=str(current_user.id))
@@ -95,19 +108,30 @@ async def two_factor_enable(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TwoFactorEnableOut:
     """Verify 6-digit TOTP code, enable 2FA, and return emergency backup recovery codes."""
-    if current_user.is_2fa_enabled:
+    user = (
+        await db.execute(select(User).where(User.id == current_user.id).with_for_update())
+    ).scalar_one()
+    if user.is_2fa_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Two-factor authentication is already enabled.",
         )
 
-    if not current_user.totp_secret:
+    try:
+        secret = decrypt_totp_secret(user.totp_secret_encrypted)
+    except TotpSecretUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Two-factor authentication is temporarily unavailable.",
+        ) from exc
+    if not secret:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please run 2FA setup first before enabling.",
         )
 
-    if not verify_totp_code(current_user.totp_secret, data.code):
+    step = matching_totp_step(secret, data.code)
+    if step is None:
         logger.warning("2fa_enable_failed", user_id=str(current_user.id), reason="invalid_code")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -115,8 +139,9 @@ async def two_factor_enable(
         )
 
     plaintext_backup_codes, hashed_json = generate_backup_codes(8)
-    current_user.is_2fa_enabled = True
-    current_user.backup_codes = hashed_json
+    user.is_2fa_enabled = True
+    user.totp_last_used_step = step
+    user.backup_codes = hashed_json
     await db.commit()
 
     logger.info("2fa_enabled_success", user_id=str(current_user.id))
@@ -136,40 +161,41 @@ async def two_factor_disable(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Disable 2FA after validating current user password and TOTP/backup code."""
-    if not current_user.is_2fa_enabled:
+    user = (
+        await db.execute(select(User).where(User.id == current_user.id).with_for_update())
+    ).scalar_one()
+    if not user.is_2fa_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Two-factor authentication is not enabled.",
         )
 
-    if not pwd_context.verify(data.password, current_user.password_hash):
+    if not verify_password(data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid account password.",
         )
 
-    totp_valid = verify_totp_code(current_user.totp_secret or "", data.code)
-    backup_valid, _ = verify_and_consume_backup_code(current_user.backup_codes, data.code)
-
-    if not (totp_valid or backup_valid):
+    try:
+        consumed = consume_second_factor(user, data.code)
+    except TotpSecretUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Two-factor authentication is temporarily unavailable.",
+        ) from exc
+    if not consumed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification or backup code.",
         )
 
-    current_user.is_2fa_enabled = False
-    current_user.totp_secret = None
-    current_user.backup_codes = None
+    user.is_2fa_enabled = False
+    user.totp_secret_encrypted = None
+    user.totp_last_used_step = None
+    user.backup_codes = None
+    user.auth_version += 1
     await db.commit()
-    from app.config import settings
-
-    response.delete_cookie(
-        key=settings.trusted_device_cookie_name,
-        path="/",
-        secure=settings.access_token_cookie_secure,
-        httponly=True,
-        samesite=settings.access_token_cookie_samesite,
-    )
+    clear_auth_cookies(response)
 
     logger.info("2fa_disabled_success", user_id=str(current_user.id))
     return {"detail": "Two-factor authentication disabled successfully."}
@@ -184,69 +210,78 @@ async def two_factor_verify_challenge(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     try:
-        payload = verify_token(data.mfa_token)
-    except Exception:
-        payload = None
-
-    if not payload or payload.get("type") != "mfa_pending":
+        payload = verify_mfa_token(data.mfa_token)
+        await ensure_mfa_challenge_active(payload)
+        user_id = UUID(str(payload["sub"]))
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable.",
+        ) from exc
+    except (AuthenticationRejected, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired MFA session token.",
-        )
+        ) from exc
 
-
-    user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
     user = result.scalar_one_or_none()
     if user is None or not user.is_2fa_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User not found or 2FA not active.",
         )
+    try:
+        ensure_account_can_authenticate(user)
+        ensure_credential_matches_account(payload, user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is not active.",
+        ) from exc
 
-    totp_valid = verify_totp_code(user.totp_secret or "", data.code)
-    backup_valid, updated_backup_json = verify_and_consume_backup_code(user.backup_codes, data.code)
-
-    if not (totp_valid or backup_valid):
+    try:
+        consumed_factor = consume_second_factor(user, data.code)
+    except TotpSecretUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Two-factor authentication is temporarily unavailable.",
+        ) from exc
+    if not consumed_factor:
         logger.warning("2fa_challenge_failed", user_id=str(user.id))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification code or backup code.",
         )
 
-    if backup_valid:
-        user.backup_codes = updated_backup_json
-        await db.commit()
+    try:
+        await consume_mfa_challenge(payload)
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable.",
+        ) from exc
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA session token.",
+        ) from exc
+
+    await db.commit()
+    if consumed_factor == "recovery":
         logger.info("2fa_backup_code_consumed", user_id=str(user.id))
 
-    final_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
-    _set_access_cookie(response, final_token)
-    from datetime import timedelta
+    final_token = issue_access_token(user)
+    set_access_cookie(response, final_token)
     from app.config import settings
 
-    trusted_device_token = create_access_token(
-        {
-            "sub": str(user.id),
-            "type": "trusted_device",
-            "factor": hashlib.sha256((user.totp_secret or "").encode()).hexdigest(),
-        },
+    trusted_device_token = create_trusted_device_token(
+        str(user.id),
+        factor=factor_fingerprint(user),
+        auth_version=user.auth_version,
         expires_delta=timedelta(days=settings.trusted_device_expire_days),
     )
-    response.set_cookie(
-        key=settings.trusted_device_cookie_name,
-        value=trusted_device_token,
-        httponly=True,
-        secure=settings.access_token_cookie_secure,
-        samesite=settings.access_token_cookie_samesite,
-        max_age=settings.trusted_device_expire_days * 24 * 60 * 60,
-        path="/",
-    )
+    set_trusted_device_cookie(response, trusted_device_token)
     logger.info("2fa_login_success", user_id=str(user.id))
     return TokenResponse(
         token=final_token,

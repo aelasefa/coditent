@@ -1,11 +1,8 @@
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User, UserRole
-
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.services.passwords import hash_password, validate_new_password
 
 
 async def seed_admin_user(
@@ -16,6 +13,7 @@ async def seed_admin_user(
     full_name: str,
     reset_password: bool = False,
 ) -> tuple[User, bool]:
+    validate_new_password(password)
     normalized_email = email.strip().lower()
     normalized_full_name = full_name.strip() or "Platform Admin"
 
@@ -25,7 +23,7 @@ async def seed_admin_user(
     if user is None:
         user = User(
             email=normalized_email,
-            password_hash=pwd_context.hash(password),
+            password_hash=hash_password(password),
             role=UserRole.PLATFORM_ADMIN,
             is_approved=True,
             full_name=normalized_full_name,
@@ -46,7 +44,7 @@ async def seed_admin_user(
         user.full_name = normalized_full_name
         updated = True
     if reset_password:
-        user.password_hash = pwd_context.hash(password)
+        user.password_hash = hash_password(password)
         updated = True
 
     if updated:

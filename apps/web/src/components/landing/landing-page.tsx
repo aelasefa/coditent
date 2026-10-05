@@ -16,7 +16,7 @@ const CAPABILITIES = [
 const COMPANY_STEPS = [
   ["Publish opportunities", "Describe the role, requirements and skills."],
   ["Find relevant candidates", "Review applicants with AI match context."],
-  ["Evaluate practical skills", "Use assessment results, not CV keywords alone."],
+  ["Review candidates clearly", "Use profile context and AI screening, not CV keywords alone."],
   ["Manage the pipeline", "Screen, shortlist, interview and hire in one flow."],
   ["Communicate and hire", "Message candidates at the right stage."],
 ];
@@ -133,7 +133,7 @@ export function LandingPage() {
                 Hire on demonstrated skill.
               </h2>
               <p className={styles.companyDescription} data-scroll-reveal data-reveal-delay="2">
-                Publish roles, review candidates with match context, run practical assessments, and move people
+                Publish roles, review candidates with match context, coordinate interviews, and move people
                 through a clear pipeline.
               </p>
               <Link href="/register" className={styles.lightButton} data-scroll-reveal data-reveal-delay="3">

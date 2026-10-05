@@ -1,6 +1,8 @@
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -8,10 +10,11 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.dependencies import get_current_user
+from app.health import router as health_router
 from app.limiter import limiter
 from app.models import User
-from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics
-from app.routers import admin, applications, assessments, auth, audit, candidates, chat, companies, offers, invitations, recommendations, requests, two_factor
+from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
+from app.routers import account_recovery, admin, applications, auth, audit, candidates, chat, companies, friends, institutions, missions, notifications, offers, invitations, recommendations, requests, two_factor
 
 
 
@@ -38,6 +41,7 @@ app.add_middleware(
 app.middleware("http")(record_request_metrics)
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.include_router(account_recovery.router, prefix="/auth", tags=["Account Recovery"])
 app.include_router(admin.router, tags=["Admin"])
 app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 app.include_router(offers.router, prefix="/offers", tags=["Offers"])
@@ -46,10 +50,14 @@ app.include_router(companies.router, prefix="/companies", tags=["Companies"])
 app.include_router(requests.router, prefix="/requests", tags=["Requests"])
 app.include_router(invitations.router, prefix="/invites", tags=["Invitations"])
 app.include_router(applications.router, prefix="/applications", tags=["Applications"])
-app.include_router(assessments.router, prefix="/assessments", tags=["Assessments"])
 app.include_router(audit.router, prefix="/audit", tags=["Audit"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(two_factor.router, prefix="/auth/2fa", tags=["Two-Factor Authentication"])
+app.include_router(friends.router, prefix="/friends", tags=["Friends"])
+app.include_router(missions.router, prefix="/missions", tags=["Practice Missions"])
+app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+app.include_router(institutions.router, prefix="/institutions", tags=["Institutions"])
+app.include_router(health_router, tags=["Health"])
 
 
 
@@ -58,20 +66,8 @@ async def on_startup():
     from app.core.vault import vault_client
     if vault_client.health_check():
         logger.info("hashicorp_vault_connected")
-        vault_client.write_secrets({
-            "JWT_SECRET": settings.secret_key,
-            "GEMINI_API_KEY": settings.gemini_api_key,
-            "SUPABASE_SERVICE_KEY": settings.supabase_service_key or "",
-        })
     else:
         logger.info("hashicorp_vault_offline_using_env_fallback")
-
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
-
 
 @app.get("/metrics")
 async def metrics() -> Response:
@@ -91,5 +87,14 @@ async def protected(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> Response:
-    logger.error("unhandled_exception", path=request.url.path, error=str(exc))
-    return Response(content="Internal Server Error", status_code=500)
+    error_id = uuid4().hex
+    logger.error(
+        "unhandled_exception",
+        route=route_label(request),
+        error_id=error_id,
+        exception_type=type(exc).__name__,
+    )
+    return JSONResponse(
+        content={"detail": "Internal server error", "error_id": error_id},
+        status_code=500,
+    )

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -9,10 +10,16 @@ from pydantic import ValidationError
 from starlette.requests import Request
 
 from app.models import CandidateProfile, User, UserRole
-from app.routers.auth import _build_sso_response, _create_sso_candidate
-from app.schemas import RegisterRequest
-from app.services import oauth_service
+from app.routers.auth import (
+    _build_sso_response,
+    _create_sso_candidate,
+    exchange_oauth_handoff,
+)
+from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
+from app.services import authentication, oauth_service
+from app.services.authentication import complete_authentication
 from app.services.oauth_service import OAuthIdentity
+from app.services.two_factor import encrypt_totp_secret
 
 
 class FakeRedis:
@@ -27,6 +34,9 @@ class FakeRedis:
 
     async def getdel(self, key):
         return self.values.pop(key, None)
+
+    async def get(self, key):
+        return self.values.get(key)
 
 
 class FakeDb:
@@ -48,12 +58,29 @@ class FakeDb:
         return None
 
 
+class ExistingUserDb:
+    def __init__(self, user: User):
+        self.user = user
+
+    async def execute(self, _query):
+        return SimpleNamespace(scalar_one_or_none=lambda: self.user)
+
+
 def _html_request() -> Request:
     return Request({
         "type": "http",
         "method": "GET",
         "path": "/auth/sso/google/callback",
         "headers": [(b"accept", b"text/html")],
+    })
+
+
+def _json_request() -> Request:
+    return Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/auth/sso/google/callback",
+        "headers": [(b"accept", b"application/json")],
     })
 
 
@@ -76,6 +103,86 @@ def test_oauth_state_binds_origin_and_attempt(monkeypatch):
         oauth_service.verify_oauth_state(state, "linkedin")
 
 
+def test_oauth_attempt_is_browser_bound_single_use_and_uses_pkce(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(oauth_service.settings, "frontend_url", "http://localhost:3001")
+
+    attempt = asyncio.run(
+        oauth_service.create_oauth_attempt(
+            "google", "http://localhost:3001", "attempt-123", None
+        )
+    )
+    provider = oauth_service.OAuthProvider(
+        name="google",
+        client_id="client-id",
+        client_secret="client-secret",
+        authorization_url="https://accounts.example/authorize",
+        token_url="https://accounts.example/token",
+        userinfo_url="https://accounts.example/userinfo",
+        scopes=("openid", "email"),
+        issuer="https://accounts.example",
+    )
+    authorization_url = oauth_service.build_oauth_authorize_url(
+        provider,
+        "https://app.example/callback",
+        attempt.state,
+        code_verifier=attempt.code_verifier,
+        nonce=attempt.nonce,
+    )
+    params = parse_qs(urlparse(authorization_url).query)
+    assert params["code_challenge_method"] == ["S256"]
+    assert params["code_challenge"]
+    assert params["nonce"] == [attempt.nonce]
+
+    with pytest.raises(HTTPException, match="invalid_sso_state"):
+        asyncio.run(
+            oauth_service.consume_oauth_attempt(attempt.state, "google", "wrong-browser")
+        )
+    consumed = asyncio.run(
+        oauth_service.consume_oauth_attempt(
+            attempt.state, "google", attempt.browser_id
+        )
+    )
+    assert consumed.code_verifier == attempt.code_verifier
+    with pytest.raises(HTTPException, match="invalid_sso_state"):
+        asyncio.run(
+            oauth_service.consume_oauth_attempt(
+                attempt.state, "google", attempt.browser_id
+            )
+        )
+
+
+def test_oauth_identity_requires_verified_email_stable_subject_and_known_issuer():
+    provider = oauth_service.OAuthProvider(
+        name="google",
+        client_id="client-id",
+        client_secret="client-secret",
+        authorization_url="https://accounts.google.com/authorize",
+        token_url="https://accounts.google.com/token",
+        userinfo_url="https://accounts.google.com/userinfo",
+        scopes=("openid", "email"),
+        issuer="https://accounts.google.com",
+    )
+    base = {
+        "email": "candidate@example.com",
+        "email_verified": True,
+        "sub": "stable-provider-subject",
+        "iss": "https://accounts.google.com",
+    }
+    identity = oauth_service._parse_identity_payload(provider, base)
+    assert identity.oauth_id == "stable-provider-subject"
+    assert identity.email_verified is True
+
+    for invalid in (
+        {**base, "email_verified": False},
+        {**base, "sub": ""},
+        {**base, "iss": "https://evil.example"},
+    ):
+        with pytest.raises(HTTPException):
+            oauth_service._parse_identity_payload(provider, invalid)
+
+
 def test_handoff_is_single_use(monkeypatch):
     redis = FakeRedis()
     monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
@@ -85,6 +192,22 @@ def test_handoff_is_single_use(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(oauth_service.consume_oauth_handoff(code))
     assert exc.value.status_code == 401
+
+
+def test_handoff_preserves_mfa_requirement(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    code = asyncio.run(
+        oauth_service.create_oauth_handoff(
+            "mfa-challenge",
+            "user-1",
+            False,
+            requires_2fa=True,
+        )
+    )
+    payload = asyncio.run(oauth_service.consume_oauth_handoff(code))
+    assert payload["token"] == "mfa-challenge"
+    assert payload["requires_2fa"] is True
 
 
 def test_html_callback_contains_only_handoff_not_access_token():
@@ -104,6 +227,75 @@ def test_html_callback_contains_only_handoff_not_access_token():
     assert params["handoff"] == ["one-time-handoff-code"]
     assert "raw-access-token" not in location
     assert not parsed.fragment
+
+
+def test_json_oauth_callback_returns_mfa_challenge_without_access_cookie():
+    user = User(
+        id=uuid.uuid4(),
+        email="mfa-oauth@example.com",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        full_name="MFA OAuth",
+        is_2fa_enabled=True,
+    )
+    response = _build_sso_response(
+        _json_request(),
+        "purpose-bound-mfa-token",
+        user,
+        "",
+        "http://127.0.0.1:3001",
+        "attempt-123",
+        "google",
+        requires_2fa=True,
+        is_new_registration=False,
+    )
+    body = json.loads(response.body)
+    assert body == {
+        "require_2fa": True,
+        "mfa_token": "purpose-bound-mfa-token",
+        "is_new_registration": False,
+    }
+    assert "set-cookie" not in response.headers
+
+
+def test_oauth_handoff_exchange_cannot_bypass_existing_local_mfa(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(authentication, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    user = User(
+        id=uuid.uuid4(),
+        email="existing-mfa@example.com",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        full_name="Existing MFA",
+        is_2fa_enabled=True,
+        totp_secret_encrypted=encrypt_totp_secret("JBSWY3DPEHPK3PXP"),
+        auth_version=0,
+    )
+
+    completion = asyncio.run(complete_authentication(user))
+    assert completion.requires_2fa is True
+    code = asyncio.run(
+        oauth_service.create_oauth_handoff(
+            completion.token,
+            str(user.id),
+            False,
+            requires_2fa=True,
+        )
+    )
+    response = asyncio.run(
+        exchange_oauth_handoff(
+            OAuthHandoffExchangeRequest(code=code),
+            ExistingUserDb(user),
+        )
+    )
+    body = json.loads(response.body)
+    assert body["require_2fa"] is True
+    assert body["mfa_token"] == completion.token
+    assert "token" not in body
+    assert "set-cookie" not in response.headers
 
 
 def test_public_registration_role_is_candidate_only_and_optional():

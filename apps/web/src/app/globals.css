@@ -1,8 +1,8 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;800&display=swap");
 
 :root {
   /* CODITENT semantic tokens — single source of truth (light) */
@@ -902,9 +902,6 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-screening-findings li::marker { color: #6d9774; }
 .candidate-screening-gaps { background: #faf2ec; border-left-color: #a25c38; }
 .candidate-screening-gaps h4, .candidate-screening-gaps li::marker { color: #8a492d; }
-.candidate-assessment-notice { padding: 1rem; border: 1px solid #e3e9df; border-radius: 12px; background: #f6f8f2; }
-.candidate-assessment-notice h3 { margin: 0; color: #405147; font-size: 0.85rem; font-weight: 650; }
-.candidate-assessment-notice p { margin: 0.4rem 0 0; color: #617369; font-size: 0.8rem; line-height: 1.6; }
 
 .candidate-resume { overflow: hidden; border: 1px solid #dce6da; border-radius: 16px; background: #fffefa; }
 .candidate-resume-heading { padding: 1.25rem; border-bottom: 1px solid #e3e9df; }
@@ -1115,142 +1112,6 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   .company-theme .company-board-candidate-card:hover { transform: none; }
 }
 
-/* Candidate assessment details: structured facts and reports. */
-.candidate-assessment-detail {
-  display: grid;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid #c9d9cb;
-  border-radius: 10px;
-  background: #fffefa;
-  box-shadow: none;
-}
-.candidate-assessment-header {
-  position: relative;
-  display: grid;
-  min-height: 0;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: #194d38;
-}
-.candidate-assessment-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.7rem;
-}
-.candidate-assessment-heading .company-detail-label { color: #bfd1c3; }
-.candidate-assessment-heading h3 {
-  margin: 0.25rem 0 0;
-  color: #fffefa;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.125rem;
-  font-weight: 400;
-  letter-spacing: -0.025em;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-.candidate-assessment-icon,
-.candidate-assessment-report-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-}
-.candidate-assessment-icon {
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid rgb(255 254 250 / 20%);
-  border-radius: 10px;
-  background: rgb(255 254 250 / 11%);
-  color: #e9f0df;
-}
-.candidate-assessment-icon svg { width: 1rem; height: 1rem; }
-.candidate-assessment-outcome {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.candidate-assessment-score {
-  display: flex;
-  min-height: 2rem;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0;
-}
-.candidate-assessment-score > span,
-.candidate-assessment-status > span:first-child {
-  color: #bfd1c3;
-  font-size: 0.6875rem;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.candidate-assessment-score p { display: flex; align-items: baseline; gap: 0.2rem; margin: 0.1rem 0 0; }
-.candidate-assessment-score p strong {
-  color: #fffefa;
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.candidate-assessment-score p span { color: #d4e2d8; font-size: 0.72rem; font-weight: 650; }
-.candidate-assessment-status {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-items: start;
-  gap: 0.35rem;
-  padding: 0;
-}
-.candidate-assessment-status > span:last-child {
-  border-color: rgb(255 254 250 / 22%);
-  background: #e8f1e5;
-  color: #194d38;
-}
-.candidate-assessment-reports {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.65rem;
-  background: #f8faf6;
-}
-.candidate-assessment-report {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 0.55rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.candidate-assessment-report-analysis { border-left-color: #6d9774; }
-.candidate-assessment-report-note { border-left-color: #a25c38; }
-.candidate-assessment-report-icon {
-  width: 1.6rem;
-  height: 1.6rem;
-  border-radius: 7px;
-  background: #e8f1e5;
-  color: #315f45;
-}
-.candidate-assessment-report-note .candidate-assessment-report-icon { background: #f7e9df; color: #8f4d30; }
-.candidate-assessment-report-icon svg { width: 0.85rem; height: 0.85rem; }
-.candidate-assessment-report h4 { margin: 0; color: #203d2e; font-size: 0.875rem; font-weight: 700; }
-.candidate-assessment-report p { margin: 0.25rem 0 0; color: #405147; font-size: 0.875rem; line-height: 1.5; overflow-wrap: anywhere; }
-.candidate-assessment-empty { margin: 0; color: #617369; font-size: 0.8rem; }
-
-@media (max-width: 560px) {
-  .candidate-assessment-header { grid-template-columns: 1fr; padding: 0.75rem; }
-  .candidate-assessment-outcome { width: 100%; }
-}
-
 /* Candidate-only centered dialog: keep other company drawers unchanged. */
 .company-candidate-panel {
   top: 50%;
@@ -1268,7 +1129,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   transform: translate(-50%, -50%);
 }
 
-.company-candidate-panel:has(.candidate-assessments-stack-wide) {
+.company-candidate-panel:has(.candidate-screening-stack-wide) {
   width: min(calc(100% - 2rem), 64rem);
   max-width: 64rem;
 }
@@ -1427,14 +1288,14 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   border-radius: 0;
 }
 
-.candidate-assessments-stack {
+.candidate-screening-stack {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: 0.75rem;
 }
 
-.candidate-assessments-stack-wide {
+.candidate-screening-stack-wide {
   grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
 }
 
@@ -1624,16 +1485,11 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 .candidate-screening-findings li { padding-left: 0; font-size: 0.875rem; line-height: 1.5; text-wrap: pretty; }
 
 @media (max-width: 900px) {
-  .candidate-assessments-stack-wide { grid-template-columns: 1fr; }
+  .candidate-screening-stack-wide { grid-template-columns: 1fr; }
 }
 
 .candidate-screening-state { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 0.85rem; }
 .candidate-screening-state p { margin: 0; color: #617369; font-size: 0.8rem; line-height: 1.55; }
-
-.candidate-assessment-notice {
-  padding: 1.1rem;
-  border-color: #d7e2d5;
-}
 
 .candidate-profile-skills-list {
   display: grid;
@@ -1781,7 +1637,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 
 @media (max-width: 639px) {
   .company-candidate-panel,
-  .company-candidate-panel:has(.candidate-assessments-stack-wide) {
+  .company-candidate-panel:has(.candidate-screening-stack-wide) {
     width: calc(100% - 1rem);
     max-height: calc(100dvh - 1rem);
     border-radius: 14px;
@@ -1802,7 +1658,7 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
   .company-candidate-overview-panel .company-candidate-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .company-candidate-overview-panel .company-candidate-detail-grid > div:nth-child(odd) { border-right: 1px solid #e3e9df; }
   .company-candidate-chat-status { flex-direction: row; align-items: center; gap: 0.5rem; }
-  .candidate-assessments-stack { grid-template-columns: 1fr; }
+  .candidate-screening-stack { grid-template-columns: 1fr; }
   .candidate-screening-report { grid-template-columns: 1fr; }
   .candidate-screening-summary { grid-column: auto; }
   .candidate-screening-state { align-items: flex-start; flex-direction: column; }

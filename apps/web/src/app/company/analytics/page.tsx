@@ -9,9 +9,9 @@ import { StatCard } from "@/components/company/StatCard";
 import { EmptyState } from "@/components/company/EmptyState";
 import { StatCardsSkeleton } from "@/components/company/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
-import { getMe, getApplications, getAssessments, getApiBaseUrl } from "@/lib/api";
-import type { ApplicationItem, AssessmentItem, Offer } from "@/lib/types";
-import { FiBarChart2, FiBriefcase, FiFileText, FiUserCheck, FiUsers } from "react-icons/fi";
+import { getMe, getApplications, getApiBaseUrl } from "@/lib/api";
+import type { ApplicationItem, Offer } from "@/lib/types";
+import { FiBarChart2, FiBriefcase, FiUserCheck, FiUsers } from "react-icons/fi";
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
   return (
@@ -44,15 +44,9 @@ export default function AnalyticsPage() {
     queryFn: async () => (await getApplications()).applications as ApplicationItem[],
     enabled: !!me,
   });
-  const assQ = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => (await getAssessments()).assessments as AssessmentItem[],
-    enabled: !!me,
-  });
 
   const offers = offersQ.data ?? [];
   const apps = appsQ.data ?? [];
-  const assessments = assQ.data ?? [];
   const byStatus = (s: string) => apps.filter((a) => a.status === s).length;
 
   const distribution = useMemo(
@@ -60,7 +54,6 @@ export default function AnalyticsPage() {
       { key: "applied", label: "Applied", count: byStatus("applied") },
       { key: "under_review", label: "Screening", count: byStatus("under_review") },
       { key: "shortlisted", label: "Shortlisted", count: byStatus("shortlisted") },
-      { key: "assessment", label: "Assessment", count: byStatus("assessment_required") + byStatus("assessment_completed") },
       { key: "interview", label: "Interview", count: byStatus("interview") },
       { key: "accepted", label: "Hired", count: byStatus("accepted") },
       { key: "rejected", label: "Rejected", count: byStatus("rejected") },
@@ -78,7 +71,6 @@ export default function AnalyticsPage() {
           offer: o,
           total: forJob.length,
           screening: inStage("under_review"),
-          assessment: inStage("assessment_required") + inStage("assessment_completed"),
           interview: inStage("interview"),
           hired: inStage("accepted"),
         };
@@ -86,7 +78,6 @@ export default function AnalyticsPage() {
     [offers, apps]
   );
 
-  const scored = assessments.filter((a) => typeof a.score === "number");
   const loading = offersQ.isLoading || appsQ.isLoading;
 
   return (
@@ -95,21 +86,21 @@ export default function AnalyticsPage() {
         <PageHeader
           tone="dark"
           title="Insights"
-          subtitle="Current hiring snapshot from live jobs, applications and assessments. No historical trends available yet."
+          subtitle="Current hiring snapshot from live jobs and applications. No historical trends available yet."
         />
 
         <section aria-label="Snapshot">
           <h2 className="ct-section-title">Current snapshot</h2>
           {loading ? (
             <div className="mt-3"><StatCardsSkeleton /></div>
-          ) : offersQ.isError || appsQ.isError || assQ.isError ? (
-            <div className="mt-3"><SectionError onRetry={() => { offersQ.refetch(); appsQ.refetch(); assQ.refetch(); }} /></div>
+          ) : offersQ.isError || appsQ.isError ? (
+            <div className="mt-3"><SectionError onRetry={() => { offersQ.refetch(); appsQ.refetch(); }} /></div>
           ) : (
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard label="Open jobs" value={offers.filter((o) => o.active).length} subValue={`${offers.length} total roles`} icon={FiBriefcase} />
               <StatCard label="Total applications" value={apps.length} subValue={`${byStatus("applied")} awaiting review`} icon={FiUsers} />
               <StatCard label="Hired" value={byStatus("accepted")} subValue={`${byStatus("interview")} in interview`} icon={FiUserCheck} highlight />
-              <StatCard label="Assessments scored" value={scored.length} subValue={`${assessments.length} evaluations total`} icon={FiFileText} />
+              <StatCard label="Shortlisted" value={byStatus("shortlisted")} subValue={`${byStatus("under_review")} in screening`} icon={FiUsers} />
             </div>
           )}
         </section>
@@ -160,8 +151,8 @@ export default function AnalyticsPage() {
                 <li key={row.offer.id} className="rounded-xl border border-border-subtle bg-surface p-4">
                   <p className="truncate text-sm font-semibold text-foreground">{row.offer.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">{row.offer.region} · {row.offer.active ? "Active" : "Paused"}</p>
-                  <dl className="mt-2 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-5">
-                    {[["Applications", row.total], ["Screening", row.screening], ["Assessment", row.assessment], ["Interview", row.interview], ["Hired", row.hired]].map(([k, v]) => (
+                  <dl className="mt-2 grid grid-cols-2 gap-1.5 text-xs sm:grid-cols-4">
+                    {[["Applications", row.total], ["Screening", row.screening], ["Interview", row.interview], ["Hired", row.hired]].map(([k, v]) => (
                       <div key={k as string} className="rounded-lg bg-surface-secondary/50 px-2.5 py-1.5">
                         <dt className="text-muted-foreground">{k}</dt>
                         <dd className="font-bold text-foreground">{v}</dd>
@@ -174,19 +165,6 @@ export default function AnalyticsPage() {
           )}
         </section>
 
-        <section aria-label="Assessment coverage">
-          <h2 className="ct-section-title">Assessment coverage</h2>
-          {assQ.isError ? (
-            <div className="mt-3"><SectionError onRetry={() => assQ.refetch()} /></div>
-          ) : (
-            <div className="mt-3 grid gap-2 rounded-xl border border-border-subtle bg-surface p-5 text-sm sm:grid-cols-3">
-              <div><p className="text-muted-foreground">Total evaluations</p><p className="text-xl font-bold text-foreground">{assessments.length}</p></div>
-              <div><p className="text-muted-foreground">Completed or evaluated</p><p className="text-xl font-bold text-foreground">{assessments.filter((a) => a.status === "completed" || a.status === "evaluated").length}</p></div>
-              <div><p className="text-muted-foreground">With recorded score</p><p className="text-xl font-bold text-foreground">{scored.length}</p></div>
-            </div>
-          )}
-          <p className="mt-2 text-xs text-muted-foreground">Scores shown as recorded. Scale varies by assessment. Time-to-hire, trends and source attribution need event history not yet available.</p>
-        </section>
       </div>
     </AppShell>
   );

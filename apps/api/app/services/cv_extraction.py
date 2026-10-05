@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.services.gemini import generate_text
 from app.services.cv_parser import clamp_years, map_study_level, normalize_skills, normalize_url
 
 MAX_OUTPUT_TOKENS = 8192
@@ -66,15 +67,6 @@ def _get_logger():
     from app.observability import get_logger
 
     return get_logger("cv_extraction")
-
-
-def _get_model():
-    import google.generativeai as genai
-
-    from app.config import settings
-
-    genai.configure(api_key=settings.gemini_api_key)
-    return genai.GenerativeModel("gemini-3-flash-preview")
 
 
 def parse_ai_response(raw: str) -> dict[str, Any]:
@@ -250,26 +242,24 @@ def normalize_extracted(payload: dict[str, Any]) -> CVExtractedData:
     )
 
 
-def _is_stop(response: Any) -> bool:
-    try:
-        fr = response.candidates[0].finish_reason
-        return getattr(fr, "name", str(fr)) == "STOP"
-    except (IndexError, AttributeError):
+def _is_stop(finish_reason: object | None) -> bool:
+    if finish_reason is None:
         return True
+    return getattr(finish_reason, "name", str(finish_reason)) == "STOP"
 
 
 async def _call_model(text: str, timeout_s: float) -> tuple[str, bool]:
-    model = _get_model()
-    response = await asyncio.wait_for(
-        asyncio.to_thread(
-            model.generate_content,
+    raw, finish_reason = await asyncio.wait_for(
+        generate_text(
             EXTRACTION_PROMPT.format(text=text),
-            generation_config={"temperature": 0.1, "max_output_tokens": MAX_OUTPUT_TOKENS},
+            temperature=0.1,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            response_mime_type="application/json",
+            timeout_seconds=timeout_s,
         ),
         timeout=timeout_s,
     )
-    raw = (getattr(response, "text", "") or "").strip()
-    return raw, _is_stop(response)
+    return raw, _is_stop(finish_reason)
 
 
 async def extract_profile_from_text(

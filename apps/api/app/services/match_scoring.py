@@ -17,8 +17,11 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.models import CandidateProfile, Offer, SavedRecommendation
 from app.observability import get_logger
@@ -27,6 +30,133 @@ logger = get_logger("match")
 
 TERMINAL_OK = "completed"
 TERMINAL_FAIL = "failed"
+
+
+def _recommendation_insert(db: AsyncSession):
+    """Return an INSERT supporting ON CONFLICT for the active DB dialect."""
+    if db.get_bind().dialect.name == "sqlite":
+        return sqlite_insert(SavedRecommendation)
+    return postgresql_insert(SavedRecommendation)
+
+
+async def initialize_active_matches(
+    db: AsyncSession,
+    candidate_id: uuid.UUID,
+) -> tuple[int, int]:
+    """Create missing pending rows for every active offer, idempotently.
+
+    The unique candidate/offer constraint is the concurrency boundary. Two
+    initializers can race safely: each row is inserted at most once and neither
+    request needs to infer existence from a paginated result set.
+    """
+    offer_ids = list(
+        (
+            await db.execute(
+                select(Offer.id).where(Offer.active.is_(True)).order_by(Offer.id)
+            )
+        ).scalars()
+    )
+    if not offer_ids:
+        return 0, 0
+
+    now = datetime.utcnow()
+    values = [
+        {
+            "id": uuid.uuid4(),
+            "candidate_id": candidate_id,
+            "offer_id": offer_id,
+            "ai_score": 0,
+            "ai_reasoning": "Match analysis pending.",
+            "status": "pending",
+            "error": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for offer_id in offer_ids
+    ]
+    statement = (
+        _recommendation_insert(db)
+        .values(values)
+        .on_conflict_do_nothing(index_elements=["candidate_id", "offer_id"])
+        .returning(SavedRecommendation.id)
+    )
+    inserted = list((await db.execute(statement)).scalars())
+    await db.commit()
+    return len(inserted), len(offer_ids)
+
+
+async def list_active_matches(
+    db: AsyncSession,
+    candidate_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[SavedRecommendation], int]:
+    """Read one stable page of active recommendations without side effects."""
+    filters = (
+        SavedRecommendation.candidate_id == candidate_id,
+        Offer.active.is_(True),
+    )
+    total = int(
+        (
+            await db.execute(
+                select(func.count(SavedRecommendation.id))
+                .join(Offer, Offer.id == SavedRecommendation.offer_id)
+                .where(*filters)
+            )
+        ).scalar_one()
+    )
+    result = await db.execute(
+        select(SavedRecommendation)
+        .join(Offer, Offer.id == SavedRecommendation.offer_id)
+        .options(joinedload(SavedRecommendation.offer))
+        .where(*filters)
+        .order_by(
+            SavedRecommendation.ai_score.desc(),
+            Offer.posted_at.desc(),
+            SavedRecommendation.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(result.scalars().all()), total
+
+
+async def upsert_recommendation_scores(
+    db: AsyncSession,
+    candidate_id: uuid.UUID,
+    rows: list[dict[str, Any]],
+) -> None:
+    """Persist validated scoring results with a conflict-safe batch upsert."""
+    if not rows:
+        return
+    now = datetime.utcnow()
+    values = [
+        {
+            "id": uuid.uuid4(),
+            "candidate_id": candidate_id,
+            "offer_id": row["offer_id"],
+            "ai_score": row["score"],
+            "ai_reasoning": row["reasoning"],
+            "status": TERMINAL_OK,
+            "error": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for row in rows
+    ]
+    statement = _recommendation_insert(db).values(values)
+    statement = statement.on_conflict_do_update(
+        index_elements=["candidate_id", "offer_id"],
+        set_={
+            "ai_score": statement.excluded.ai_score,
+            "ai_reasoning": statement.excluded.ai_reasoning,
+            "status": statement.excluded.status,
+            "error": None,
+            "updated_at": statement.excluded.updated_at,
+        },
+    )
+    await db.execute(statement)
 
 
 async def invalidate_candidate_matches(
@@ -48,13 +178,9 @@ async def invalidate_candidate_matches(
 
 
 def _safe_reason(exc: Exception) -> str:
-    name = type(exc).__name__
-    msg = str(exc)[:200].strip()
-    # Never persist secrets/PII blobs — keep a short, safe reason.
-    for secret_hint in ("key", "token", "bearer", "password", "secret"):
-        if secret_hint in msg.lower():
-            return f"{name}: AI provider error"
-    return f"{name}: {msg}" if msg else f"{name}: AI scoring failed"
+    # Provider exception messages can echo prompts, credentials, and request
+    # bodies. The exception class is enough for internal failure grouping.
+    return f"{type(exc).__name__}: AI provider error"
 
 
 def _normalized_terms(value: object) -> set[str]:
@@ -118,28 +244,32 @@ async def get_or_create_pending(
     ).scalar_one_or_none()
     if offer is None or not offer.active:
         return None
-    existing = (
+    now = datetime.utcnow()
+    statement = (
+        _recommendation_insert(db)
+        .values(
+            id=uuid.uuid4(),
+            candidate_id=candidate_id,
+            offer_id=offer_id,
+            ai_score=0,
+            ai_reasoning="Match analysis pending.",
+            status="pending",
+            error=None,
+            created_at=now,
+            updated_at=now,
+        )
+        .on_conflict_do_nothing(index_elements=["candidate_id", "offer_id"])
+    )
+    await db.execute(statement)
+    await db.commit()
+    row = (
         await db.execute(
             select(SavedRecommendation).where(
                 SavedRecommendation.candidate_id == candidate_id,
                 SavedRecommendation.offer_id == offer_id,
             )
         )
-    ).scalar_one_or_none()
-    if existing is not None:
-        if existing.candidate_id != candidate_id:
-            return None
-        return existing
-    row = SavedRecommendation(
-        candidate_id=candidate_id,
-        offer_id=offer_id,
-        ai_score=0,
-        ai_reasoning="Match analysis pending.",
-        status="pending",
-    )
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
+    ).scalar_one()
     logger.info(f"[MATCH] requested candidate={candidate_id} offer={offer_id}")
     return row
 
@@ -148,6 +278,8 @@ async def score_single_match(
     db: AsyncSession,
     candidate_id: uuid.UUID,
     offer_id: uuid.UUID,
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     """Run scoring for one pair, with a deterministic provider-outage fallback."""
     logger.info(f"[MATCH] requested candidate={candidate_id} offer={offer_id}")
@@ -159,6 +291,8 @@ async def score_single_match(
     )
     row = row_result.scalar_one_or_none()
     if row is None:
+        if not commit:
+            raise ValueError("Pending recommendation row not found")
         row = await get_or_create_pending(db, candidate_id, offer_id)
         if row is None:
             raise ValueError("Offer not found or inactive")
@@ -176,7 +310,10 @@ async def score_single_match(
         row.status = TERMINAL_FAIL
         row.error = "Offer not found or inactive"
         row.updated_at = datetime.utcnow()
-        await db.commit()
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
         logger.error(
             f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=inactive_offer"
         )
@@ -191,7 +328,10 @@ async def score_single_match(
         row.status = TERMINAL_FAIL
         row.error = "Candidate profile not found"
         row.updated_at = datetime.utcnow()
-        await db.commit()
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
         logger.error(
             f"[MATCH] failed candidate={candidate_id} offer={offer_id} reason=missing_profile"
         )
@@ -200,7 +340,10 @@ async def score_single_match(
     row.status = "processing"
     row.error = None
     row.updated_at = datetime.utcnow()
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     logger.info(f"[MATCH] processing candidate={candidate_id} offer={offer_id}")
 
     provider_error: Exception | None = None
@@ -225,7 +368,10 @@ async def score_single_match(
     row.status = TERMINAL_OK
     row.error = None
     row.updated_at = datetime.utcnow()
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     logger.info(
         f"[MATCH] persisted score={row.ai_score} candidate={candidate_id} offer={offer_id}"
     )

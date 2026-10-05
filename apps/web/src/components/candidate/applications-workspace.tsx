@@ -13,13 +13,12 @@ import { ApplicationCard, ApplicationDetail, applicationName } from "./applicati
 import type { ApplicationItem, RecruitmentChatListItem } from "@/lib/types";
 import styles from "./applications.module.css";
 
-type Filter = "all" | "in-progress" | "assessment" | "interview" | "decisions";
+type Filter = "all" | "in-progress" | "interview" | "decisions";
 type Sort = "recent" | "applied" | "company";
 
 const filters: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All" },
   { id: "in-progress", label: "In progress" },
-  { id: "assessment", label: "Assessment" },
   { id: "interview", label: "Interview" },
   { id: "decisions", label: "Decisions" },
 ];
@@ -28,7 +27,6 @@ function matchesFilter(app: ApplicationItem, filter: Filter) {
   const status = app.status.toLowerCase();
   if (filter === "all") return true;
   if (filter === "in-progress") return !["accepted", "offer", "rejected"].includes(status);
-  if (filter === "assessment") return status.startsWith("assessment_");
   if (filter === "interview") return status === "interview";
   return ["accepted", "offer", "rejected"].includes(status);
 }

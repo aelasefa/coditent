@@ -1,7 +1,8 @@
 import uuid
+import secrets
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, Query, status
+from fastapi import Cookie, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models import User
-from app.utils.jwt import verify_token
+from app.services.authentication import (
+    AuthenticationRejected,
+    AuthenticationStoreUnavailable,
+    ensure_access_session_active,
+    ensure_account_can_authenticate,
+    ensure_credential_matches_account,
+)
+from app.utils.jwt import verify_access_token
 
 # Standard Bearer security scheme so OpenAPI/Swagger offers Authorize and
 # sends `Authorization: Bearer <JWT>` automatically. auto_error=False keeps
@@ -17,35 +25,69 @@ from app.utils.jwt import verify_token
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    db: Annotated[AsyncSession, Depends(get_db)],
+async def get_current_access_payload(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
     access_token_cookie: Annotated[str | None, Cookie(alias=settings.access_token_cookie_name)] = None,
-) -> User:
+) -> dict:
     token: str | None = None
     if credentials and credentials.credentials:
         token = credentials.credentials.strip()
     elif access_token_cookie:
         token = access_token_cookie.strip()
+        if request.method.upper() not in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+            origin = (request.headers.get("origin") or "").rstrip("/")
+            csrf_cookie = request.cookies.get(settings.csrf_cookie_name) or ""
+            csrf_header = request.headers.get("x-csrf-token") or ""
+            if (
+                origin not in settings.allowed_cors_origins
+                or not csrf_cookie
+                or not csrf_header
+                or not secrets.compare_digest(csrf_cookie, csrf_header)
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="CSRF validation failed",
+                )
 
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
 
     try:
-        payload = verify_token(token)
-        if payload.get("type") is not None:
-            raise ValueError("This token cannot be used as an access token")
-        subject = payload.get("sub")
-        if not subject:
-            raise ValueError("Missing subject")
-        user_id = uuid.UUID(subject)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        payload = verify_access_token(token)
+        await ensure_access_session_active(payload)
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+    except (AuthenticationRejected, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        ) from exc
+    return payload
+
+
+async def get_current_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    payload: Annotated[dict, Depends(get_current_access_payload)],
+) -> User:
+    user_id = uuid.UUID(str(payload["sub"]))
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    try:
+        ensure_account_can_authenticate(user)
+        ensure_credential_matches_account(payload, user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is not active",
+        ) from exc
 
     return user
 

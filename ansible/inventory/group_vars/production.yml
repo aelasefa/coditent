@@ -5,6 +5,9 @@
 
 env_name: production
 repo_branch: main
+nginx_tls_enabled: true
+nginx_waf_enabled: true
+compose_file_list: "docker-compose.yml:docker-compose.production.yml"
 
 # In production, Supabase and AI keys can be provided via:
 # 1. ansible-vault (e.g. including vault.yml)
@@ -18,5 +21,7 @@ next_public_supabase_url: "{{ vault_next_public_supabase_url | default(lookup('e
 next_public_supabase_publishable_key: "{{ vault_next_public_supabase_publishable_key | default(lookup('env', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')) | default('') }}"
 
 jwt_secret: "{{ vault_jwt_secret | default(lookup('env', 'JWT_SECRET')) | default('') }}"
+totp_encryption_key: "{{ vault_totp_encryption_key | default(lookup('env', 'TOTP_ENCRYPTION_KEY')) | default('') }}"
+email_outbox_encryption_key: "{{ vault_email_outbox_encryption_key | default(lookup('env', 'EMAIL_OUTBOX_ENCRYPTION_KEY')) | default('') }}"
 gemini_api_key: "{{ vault_gemini_api_key | default(lookup('env', 'GEMINI_API_KEY')) | default('') }}"
 redis_url: "redis://redis:6380/0"

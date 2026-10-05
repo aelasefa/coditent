@@ -1,17 +1,19 @@
+import asyncio
 import json
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import uuid as uuid_lib
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_candidate, require_candidate_account
-from app.models import CandidateProfile, User
+from app.models import CVAsset, CandidateProfile, User
 from app.observability import get_logger
 from app.schemas import (
     CVMetaOut,
@@ -22,20 +24,30 @@ from app.schemas import (
     ProfileUpdate,
 )
 from app.services.cv_extraction import AIExtractionError, extract_profile_from_text
+from app.services.ai_controls import AIAdmissionError, AIControlUnavailable, ai_capacity
+from app.services.cv_assets import (
+    CVAssetOwnershipError,
+    garbage_collect_cv_asset,
+    get_current_cv_asset,
+    next_cv_asset_version,
+)
 from app.services.cv_parser import (
     MAX_CV_BYTES,
+    CVParseTimeoutError,
+    CVResourceLimitError,
     NoExtractableTextError,
-    extract_text,
-    get_pdf_page_count,
+    extract_text_with_meta_async,
     validate_cv_file,
+    validate_cv_content_async,
 )
 from app.services.cv_storage import (
     CVStorageError,
-    assert_owns_path,
     delete_cv,
     download_cv,
     upload_cv,
 )
+from app.services.upload_limits import UploadTooLargeError, read_upload_limited
+from app.services.profile_ai import generate_profile_bio, generate_profile_headline
 
 router = APIRouter()
 logger = get_logger("candidates")
@@ -70,15 +82,56 @@ MATCH_PROFILE_FIELDS = {
 }
 
 
+class ProfileAIRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    skills: list[str] = Field(min_length=1, max_length=30)
+    field_of_study: str | None = Field(default=None, max_length=120)
+    headline: str | None = Field(default=None, max_length=120)
+    experience: str | None = Field(default=None, max_length=1_000)
+    education: str | None = Field(default=None, max_length=1_000)
+    interests: str | None = Field(default=None, max_length=500)
+    career_goals: str | None = Field(default=None, max_length=500)
+
+    @field_validator("skills")
+    @classmethod
+    def normalize_skills_for_ai(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values if value.strip()]
+        if not cleaned or any(len(value) > 80 for value in cleaned):
+            raise ValueError("skills must contain 1-30 values of at most 80 characters")
+        return cleaned
+
+
+def _raise_ai_admission(exc: AIAdmissionError) -> NoReturn:
+    if isinstance(exc, AIControlUnavailable):
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        message = "AI controls are temporarily unavailable"
+    else:
+        status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        message = "AI usage limit reached; retry later"
+    raise HTTPException(
+        status_code=status_code,
+        detail={"code": exc.code, "message": message},
+        headers={"Retry-After": str(exc.retry_after)},
+    ) from exc
+
+
 async def _clear_recommendation_cache(user_id) -> None:
     """Best-effort removal of legacy bulk results for this candidate only."""
     try:
         from app.cache import get_async_redis
 
         client = get_async_redis()
-        keys = await client.keys(f"recommendations:{user_id}:*")
-        if keys:
-            await client.delete(*keys)
+        batch: list[str | bytes] = []
+        async for key in client.scan_iter(
+            match=f"recommendations:{user_id}:*", count=100
+        ):
+            batch.append(key)
+            if len(batch) == 100:
+                await client.delete(*batch)
+                batch.clear()
+        if batch:
+            await client.delete(*batch)
     except Exception:
         logger.warning("recommendation_cache_invalidation_failed", candidate_id=str(user_id))
 
@@ -226,6 +279,44 @@ async def update_profile(
     return ProfileOut.model_validate(profile)
 
 
+@router.post("/ai/headline", response_model=dict[str, str])
+async def generate_candidate_headline(
+    data: ProfileAIRequest,
+    current_user: Annotated[User, Depends(require_candidate_account)],
+) -> dict[str, str]:
+    try:
+        async with ai_capacity("profile_headline", user_id=current_user.id):
+            headline = await generate_profile_headline(data.model_dump())
+    except AIAdmissionError as exc:
+        _raise_ai_admission(exc)
+    except Exception as exc:
+        logger.error("profile_headline_failed", exception_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Headline generation failed",
+        ) from exc
+    return {"headline": headline}
+
+
+@router.post("/ai/bio", response_model=dict[str, str | bool])
+async def generate_candidate_bio(
+    data: ProfileAIRequest,
+    current_user: Annotated[User, Depends(require_candidate_account)],
+) -> dict[str, str | bool]:
+    try:
+        async with ai_capacity("profile_bio", user_id=current_user.id):
+            bio = await generate_profile_bio(data.model_dump())
+    except AIAdmissionError as exc:
+        _raise_ai_admission(exc)
+    except Exception as exc:
+        logger.error("profile_bio_failed", exception_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Bio generation failed",
+        ) from exc
+    return {"success": True, "bio": bio}
+
+
 @router.post("/cv", response_model=CVMetaOut, status_code=status.HTTP_201_CREATED)
 async def upload_candidate_cv(
     file: UploadFile,
@@ -234,39 +325,90 @@ async def upload_candidate_cv(
 ) -> CVMetaOut:
     filename = file.filename or ""
     try:
-        # Read first to know size (Streamlit-style); cap at MAX+1 to detect oversize
-        data = await file.read()
+        data = await read_upload_limited(file, MAX_CV_BYTES)
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 5MB",
+        ) from exc
     finally:
         await file.close()
     try:
         ext = validate_cv_file(filename, file.content_type, len(data))
+        await validate_cv_content_async(data, ext)
+    except CVResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except CVParseTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CV could not be validated within the processing limit",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if len(data) > MAX_CV_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large. Maximum size is 5MB")
 
     profile = await _get_profile(db, current_user.id)
-    # Delete previous CV first (best effort, ownership enforced)
-    old_path = profile.cv_url
-    if old_path:
-        try:
-            assert_owns_path(old_path, str(current_user.id))
-            delete_cv(old_path)
-        except CVStorageError:
-            pass
-
-    base = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    path = f"{current_user.id}/{uuid_lib.uuid4().hex}_{_safe_filename(base)}.{ext}"
     try:
-        upload_cv(path, data, CONTENT_TYPE_BY_EXT[ext])
+        old_asset = await get_current_cv_asset(
+            db,
+            profile,
+            current_user.id,
+            lock=True,
+        )
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Current CV is invalid",
+        ) from exc
+    old_asset_id = old_asset.id if old_asset is not None else None
+    version = await next_cv_asset_version(db, current_user.id)
+    asset_id = uuid_lib.uuid4()
+    submitted_name = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    base = submitted_name.rsplit(".", 1)[0]
+    display_filename = f"{_safe_filename(base)}.{ext}"
+    path = f"{current_user.id}/{asset_id.hex}_{_safe_filename(base)}.{ext}"
+    try:
+        await asyncio.to_thread(upload_cv, path, data, CONTENT_TYPE_BY_EXT[ext])
     except CVStorageError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
+    asset = CVAsset(
+        id=asset_id,
+        owner_id=current_user.id,
+        version=version,
+        storage_path=path,
+        original_filename=display_filename,
+        content_type=CONTENT_TYPE_BY_EXT[ext],
+        size_bytes=len(data),
+    )
+    db.add(asset)
+    profile.current_cv_asset_id = asset.id
     profile.cv_url = path
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        try:
+            await asyncio.to_thread(delete_cv, path)
+        except CVStorageError:
+            logger.warning("cv_failed_upload_cleanup_deferred", asset_id=str(asset.id))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV could not be saved",
+        ) from exc
     await db.refresh(profile)
+    if old_asset_id and old_asset_id != asset.id:
+        await garbage_collect_cv_asset(db, old_asset_id, current_user.id)
     logger.info("cv_uploaded", user_id=str(current_user.id))
-    return CVMetaOut(cv_url=path, filename=filename, content_type=CONTENT_TYPE_BY_EXT[ext], size_bytes=len(data))
+    return CVMetaOut(
+        cv_url=path,
+        filename=display_filename,
+        content_type=CONTENT_TYPE_BY_EXT[ext],
+        size_bytes=len(data),
+    )
 
 
 @router.get("/cv/meta", response_model=CVMetaOut)
@@ -275,19 +417,17 @@ async def get_cv_meta(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CVMetaOut:
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-    except CVStorageError as exc:
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-    filename = profile.cv_url.rsplit("/", 1)[-1]
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     return CVMetaOut(
-        cv_url=profile.cv_url,
-        filename=filename,
-        content_type=CONTENT_TYPE_BY_EXT.get(ext),
-        size_bytes=None,
+        cv_url=asset.storage_path,
+        filename=asset.original_filename,
+        content_type=asset.content_type,
+        size_bytes=asset.size_bytes,
     )
 
 
@@ -297,23 +437,20 @@ async def download_candidate_cv(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
+    try:
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-        data = download_cv(profile.cv_url)
+        data = await asyncio.to_thread(download_cv, asset.storage_path)
     except CVStorageError as exc:
-        msg = str(exc)
-        if msg == "Forbidden":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV not found") from exc
-    filename = profile.cv_url.rsplit("/", 1)[-1]
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    media = CONTENT_TYPE_BY_EXT.get(ext, "application/octet-stream")
     return StreamingResponse(
         iter([data]),
-        media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        media_type=asset.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{asset.original_filename}"'},
     )
 
 
@@ -323,18 +460,29 @@ async def delete_candidate_cv(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
-        return None
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-        delete_cv(profile.cv_url)
-    except CVStorageError as exc:
-        if str(exc) == "Forbidden":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-        # Storage missing but DB points to it: still clear DB to stay consistent
-        logger.error("cv_delete_storage_miss")
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    if asset is None:
+        if profile.cv_url:
+            profile.cv_url = None
+            await db.commit()
+        return None
+    old_asset_id = asset.id
+    profile.current_cv_asset_id = None
     profile.cv_url = None
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV could not be removed",
+        ) from exc
+    # Application snapshots follow the explicit retain-while-application-exists
+    # policy; cleanup deletes storage only when no application references it.
+    await garbage_collect_cv_asset(db, old_asset_id, current_user.id)
     logger.info("cv_deleted", user_id=str(current_user.id))
     return None
 
@@ -346,41 +494,64 @@ async def parse_candidate_cv(
 ) -> CVParseOut:
     """Extract structured data from stored CV. Read-only: never mutates profile (retry-safe)."""
     profile = await _get_profile(db, current_user.id)
-    if not profile.cv_url:
+    try:
+        asset = await get_current_cv_asset(db, profile, current_user.id)
+    except CVAssetOwnershipError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    if asset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "CV_FILE_READ_ERROR", "message": "No CV uploaded"},
         )
     try:
-        assert_owns_path(profile.cv_url, str(current_user.id))
-        data = download_cv(profile.cv_url)
+        data = await asyncio.to_thread(download_cv, asset.storage_path)
     except CVStorageError as exc:
-        if str(exc) == "Forbidden":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "CV_FILE_READ_ERROR", "message": "CV not found"},
         ) from exc
 
-    filename = profile.cv_url.rsplit("/", 1)[-1]
+    filename = asset.original_filename
     logger.info("cv_parse_downloaded", file_bytes=len(data))
     try:
-        text = extract_text(filename, data)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "CV_FILE_READ_ERROR", "message": str(exc)},
-        ) from exc
+        text, pages = await extract_text_with_meta_async(filename, data)
     except NoExtractableTextError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "CV_NO_TEXT", "message": str(exc)},
         ) from exc
+    except CVResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"code": "CV_RESOURCE_LIMIT", "message": str(exc)},
+        ) from exc
+    except CVParseTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "CV_PARSE_TIMEOUT", "message": str(exc)},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "CV_FILE_READ_ERROR", "message": str(exc)},
+        ) from exc
 
-    pages = get_pdf_page_count(data)
     logger.info("cv_parse_text", text_chars=len(text), pages=pages if pages is not None else -1)
     try:
-        extracted, warnings, ai_meta = await extract_profile_from_text(text)
+        async with ai_capacity("cv_extract", user_id=current_user.id):
+            extracted, warnings, ai_meta = await extract_profile_from_text(text)
+    except AIControlUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": exc.code, "message": "AI controls are temporarily unavailable"},
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    except AIAdmissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": exc.code, "message": "AI usage limit reached; retry later"},
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
     except AIExtractionError as exc:
         status_code = (
             status.HTTP_504_GATEWAY_TIMEOUT

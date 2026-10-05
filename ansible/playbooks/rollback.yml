@@ -35,7 +35,7 @@
         cmd: docker compose up -d --build --remove-orphans
         chdir: "{{ app_dir }}"
 
-    - name: Wait for API service health
+    - name: Wait for application readiness
       ansible.builtin.uri:
         url: "{{ healthcheck_url }}"
         method: GET
@@ -46,9 +46,10 @@
       retries: "{{ healthcheck_retries | default(15) }}"
       delay: "{{ healthcheck_delay | default(5) }}"
 
-    - name: Assert rollback healthcheck passed
+    - name: Assert rollback readiness passed
       ansible.builtin.assert:
         that:
           - rollback_health.status == 200
-        fail_msg: "Rollback failed: API did not return status 200"
+          - (rollback_health.json.status | default('')) == 'ready'
+        fail_msg: "Rollback failed: application dependencies are not ready"
         success_msg: "Rollback completed successfully to commit {{ rollback_commit }}"

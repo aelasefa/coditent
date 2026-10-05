@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
@@ -10,61 +11,73 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user, require_company_admin, require_company_member, require_recruiter
-from app.models import Company, User, UserRole
+from app.models import Company, CompanyStatus, User, UserRole
 from app.observability import get_logger
-from app.schemas import CompanyCreate, CompanyLogoMetaOut, CompanyOut
+from app.schemas import (
+    CompanyCreate,
+    CompanyListOut,
+    CompanyLogoMetaOut,
+    CompanyMemberRoleOut,
+    CompanyMemberRoleUpdate,
+    CompanyMembersOut,
+    CompanyOut,
+    CompanySubscriptionOut,
+    CompanyUpdate,
+)
 from app.services.company_logo import (
     CONTENT_TYPE_BY_EXT,
     MAX_LOGO_BYTES,
+    LogoResourceLimitError,
     LogoStorageError,
+    LogoValidationTimeoutError,
     assert_company_logo_path,
     build_logo_path,
-    check_logo_magic_bytes,
     delete_logo,
     download_logo,
     upload_logo,
+    validate_logo_content_async,
     validate_logo_file,
 )
+from app.services.upload_limits import UploadTooLargeError, read_upload_limited
+from app.services.entitlements import EntitlementDenied, entitlement_snapshot
 
 router = APIRouter()
 logger = get_logger("companies")
 
 
-@router.get("", response_model=dict[str, list[CompanyOut]])
-async def list_companies(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
-    result = await db.execute(select(Company).order_by(Company.created_at.desc()))
-    companies = result.scalars().all()
-    out = []
-    for c in companies:
-        cnt = await db.execute(select(func.count()).select_from(User).where(User.company_id == c.id))
-        count = cnt.scalar() or 0
-        out.append(
-            CompanyOut(
-                id=c.id, name=c.name, region=c.region, description=c.description,
-                logo_url=c.logo_url, industry=c.industry, location=c.location,
-                website=c.website, company_size=c.company_size, contact_email=c.contact_email,
-                contact_phone=c.contact_phone, status=c.status, owner_id=c.owner_id,
-                created_at=c.created_at, recruiter_count=count,
-            )
-        )
-    return {"companies": out}
+def _company_out(company: Company, recruiter_count: int = 0) -> CompanyOut:
+    return CompanyOut.model_validate(company).model_copy(
+        update={"recruiter_count": recruiter_count}
+    )
+
+
+@router.get("", response_model=CompanyListOut)
+async def list_companies(db: Annotated[AsyncSession, Depends(get_db)]) -> CompanyListOut:
+    result = await db.execute(
+        select(Company, func.count(User.id))
+        .outerjoin(User, User.company_id == Company.id)
+        .where(Company.status == CompanyStatus.active.value)
+        .group_by(Company.id)
+        .order_by(Company.created_at.desc())
+    )
+    out = [_company_out(company, int(count or 0)) for company, count in result.all()]
+    return CompanyListOut(companies=out)
 
 
 @router.get("/{company_id}", response_model=CompanyOut)
 async def get_company(company_id: UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> CompanyOut:
-    result = await db.execute(select(Company).where(Company.id == company_id))
+    result = await db.execute(
+        select(Company).where(
+            Company.id == company_id,
+            Company.status == CompanyStatus.active.value,
+        )
+    )
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     cnt = await db.execute(select(func.count()).select_from(User).where(User.company_id == company.id))
     count = cnt.scalar() or 0
-    return CompanyOut(
-        id=company.id, name=company.name, region=company.region, description=company.description,
-        logo_url=company.logo_url, industry=company.industry, location=company.location,
-        website=company.website, company_size=company.company_size, contact_email=company.contact_email,
-        contact_phone=company.contact_phone, status=company.status, owner_id=company.owner_id,
-        created_at=company.created_at, recruiter_count=count,
-    )
+    return _company_out(company, count)
 
 
 @router.post("", response_model=CompanyOut)
@@ -81,7 +94,8 @@ async def create_company(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Company already exists")
     company = Company(
         name=data.name.strip(), region=data.region, description=data.description,
-        logo_url=data.logo_url, industry=data.industry, location=data.location,
+        # Logo storage keys are set only by the validated upload endpoint.
+        logo_url=None, industry=data.industry, location=data.location,
         website=data.website, company_size=data.company_size, contact_email=data.contact_email,
         contact_phone=data.contact_phone, owner_id=current_user.id,
     )
@@ -92,13 +106,7 @@ async def create_company(
     await db.commit()
     await db.refresh(company)
     await log_audit(db, action="COMPANY_CREATED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
-    return CompanyOut(
-        id=company.id, name=company.name, region=company.region, description=company.description,
-        logo_url=company.logo_url, industry=company.industry, location=company.location,
-        website=company.website, company_size=company.company_size, contact_email=company.contact_email,
-        contact_phone=company.contact_phone, status=company.status, owner_id=company.owner_id,
-        created_at=company.created_at, recruiter_count=1,
-    )
+    return _company_out(company, 1)
 
 
 @router.post("/{company_id}/join", response_model=dict)
@@ -114,7 +122,7 @@ async def join_company(
     )
 
 
-@router.get("/{company_id}/recruiters", response_model=dict[str, list[dict]])
+@router.get("/{company_id}/recruiters", response_model=CompanyMembersOut)
 async def list_recruiters(
     company_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -124,13 +132,19 @@ async def list_recruiters(
     if current_user.role.value == "COMPANY_USER" and str(current_user.company_id) != str(company_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     # Allow candidates to view recruiter list for request targeting; admins unrestricted
-    result = await db.execute(select(User).where(User.company_id == company_id))
+    result = await db.execute(
+        select(User).where(
+            User.company_id == company_id,
+            User.role == UserRole.COMPANY_USER,
+            User.is_approved.is_(True),
+        )
+    )
     recruiters = result.scalars().all()
     return {"recruiters": [{"id": str(r.id), "full_name": r.full_name, "email": r.email, "avatar_url": r.avatar_url, "company_role": r.company_role} for r in recruiters],
             "members": [{"id": str(r.id), "full_name": r.full_name, "email": r.email, "avatar_url": r.avatar_url, "company_role": r.company_role} for r in recruiters]}
 
 
-@router.get("/{company_id}/members", response_model=dict[str, list[dict]])
+@router.get("/{company_id}/members", response_model=CompanyMembersOut)
 async def list_members(
     company_id: UUID,
     current_user: Annotated[User, Depends(require_company_member)],
@@ -146,7 +160,7 @@ async def list_members(
 @router.patch("/{company_id}", response_model=CompanyOut)
 async def update_company(
     company_id: UUID,
-    data: CompanyCreate,
+    data: CompanyUpdate,
     current_user: Annotated[User, Depends(require_company_member)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CompanyOut:
@@ -159,8 +173,8 @@ async def update_company(
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     # Only allow whitelisted fields
-    for field in ["name", "region", "description", "logo_url", "industry", "location", "website", "company_size", "contact_email", "contact_phone"]:
-        val = getattr(data, field, None)
+    for field in data.model_fields_set:
+        val = getattr(data, field)
         if val is not None:
             setattr(company, field, val.strip() if isinstance(val, str) else val)
     await db.commit()
@@ -168,7 +182,7 @@ async def update_company(
     await log_audit(db, action="COMPANY_UPDATED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
     cnt = await db.execute(select(func.count()).select_from(User).where(User.company_id == company.id))
     count = cnt.scalar() or 0
-    return CompanyOut(id=company.id, name=company.name, region=company.region, description=company.description, logo_url=company.logo_url, industry=company.industry, location=company.location, website=company.website, company_size=company.company_size, contact_email=company.contact_email, contact_phone=company.contact_phone, status=company.status, owner_id=company.owner_id, created_at=company.created_at, recruiter_count=count)
+    return _company_out(company, count)
 
 
 def _logo_media(ext: str) -> str:
@@ -189,7 +203,7 @@ async def get_company_logo(company_id: UUID, db: Annotated[AsyncSession, Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
     try:
         assert_company_logo_path(company.logo_url, str(company.id))
-        data = download_logo(company.logo_url)
+        data = await asyncio.to_thread(download_logo, company.logo_url)
     except LogoStorageError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
     filename = company.logo_url.rsplit("/", 1)[-1]
@@ -215,43 +229,70 @@ async def upload_company_logo(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
     filename = file.filename or ""
     try:
-        data = await file.read()
+        data = await read_upload_limited(file, MAX_LOGO_BYTES)
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 2MB",
+        ) from exc
     finally:
         await file.close()
     try:
         ext = validate_logo_file(filename, file.content_type, len(data))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if len(data) > MAX_LOGO_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large. Maximum size is 2MB")
-    try:
-        check_logo_magic_bytes(data, ext)
+        await validate_logo_content_async(data, ext)
+    except LogoResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except LogoValidationTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Logo could not be validated within the processing limit",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    result = await db.execute(select(Company).where(Company.id == company_id))
+    # Serialize replacements for one company so concurrent uploads always
+    # observe and clean the actual superseded object, never leave the first
+    # successful replacement orphaned.
+    result = await db.execute(
+        select(Company).where(Company.id == company_id).with_for_update()
+    )
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
 
-    # Delete previous logo first (best effort, scope-enforced).
     old_path = company.logo_url
-    if old_path:
-        try:
-            assert_company_logo_path(old_path, str(company.id))
-            delete_logo(old_path)
-        except LogoStorageError:
-            pass
-
     path = build_logo_path(str(company.id), ext)
     try:
-        upload_logo(path, data, CONTENT_TYPE_BY_EXT[ext])
+        await asyncio.to_thread(upload_logo, path, data, CONTENT_TYPE_BY_EXT[ext])
     except LogoStorageError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     company.logo_url = path
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        try:
+            await asyncio.to_thread(delete_logo, path)
+        except LogoStorageError:
+            logger.warning("logo_failed_upload_cleanup_deferred", company_id=str(company_id))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Logo could not be saved",
+        ) from exc
     await db.refresh(company)
+    # Replacement is now visible. Only the superseded object can be removed;
+    # upload or database failures above always leave the prior logo untouched.
+    if old_path and old_path != path:
+        try:
+            assert_company_logo_path(old_path, str(company.id))
+            await asyncio.to_thread(delete_logo, old_path)
+        except LogoStorageError:
+            logger.warning("logo_replacement_cleanup_deferred", company_id=str(company.id))
     await log_audit(db, action="COMPANY_LOGO_UPDATED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
     logger.info("company_logo_uploaded", company_id=str(company.id))
     return CompanyLogoMetaOut(logo_url=path, filename=filename, content_type=CONTENT_TYPE_BY_EXT[ext], size_bytes=len(data))
@@ -268,32 +309,45 @@ async def delete_company_logo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not can(current_user.company_role, "edit_company"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
-    result = await db.execute(select(Company).where(Company.id == company_id))
+    result = await db.execute(
+        select(Company).where(Company.id == company_id).with_for_update()
+    )
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not company.logo_url:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo not found")
+    old_path = company.logo_url
     try:
-        assert_company_logo_path(company.logo_url, str(company.id))
-        delete_logo(company.logo_url)
+        assert_company_logo_path(old_path, str(company.id))
     except LogoStorageError as exc:
         if str(exc) == "Forbidden":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
-        # Storage missing but DB points to it: still clear DB to stay consistent.
-        logger.error("company_logo_delete_storage_miss")
     company.logo_url = None
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Logo could not be removed",
+        ) from exc
+    try:
+        await asyncio.to_thread(delete_logo, old_path)
+    except LogoStorageError:
+        # The committed reference is authoritative; retain an orphan for a
+        # later storage cleanup rather than restoring a stale database link.
+        logger.warning("company_logo_delete_cleanup_deferred", company_id=str(company.id))
     await log_audit(db, action="COMPANY_LOGO_REMOVED", actor=current_user, company_id=company.id, resource_type="company", resource_id=company.id)
     logger.info("company_logo_deleted", company_id=str(company.id))
     return None
 
 
-@router.patch("/{company_id}/members/{user_id}", response_model=dict)
+@router.patch("/{company_id}/members/{user_id}", response_model=CompanyMemberRoleOut)
 async def change_member_role(
     company_id: UUID,
     user_id: UUID,
-    data: dict,
+    data: CompanyMemberRoleUpdate,
     current_user: Annotated[User, Depends(require_company_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
@@ -301,9 +355,7 @@ async def change_member_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not can(current_user.company_role, "change_employee_roles"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    new_role = str(data.get("company_role") or data.get("role") or "").upper().strip()
-    if new_role not in {"ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role — cannot set OWNER via this endpoint")
+    new_role = data.company_role
     target = (await db.execute(select(User).where(User.id == user_id, User.company_id == company_id))).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
@@ -339,7 +391,7 @@ async def remove_member(
     await log_audit(db, action="EMPLOYEE_REMOVED", actor=current_user, company_id=company_id, resource_type="user", resource_id=user_id)
 
 
-@router.get("/{company_id}/subscription", response_model=dict)
+@router.get("/{company_id}/subscription", response_model=CompanySubscriptionOut)
 async def get_subscription(
     company_id: UUID,
     current_user: Annotated[User, Depends(require_company_member)],
@@ -349,8 +401,18 @@ async def get_subscription(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not can(current_user.company_role, "manage_subscription"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner only")
-    result = await db.execute(select(Company).where(Company.id == company_id))
-    company = result.scalar_one_or_none()
-    if not company:
+    try:
+        snapshot = await entitlement_snapshot(db, company_id, require_active=False)
+    except EntitlementDenied:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
-    return {"company_id": str(company.id), "status": company.status, "owner_id": str(company.owner_id) if company.owner_id else None}
+    company = snapshot.company
+    return {
+        "company_id": company.id,
+        "status": company.status,
+        "owner_id": company.owner_id,
+        "plan": company.subscription_plan,
+        "subscription_status": company.subscription_status,
+        "expires_at": company.subscription_expires_at,
+        "limits": snapshot.limits,
+        "usage": snapshot.usage,
+    }

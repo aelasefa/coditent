@@ -1,21 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { StatusBadge } from "@/components/company/StatusBadge";
 import { AiScore } from "./CandidateCard";
 import { candidateName, jobTitleFor } from "./hiring";
-import { getApiBaseUrl, retryApplicationScreening } from "@/lib/api";
+import { createInterviewFeedback, getApiBaseUrl, getMe, listInterviewFeedback, retryApplicationScreening, updateInterviewFeedback } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import type { ApplicationItem, AssessmentItem } from "@/lib/types";
+import type { ApplicationItem, InterviewRecommendation } from "@/lib/types";
 import {
   FiActivity,
   FiAlertCircle,
   FiAward,
-  FiBarChart2,
   FiCheckCircle,
   FiDownload,
   FiExternalLink,
@@ -25,12 +23,20 @@ import {
   FiX,
 } from "react-icons/fi";
 
-const PIPELINE_STAGES = [
-  { status: "under_review", label: "Review", description: "Start structured screening" },
-  { status: "shortlisted", label: "Shortlist", description: "Keep in active consideration" },
-  { status: "interview", label: "Interview", description: "Move to a live conversation" },
-  { status: "accepted", label: "Hire", description: "Mark the candidate as hired" },
-] as const;
+const NEXT_STAGES: Record<string, string[]> = {
+  applied: ["under_review", "rejected"],
+  under_review: ["shortlisted", "interview", "rejected"],
+  shortlisted: ["interview", "rejected"],
+  interview: ["accepted", "rejected"],
+  accepted: [],
+  rejected: [],
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  under_review: "Review",
+  shortlisted: "Shortlist",
+  accepted: "Hire",
+};
 
 function parseScreeningReport(report?: string | null): { summary: string; strengths: string[]; gaps: string[] } | null {
   if (!report) return null;
@@ -57,7 +63,6 @@ function dateTime(iso?: string | null): string {
 export function CandidateDetail({
   app,
   jobTitle,
-  assessment,
   canMoveStage,
   stagePending,
   chatUnlocked,
@@ -66,14 +71,25 @@ export function CandidateDetail({
 }: {
   app: ApplicationItem;
   jobTitle: string;
-  assessment?: AssessmentItem | null;
   canMoveStage: boolean;
   stagePending: boolean;
   chatUnlocked: boolean;
-  onStage: (status: string) => void;
+  onStage: (
+    status: string,
+    interview?: { scheduledAt: string; notes?: string }
+  ) => void;
   onReject: () => void;
 }) {
   const [rejectConfirm, setRejectConfirm] = useState(false);
+  const [interviewAt, setInterviewAt] = useState("");
+  const [interviewNotes, setInterviewNotes] = useState("");
+  const [feedbackForm, setFeedbackForm] = useState({
+    rating: 3,
+    recommendation: "neutral" as InterviewRecommendation,
+    strengths: "",
+    concerns: "",
+    notes: "",
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const screening = parseScreeningReport(app.ai_report);
@@ -84,6 +100,36 @@ export function CandidateDetail({
     screening &&
       (screeningTextLength > 360 || screening.strengths.length + screening.gaps.length >= 4)
   );
+  const meQ = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
+  const feedbackQ = useQuery({
+    queryKey: ["interview-feedback", app.id],
+    queryFn: () => listInterviewFeedback(app.id),
+    enabled: Boolean(app.interview_scheduled_at),
+  });
+  const myFeedback = feedbackQ.data?.find((entry) => entry.reviewer_id === meQ.data?.id);
+  useEffect(() => {
+    if (!myFeedback) return;
+    setFeedbackForm({
+      rating: myFeedback.rating,
+      recommendation: myFeedback.recommendation,
+      strengths: myFeedback.strengths,
+      concerns: myFeedback.concerns ?? "",
+      notes: myFeedback.notes ?? "",
+    });
+  }, [myFeedback]);
+  const feedbackMut = useMutation({
+    mutationFn: () => myFeedback
+      ? updateInterviewFeedback(app.id, myFeedback.id, {
+          expected_version: myFeedback.version,
+          ...feedbackForm,
+        })
+      : createInterviewFeedback(app.id, feedbackForm),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["interview-feedback", app.id] });
+      toast(myFeedback ? "Interview feedback updated" : "Interview feedback saved", { variant: "success" });
+    },
+    onError: () => toast("Interview feedback could not be saved", { variant: "error" }),
+  });
   const screenMut = useMutation({
     mutationFn: () => retryApplicationScreening(app.id),
     onSuccess: () => {
@@ -111,6 +157,10 @@ export function CandidateDetail({
     ? `${getApiBaseUrl()}${cvDownloadPath.startsWith("/") ? cvDownloadPath : `/${cvDownloadPath}`}`
     : null;
   const cvFilename = app.cv?.filename ?? null;
+  const nextStages = NEXT_STAGES[app.status] ?? [];
+  const nonInterviewStages = nextStages.filter(
+    (stage) => stage !== "interview" && stage !== "rejected"
+  );
 
   return (
     <div className={`company-candidate-detail${canMoveStage ? " company-candidate-detail-manageable" : ""}`}>
@@ -136,21 +186,55 @@ export function CandidateDetail({
                 onStage(status);
               }}
             >
-              {!PIPELINE_STAGES.some((stage) => stage.status === app.status) && (
-                <option value={app.status} disabled>
-                  {app.status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
-                </option>
-              )}
-              {PIPELINE_STAGES.map((stage) => (
-                <option key={stage.status} value={stage.status} title={stage.description}>{stage.label}</option>
+              <option value={app.status} disabled>
+                {app.status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+              </option>
+              {nonInterviewStages.map((stage) => (
+                <option key={stage} value={stage}>{STAGE_LABELS[stage] ?? stage}</option>
               ))}
             </select>
             <p id="candidate-stage-save-status" role="status" className="sr-only">
               {stagePending ? "Updating pipeline…" : "Stage changes save automatically."}
             </p>
           </div>
+          {nextStages.includes("interview") ? (
+            <div className="rounded-xl border border-border-subtle bg-surface-secondary/30 p-3">
+              <p className="text-xs font-semibold text-foreground">Schedule interview</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <input
+                  type="datetime-local"
+                  value={interviewAt}
+                  onChange={(event) => setInterviewAt(event.target.value)}
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  aria-label="Interview date and time"
+                />
+                <input
+                  type="text"
+                  maxLength={2000}
+                  value={interviewNotes}
+                  onChange={(event) => setInterviewNotes(event.target.value)}
+                  placeholder="Location or meeting details (optional)"
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  aria-label="Interview notes"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                disabled={stagePending || !interviewAt}
+                loading={stagePending}
+                onClick={() => onStage("interview", {
+                  scheduledAt: new Date(interviewAt).toISOString(),
+                  notes: interviewNotes,
+                })}
+              >
+                Schedule interview
+              </Button>
+            </div>
+          ) : null}
           <div className="company-candidate-stage-secondary">
-            {rejectConfirm && app.status !== "rejected" ? (
+            {rejectConfirm ? (
               <span className="company-candidate-reject-confirm">
                 <span>Reject candidate?</span>
                 <Button size="sm" variant="danger" disabled={stagePending} onClick={onReject}>
@@ -161,7 +245,7 @@ export function CandidateDetail({
                 </Button>
               </span>
             ) : (
-              app.status !== "rejected" && (
+              nextStages.includes("rejected") && (
                 <Button size="sm" variant="ghost" className="company-candidate-reject-trigger" aria-label="Reject application" disabled={stagePending} onClick={() => setRejectConfirm(true)}>
                   <FiX aria-hidden="true" /> Reject
                 </Button>
@@ -196,6 +280,10 @@ export function CandidateDetail({
                       <dt className="company-detail-label">Job</dt>
                       <dd>{jobTitle}</dd>
                     </div>
+                    <div>
+                      <dt className="company-detail-label">Interview</dt>
+                      <dd>{app.interview_scheduled_at ? dateTime(app.interview_scheduled_at) : "Not scheduled"}</dd>
+                    </div>
                   </dl>
 
                   <section className={chatUnlocked ? "company-candidate-chat-status company-candidate-chat-status-open" : "company-candidate-chat-status"} aria-label="Recruitment chat">
@@ -207,6 +295,54 @@ export function CandidateDetail({
                   </section>
                 </div>
               ),
+            },
+            {
+              id: "interview",
+              label: "Interview",
+              content: app.interview_scheduled_at ? (
+                <div className="space-y-5">
+                  <div className="rounded-lg bg-surface-secondary/50 p-3 text-sm">
+                    <p className="font-semibold text-foreground">Scheduled {dateTime(app.interview_scheduled_at)}</p>
+                    {app.interview_notes ? <p className="mt-1 text-muted-foreground">{app.interview_notes}</p> : null}
+                  </div>
+                  {canMoveStage ? (
+                    <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); feedbackMut.mutate(); }}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs font-medium text-foreground">Rating
+                          <select className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" value={feedbackForm.rating} onChange={(event) => setFeedbackForm((current) => ({ ...current, rating: Number(event.target.value) }))}>
+                            {[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating} / 5</option>)}
+                          </select>
+                        </label>
+                        <label className="text-xs font-medium text-foreground">Recommendation
+                          <select className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" value={feedbackForm.recommendation} onChange={(event) => setFeedbackForm((current) => ({ ...current, recommendation: event.target.value as InterviewRecommendation }))}>
+                            <option value="strong_no">Strong no</option><option value="no">No</option><option value="neutral">Neutral</option><option value="yes">Yes</option><option value="strong_yes">Strong yes</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block text-xs font-medium text-foreground">Strengths
+                        <textarea required minLength={2} maxLength={5000} rows={3} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm" value={feedbackForm.strengths} onChange={(event) => setFeedbackForm((current) => ({ ...current, strengths: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-medium text-foreground">Concerns
+                        <textarea maxLength={5000} rows={2} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm" value={feedbackForm.concerns} onChange={(event) => setFeedbackForm((current) => ({ ...current, concerns: event.target.value }))} />
+                      </label>
+                      <label className="block text-xs font-medium text-foreground">Private notes
+                        <textarea maxLength={10000} rows={2} className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm" value={feedbackForm.notes} onChange={(event) => setFeedbackForm((current) => ({ ...current, notes: event.target.value }))} />
+                      </label>
+                      <Button type="submit" size="sm" loading={feedbackMut.isPending}>{myFeedback ? "Update my feedback" : "Save my feedback"}</Button>
+                    </form>
+                  ) : null}
+                  <div className="space-y-2">
+                    {(feedbackQ.data ?? []).map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-border-subtle p-3 text-sm">
+                        <div className="flex justify-between gap-3"><strong>{entry.reviewer_name}</strong><span>{entry.rating}/5 · {entry.recommendation.replace(/_/g, " ")}</span></div>
+                        <p className="mt-2 text-foreground-secondary"><strong>Strengths:</strong> {entry.strengths}</p>
+                        {entry.concerns ? <p className="mt-1 text-foreground-secondary"><strong>Concerns:</strong> {entry.concerns}</p> : null}
+                      </div>
+                    ))}
+                    {feedbackQ.data?.length === 0 ? <p className="text-sm text-muted-foreground">No interviewer feedback yet.</p> : null}
+                  </div>
+                </div>
+              ) : <p className="text-sm text-muted-foreground">Schedule an interview before recording structured feedback.</p>,
             },
             {
               id: "skills",
@@ -244,11 +380,11 @@ export function CandidateDetail({
               ),
             },
             {
-              id: "assessments",
-              label: "Assessments",
+              id: "screening",
+              label: "Screening",
               content: (
                 <div
-                  className={`candidate-assessments-stack${screeningNeedsWideLayout ? " candidate-assessments-stack-wide" : ""}`}
+                  className={`candidate-screening-stack${screeningNeedsWideLayout ? " candidate-screening-stack-wide" : ""}`}
                 >
                   <section className="candidate-screening" aria-labelledby="candidate-screening-title">
                     <div className="candidate-screening-heading">
@@ -300,51 +436,6 @@ export function CandidateDetail({
                       </div>
                     ) : null}
                   </section>
-                  {assessment ? (
-                    <section className="candidate-assessment-detail" aria-label="Practical assessment result">
-                      <header className="candidate-assessment-header">
-                        <div className="candidate-assessment-heading">
-                          <span className="candidate-assessment-icon" aria-hidden="true"><FiFileText /></span>
-                          <div>
-                            <p className="company-detail-label">Practical assessment</p>
-                            <h3>{assessment.title || "Assessment result"}</h3>
-                          </div>
-                        </div>
-                        <div className="candidate-assessment-outcome">
-                          <div className="candidate-assessment-score">
-                            <span>Objective score</span>
-                            <p>
-                              <strong>{typeof assessment.score === "number" ? assessment.score : "—"}</strong>
-                              <span>/ 100</span>
-                            </p>
-                          </div>
-                          <div className="candidate-assessment-status">
-                            <span className="sr-only">Status</span>
-                            <StatusBadge status={assessment.status} size="sm" />
-                          </div>
-                        </div>
-                      </header>
-                      <div className="candidate-assessment-reports">
-                        {assessment.report ? (
-                          <section className="candidate-assessment-report candidate-assessment-report-analysis" aria-label="AI analysis">
-                            <span className="candidate-assessment-report-icon" aria-hidden="true"><FiBarChart2 /></span>
-                            <div>
-                              <h4>AI analysis</h4>
-                              <p>{assessment.report}</p>
-                            </div>
-                          </section>
-                        ) : null}
-                        {!assessment.report ? (
-                          <p className="candidate-assessment-empty">No AI analysis recorded for this assessment.</p>
-                        ) : null}
-                      </div>
-                    </section>
-                  ) : (
-                    <section className="candidate-assessment-notice" aria-label="Practical assessment">
-                      <h3>Practical assessment</h3>
-                      <p>No practical assessment registered for this application.</p>
-                    </section>
-                  )}
                 </div>
               ),
             },

@@ -5,19 +5,12 @@ Run: python3 -m pytest tests/test_cv_upload.py -v
 import asyncio
 import io
 import sys
+import time
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
-
-# --- Stub heavy modules before importing app code ---
-_g = types.ModuleType("google")
-_ga = types.ModuleType("google.generativeai")
-_ga.configure = lambda **kwargs: None
-_ga.GenerativeModel = lambda *a, **k: None
-_g.generativeai = _ga
-sys.modules.setdefault("google", _g)
-sys.modules.setdefault("google.generativeai", _ga)
 
 _obs = types.ModuleType("app.observability")
 
@@ -33,7 +26,12 @@ _obs.get_logger = lambda name="t": _Log()
 sys.modules["app.observability"] = _obs
 
 _cfg = types.ModuleType("app.config")
-_cfg.settings = types.SimpleNamespace(gemini_api_key="test", database_url="sqlite://")
+_cfg.settings = types.SimpleNamespace(
+    gemini_api_key="test",
+    gemini_model="gemini-3-flash-preview",
+    ai_provider_timeout_seconds=30,
+    database_url="sqlite://",
+)
 sys.modules["app.config"] = _cfg
 
 _db = types.ModuleType("app.db")
@@ -49,8 +47,14 @@ from app.services.cv_extraction import (  # noqa: E402
     parse_ai_response,
 )
 from app.services import cv_extraction as ce_mod  # noqa: E402
+from app.services import cv_parser as cp_mod  # noqa: E402
 from app.services.cv_parser import (  # noqa: E402
+    MAX_DOCX_ENTRY_BYTES,
+    MAX_EXTRACTED_TEXT_CHARS,
+    MAX_PDF_PAGES,
     MAX_CV_BYTES,
+    CVParseTimeoutError,
+    CVResourceLimitError,
     NoExtractableTextError,
     check_magic_bytes,
     extract_text,
@@ -60,7 +64,10 @@ from app.services.cv_parser import (  # noqa: E402
     normalize_skills,
     normalize_url,
     clamp_years,
+    validate_docx_bounds,
+    validate_cv_content,
     validate_cv_file,
+    validate_pdf_bounds,
 )
 from app.services.cv_storage import assert_owns_path  # noqa: E402
 
@@ -118,6 +125,12 @@ def test_invalid_file_type():
         validate_cv_file("cv.exe", "application/octet-stream", 100)
     with pytest.raises(ValueError, match="Only PDF and DOCX"):
         extract_text("cv.txt", b"hello")
+    with pytest.raises(ValueError, match="content type does not match"):
+        validate_cv_file(
+            "cv.pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            100,
+        )
 
 
 # 4. Oversized file
@@ -324,14 +337,11 @@ def test_empty_text_code():
 
 
 def test_ai_timeout_code(monkeypatch):
-    import time
+    async def slow_generate(*_args, **_kwargs):
+        await asyncio.sleep(5)
+        return "", None
 
-    class SlowModel:
-        def generate_content(self, *a, **k):
-            time.sleep(5)
-            return None
-
-    monkeypatch.setattr(ce_mod, "_get_model", lambda: SlowModel())
+    monkeypatch.setattr(ce_mod, "generate_text", slow_generate)
     with pytest.raises(AIExtractionError) as ei:
         asyncio.run(extract_profile_from_text("x" * 100, timeout_s=0.05))
     assert ei.value.code == "CV_AI_TIMEOUT"
@@ -342,15 +352,11 @@ def test_nonstop_finish_retries_then_coded(monkeypatch):
 
     calls = {"n": 0}
 
-    class CutModel:
-        def generate_content(self, *a, **k):
-            calls["n"] += 1
-            return SimpleNamespace(
-                text='{"skills": ["Python"]',
-                candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="MAX_TOKENS"))],
-            )
+    async def cut_generate(*_args, **_kwargs):
+        calls["n"] += 1
+        return '{"skills": ["Python"]', SimpleNamespace(name="MAX_TOKENS")
 
-    monkeypatch.setattr(ce_mod, "_get_model", lambda: CutModel())
+    monkeypatch.setattr(ce_mod, "generate_text", cut_generate)
     with pytest.raises(AIExtractionError) as ei:
         asyncio.run(extract_profile_from_text("x" * 100, timeout_s=5))
     assert ei.value.code == "CV_AI_ERROR"
@@ -360,14 +366,13 @@ def test_nonstop_finish_retries_then_coded(monkeypatch):
 def test_extract_success_path(monkeypatch):
     from types import SimpleNamespace
 
-    class GoodModel:
-        def generate_content(self, *a, **k):
-            return SimpleNamespace(
-                text='{"skills": ["Python", "SQL"], "city": "Fes", "study_level": "LICENCE"}',
-                candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="STOP"))],
-            )
+    async def good_generate(*_args, **_kwargs):
+        return (
+            '{"skills": ["Python", "SQL"], "city": "Fes", "study_level": "LICENCE"}',
+            SimpleNamespace(name="STOP"),
+        )
 
-    monkeypatch.setattr(ce_mod, "_get_model", lambda: GoodModel())
+    monkeypatch.setattr(ce_mod, "generate_text", good_generate)
     data, warnings, meta = asyncio.run(extract_profile_from_text("x" * 100))
     assert data.skills == ["Python", "SQL"]
     assert data.city == "Fes"
@@ -378,6 +383,79 @@ def test_extract_success_path(monkeypatch):
 def test_pdf_page_count():
     assert get_pdf_page_count(make_blank_pdf_bytes()) == 1
     assert get_pdf_page_count(b"not a pdf") is None
+
+
+def test_pdf_page_limit_is_enforced_before_extraction():
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(MAX_PDF_PAGES + 1):
+        writer.add_blank_page(width=100, height=100)
+    buf = io.BytesIO()
+    writer.write(buf)
+    with pytest.raises(CVResourceLimitError, match="maximum"):
+        validate_pdf_bounds(buf.getvalue())
+
+
+def test_encrypted_pdf_is_rejected_before_extraction():
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.encrypt("secret")
+    buf = io.BytesIO()
+    writer.write(buf)
+    with pytest.raises(ValueError, match="Encrypted PDFs"):
+        validate_pdf_bounds(buf.getvalue())
+
+
+def test_docx_requires_real_office_structure():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("payload.txt", "not a Word document")
+    with pytest.raises(ValueError, match="DOCX structure"):
+        validate_docx_bounds(buf.getvalue())
+
+
+def test_docx_rejects_fake_required_entries():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "not XML")
+        archive.writestr("word/document.xml", "not XML")
+    with pytest.raises(ValueError, match="Invalid DOCX"):
+        validate_cv_content(buf.getvalue(), "docx")
+
+
+def test_docx_rejects_highly_compressed_oversized_entry():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("word/document.xml", "x" * (MAX_DOCX_ENTRY_BYTES + 1))
+    assert len(buf.getvalue()) < MAX_CV_BYTES
+    with pytest.raises(CVResourceLimitError, match="oversized archive entry"):
+        validate_docx_bounds(buf.getvalue())
+
+
+def test_extracted_text_is_bounded_during_accumulation():
+    data = make_docx_bytes(["x" * 1_000 for _ in range(40)])
+    text = extract_text("cv.docx", data)
+    assert len(text) <= MAX_EXTRACTED_TEXT_CHARS
+
+
+def test_parser_timeout_is_reported_deterministically(monkeypatch):
+    def slow_parse(_filename: str, _data: bytes):
+        time.sleep(0.05)
+        return "unused", None
+
+    monkeypatch.setattr(cp_mod, "extract_text_with_meta", slow_parse)
+    with pytest.raises(CVParseTimeoutError, match="time limit"):
+        asyncio.run(
+            cp_mod.extract_text_with_meta_async(
+                "cv.pdf",
+                b"%PDF-1.7",
+                timeout_s=0.001,
+            )
+        )
 
 
 def test_router_error_codes():
@@ -394,7 +472,7 @@ def test_router_error_codes():
 
 def test_frontend_review_and_retry():
     page = (Path(__file__).resolve().parents[2] / "web" / "src" / "app" / "dashboard" / "profile" / "page.tsx").read_text()
-    assert "Retry extraction" in page
+    assert "Retry reading" in page
     assert "runParse" in page
-    assert "Review extracted info" in page
+    assert "Review details from your CV" in page
     assert "getApiError" in page

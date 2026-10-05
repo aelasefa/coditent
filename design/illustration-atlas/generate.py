@@ -178,7 +178,6 @@ ROUTES = [
     ("company", "/company", "Enterprise canopy", "Company", "A strong team supports the wider talent ecosystem.", [("tree", 203, 215, 1.17), ("person", 75, 155, "forest"), ("person", 331, 155, "terra", True), ("card", 276, 71, "profile", 5)]),
     ("company-jobs", "/company/jobs", "Opportunity beds", "Company", "Several roles grow from one coherent hiring plan.", [("sprout", 79, 211, .72), ("sprout", 207, 213, 1.05), ("sprout", 327, 211, .76), ("card", 168, 62, "job", -4)]),
     ("company-candidates", "/company/candidates", "People mosaic", "Company", "Individual profiles form a diverse talent picture.", [("card", 55, 72, "profile", -8), ("card", 164, 93, "profile", 4), ("card", 270, 66, "profile", 10), ("path", [(97, 170), (204, 167), (314, 169)], "ochre", True)]),
-    ("company-assessments", "/company/assessments", "Skill rings", "Company", "Practical skills are measured with care and clarity.", [("glyph", "star", 205, 113, "forest", .88), ("glyph", "check", 205, 113, "ochre", .43), ("node", 85, 84, "terra", 11), ("node", 322, 79, "sage", 11)]),
     ("company-messages", "/company/messages", "Conversation bridge", "Company", "Messages bridge candidates and hiring teams.", [("glyph", "chat", 112, 96, "terra", .75), ("glyph", "chat", 309, 96, "forest", .75), ("path", [(152, 144), (205, 165), (268, 144)], "ochre"), ("node", 205, 165, "ochre", 9)]),
     ("company-invitations", "/company/invitations", "Opening circle", "Company", "Each invitation adds another person to the team.", [("glyph", "envelope", 205, 93, "forest", .75), ("person", 79, 158, "terra"), ("person", 333, 158, "forest", True), ("path", [(111, 166), (205, 187), (301, 166)], "sage", True)]),
     ("company-team", "/company/team", "Collective canopy", "Company", "People share responsibility beneath a common canopy.", [("tree", 211, 195, .88), ("person", 73, 155, "terra"), ("person", 320, 155, "forest", True), ("node", 124, 94, "ochre", 10), ("node", 299, 76, "sage", 10)]),
@@ -266,6 +265,7 @@ page = page.replace(
     "</header><main>",
     '</header><figure style="max-width:1320px;margin:24px auto 8px;padding:0 24px"><img src="higgsfield-career-network.png" alt="Higgsfield exploration showing professionals connected by profile cards beneath a green tree" style="display:block;width:100%;max-height:460px;object-fit:cover;object-position:center 45%;border-radius:18px"><figcaption style="font-size:13px;color:#627668;margin:9px 2px">Higgsfield people study · a supporting style reference, separate from the 47 editable SVG concepts below.</figcaption></figure><main>',
 )
+page = page.replace("47 editable", f"{len(manifest)} editable")
 (HERE / "index.html").write_text(page, encoding="utf-8")
 
 app_dir = HERE.parents[1] / "apps" / "web" / "src" / "app"

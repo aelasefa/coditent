@@ -333,12 +333,14 @@ async def test_6_direct_stays_separate_and_recruitment_does_not_leak(client, flo
     r = await client.get("/chat/conversations", headers=auth(flow["cand"]))
     assert r.status_code == 200
     assert r.json()["conversations"] == []
+    # Direct friend threads are candidate-only. A recruiter ID must not open a
+    # parallel general thread; the application-scoped route remains canonical.
     r = await client.get(f"/chat/with/{flow['hr'].id}", headers=auth(flow["cand"]))
-    assert r.status_code == 200
-    assert r.json()["messages"] == []
+    assert r.status_code == 404
 
-    # A real direct message (application_id NULL) stays a separate thread and
-    # never merges into / changes the recruitment conversation.
+    # Even a legacy application-less candidate-to-recruiter row must not create
+    # a friend thread. Friend conversations are candidate-to-candidate and must
+    # also have an accepted friendship.
     async def _insert_direct():
         async with AsyncSessionLocal() as db:
             db.add(ChatMessage(
@@ -352,10 +354,9 @@ async def test_6_direct_stays_separate_and_recruitment_does_not_leak(client, flo
     await _with_db_retries("insert.direct", _insert_direct)
     r = await client.get("/chat/conversations", headers=auth(flow["cand"]))
     assert r.status_code == 200
-    assert len(r.json()["conversations"]) == 1
-    assert r.json()["conversations"][0]["last_message"] == "hello direct"
+    assert r.json()["conversations"] == []
     r = await client.get(f"/chat/with/{flow['hr'].id}", headers=auth(flow["cand"]))
-    assert [m["content"] for m in r.json()["messages"]] == ["hello direct"]
+    assert r.status_code == 404
     # Recruitment side untouched.
     entries = await _recruitment_entries(client, flow["cand"])
     mine = [e for e in entries if e["application_id"] == str(flow["application"].id)]
@@ -374,9 +375,9 @@ async def test_7_messages_survive_stage_moves(client, flow):
         )
         assert r.status_code == 200, r.text
     # Move through the pipeline: history (timestamps + senders) preserved.
-    for stage in ["interview", "accepted", "assessment_completed"]:
+    for stage in ["shortlisted", "interview", "accepted"]:
         await _set_status(flow["application"].id, stage)
-        # Re-enable chat-gated stages for readability; assessment_completed
+        # Re-enable chat-gated stages for readability; accepted
         # keeps chat enabled as well.
         r = await client.get(f"/chat/recruitment/{flow['application'].id}", headers=auth(flow["cand"]))
         assert r.status_code == 200

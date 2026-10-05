@@ -7,7 +7,7 @@
 
 - **Framework:** FastAPI (unpinned in `apps/api/requirements.txt:1-22`), **Python 3.12** (`apps/api/Dockerfile:1`, CI `setup-python 3.12` in `.github/workflows/deploy.yml:52-55,87-89`).
 - **Entry point:** `apps/api/app/main.py` — builds `FastAPI(title="CODITENT API", version="1.0.0")` (`main.py:17-21`), no lifespan handlers.
-- **How it starts:** `docker-compose.yml:23-25` runs `sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001"`; fallback `CMD` in `apps/api/Dockerfile:19`. Healthcheck polls `http://localhost:8001/health` (`docker-compose.yml:27-34`).
+- **How it starts:** Compose runs `alembic upgrade head` before Uvicorn; fallback `CMD` is in `apps/api/Dockerfile`. `GET /health` is pure process liveness. Compose and deployment verification use `GET /ready`, whose bounded probes cover PostgreSQL, Redis, and a TTL-backed Celery worker heartbeat.
 - **Database:** Supabase-hosted PostgreSQL only. SQLAlchemy 2 async (`asyncpg`) via `apps/api/app/database.py:36-47` (PgBouncer-safe: `statement_cache_size=0`, `pool_pre_ping=True`). Local DB markers are rejected at startup (`app/database.py:9-33`, `app/config.py:47-54`).
 - **ORM:** SQLAlchemy `DeclarativeBase` (`app/database.py:50-56`), per-request `AsyncSession` (`get_db`).
 - **Authentication:** custom JWT (HS256, `python-jose`), **not Supabase Auth**. `get_current_user` (`app/dependencies.py:20-48`): `HTTPBearer(auto_error=False)` first, HttpOnly `access_token` cookie fallback, `sub`→UUID→DB row lookup. Authority is `public.users`, never `auth.users`.
@@ -44,7 +44,7 @@ FastAPI (:8001, uvicorn) — routers/*, CORS allow frontend origins
 
 | PATH | PURPOSE | USED BY | IMPORTANT DEPENDENCIES |
 |---|---|---|---|
-| `apps/api/app/main.py` | App factory: routers, CORS, rate-limit, metrics, `/health`, `/metrics`, `/protected` | uvicorn, deploy healthcheck | `app/routers/*`, `app/config.py`, `slowapi` |
+| `apps/api/app/main.py` + `health.py` | App factory plus `/health` liveness and `/ready` dependency readiness | uvicorn, compose/deploy checks | PostgreSQL engine, Redis, Celery heartbeat |
 | `apps/api/app/config.py` | `Settings` (pydantic-settings, `.env`) | everything via `settings` | env names only — see §31 |
 | `apps/api/app/database.py` | Async engine (PgBouncer-safe), sessions, Supabase-only guard | all routers, tasks, tests | `sqlalchemy[asyncio]`, `asyncpg` |
 | `apps/api/app/models.py` | All ORM tables (320 lines) | routers, services, tasks | `app/database.py:Base` |
@@ -256,7 +256,7 @@ Grouped map (auth/roles/side effects per endpoint; evidence in subagent reports 
 - **Chat** (`/chat`): send/with/conversations/recruitment×3/WS — §16.
 - **Audit** (`GET /audit`): admin last-50 / company filtered-50 / others empty.
 - **Admin** (`/admin`): recruiters pending/approve/reject, stats (9 fields), users, offers, activity (all paginated), impersonate (JWT + audit).
-- **System:** `GET /health`, `GET /metrics` (Prometheus), `GET /protected` (auth probe).
+- **System:** `GET /health` (liveness), `GET /ready` (dependency readiness), `GET /metrics` (Prometheus), `GET /protected` (auth probe).
 - **Discrepancies:** none unregistered (all 12 routers mounted, `main.py:45-56`); no OpenAPI-but-missing-code found. OpenAPI itself not diffed against live (static review only).
 
 ## 21. Frontend ↔ backend contracts
@@ -299,7 +299,7 @@ Stale windows: new offer visible in Generate results only after cache bust (crea
 
 ## 26. Deployment
 
-- Flow: `git push main` → Actions CI (web lint+build with `NEXT_PUBLIC_API_URL=http://34.205.255.37`, api import check) → CD (Ansible: SSH via `EC2_SSH_KEY`, `repo_branch=main`, sync code, render env only if missing, `docker compose up -d --build`, health-gate `http://127.0.0.1:8001/health`) → `curl -f http://$EC2_HOST/health` verification (`.github/workflows/deploy.yml:14-120`).
+- Flow: `git push main` → Actions CI (web lint/build, API import check, Ansible collection install and syntax checks) → CD (`docker compose up -d --build`) → bounded readiness gate at `http://127.0.0.1:8001/ready` → public `/ready` verification. The generated helper exits nonzero after exhausted readiness attempts.
 - Backend host: EC2 `34.205.255.37` (also baked as frontend API default + WS fallback). Containers: api (`:8001`, `alembic upgrade head && uvicorn`), worker (celery), redis (`:6379`), web (`:3001→3000`, `NEXT_PUBLIC_API_URL` build-arg). Reverse proxy: host nginx `:80/443` (`roles/nginx`). **No zero-downtime**: compose rebuild restarts API (in-flight requests dropped; see §30 risks).
 - Env loading: compose `env_file: apps/api/.env` + `environment:` overrides (`docker-compose.yml:7-20`); Ansible renders `.env` files only when absent (safe for secrets); secrets live in GH secrets + server files, never repo (names: `DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `SUPABASE_URL/SUPABASE_SERVICE_KEY`, `RESEND_API_KEY/RESEND_FROM_EMAIL`, `REDIS_URL`, `FRONTEND_URL`, `GOOGLE/LINKEDIN_*`).
 - Migrations: automatic `alembic upgrade head` on api start (additive so far); rollback playbook exists (`ansible/playbooks/rollback.yml`) but no per-migration downgrade testing evident.
@@ -431,7 +431,7 @@ CREATE MIGRATION: `docker exec coditent-api alembic revision -m "<what>"` (set `
 CHECK OPENAPI: `curl localhost:8001/openapi.json | python3 -c ...` (compare path counts prod vs local)
 CHECK REDIS: `docker exec coditent-redis redis-cli -n 0 keys 'recommendations:*'`, `'job:*'`
 CHECK WORKER: `docker logs coditent-worker | grep -E "ai_job|screening_(started|completed|failed)"`
-DEPLOY BACKEND: `git push origin main` (Actions CI → Ansible EC2 `34.205.255.37`); verify `curl http://34.205.255.37/health`
+DEPLOY BACKEND: `git push origin main`; use `/health` for liveness and require `curl -f http://<host>/ready` before considering the deployment ready.
 VIEW LOGS: `docker logs coditent-api | tail`, `docker logs coditent-worker | tail`
 IMPORTANT TABLES: `users`, `candidate_profiles`, `companies`, `offers`, `applications`, `saved_recommendations`, `assessments`, `chat_messages`, `candidate_requests`, `admin_activity_logs`, `company_invitations`, `employee_invitations`, `pending_registrations`
 IMPORTANT ROUTERS: `auth`, `dependencies`, `applications`, `invitations`, `recommendations`, `chat`, `companies`, `offers`

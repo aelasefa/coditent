@@ -1,6 +1,7 @@
 """Company invitation flow — platform invites company, owner accepts. Run: pytest tests/test_company_invitations.py -v"""
 import base64
 import hashlib
+import os
 import uuid
 from datetime import datetime
 from unittest.mock import patch
@@ -14,7 +15,7 @@ from app.models import User
 from app.routers import invitations
 from app.utils.jwt import create_access_token
 
-BASE = "http://localhost:8001"
+BASE = os.getenv("API_TEST_BASE_URL", "http://localhost:8001")
 
 
 def _hash(token: str) -> str:
@@ -135,7 +136,7 @@ async def test_invite_validate_accept_owner_flow():
         assert r.status_code == 200
         r = await c.post(
             "/invites/company/accept",
-            json={"token": "invalid-token-xyz", "password": "Pass12345!", "full_name": "No One"},
+            json={"token": "invalid-token-xyz", "password": "StrongPass123!", "full_name": "No One"},
         )
         assert r.status_code == 400
 

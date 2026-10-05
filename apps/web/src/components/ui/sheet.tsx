@@ -110,5 +110,5 @@ export function Sheet({ open, onClose, title, description, headerLeading, header
       </div>
     </div>,
     document.body
-  ) as unknown as JSX.Element;
+  );
 }

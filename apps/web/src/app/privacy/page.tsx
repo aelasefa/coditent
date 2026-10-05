@@ -4,7 +4,7 @@ export default function PrivacyPage() {
       <h1 className="text-3xl font-semibold">Privacy Policy</h1>
       <p className="mt-2 text-sm text-zinc-500">Last updated: 2026-08-29 — Coditent, Morocco</p>
       <div className="mt-8 space-y-6 text-sm leading-6 text-zinc-300">
-        <p>Coditent ("we") operates a talent workflow platform connecting candidates and recruiters. This policy explains what we collect, why, and your rights.</p>
+        <p>Coditent (“we”) operates a talent workflow platform connecting candidates and recruiters. This policy explains what we collect, why, and your rights.</p>
         <h2 className="text-base font-semibold text-white">Data we collect</h2>
         <ul className="list-disc pl-5">
           <li>Account: email, password hash, full name, role, avatar URL, OAuth identifiers</li>

@@ -6,6 +6,8 @@ Bucket is separate so CV retention policies never touch company branding.
 """
 from __future__ import annotations
 
+import asyncio
+import io
 import uuid
 
 from app.db import get_supabase_client
@@ -15,6 +17,10 @@ BUCKET = "company-logos"
 
 # Reasonable cap for a small logo: 2 MB.
 MAX_LOGO_BYTES = 2 * 1024 * 1024
+MAX_LOGO_WIDTH = 4096
+MAX_LOGO_HEIGHT = 4096
+MAX_LOGO_PIXELS = 16_000_000
+LOGO_VALIDATION_TIMEOUT_SECONDS = 5.0
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
@@ -38,6 +44,18 @@ class LogoStorageError(RuntimeError):
     pass
 
 
+class LogoResourceLimitError(ValueError):
+    pass
+
+
+class LogoValidationTimeoutError(ValueError):
+    pass
+
+
+class _LogoContentValidationError(ValueError):
+    """Known-safe validation message raised by this module itself."""
+
+
 def _client():
     try:
         return get_supabase_client()
@@ -52,12 +70,14 @@ def validate_logo_file(filename: str | None, content_type: str | None, size: int
     ext = filename.rsplit(".", 1)[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise ValueError("Invalid file type. Only PNG, JPG, and WebP are supported")
-    if content_type and content_type not in ALLOWED_CONTENT_TYPES and content_type != "application/octet-stream":
-        raise ValueError("Invalid file type. Only PNG, JPG, and WebP are supported")
+    if content_type and content_type != "application/octet-stream":
+        expected_content_type = CONTENT_TYPE_BY_EXT[ext]
+        if content_type not in ALLOWED_CONTENT_TYPES or content_type != expected_content_type:
+            raise ValueError("File content type does not match its extension")
     if size <= 0:
         raise ValueError("Empty file")
     if size > MAX_LOGO_BYTES:
-        raise ValueError("File too large. Maximum size is 2MB")
+        raise LogoResourceLimitError("File too large. Maximum size is 2MB")
     return ext
 
 
@@ -77,6 +97,67 @@ def check_logo_magic_bytes(data: bytes, ext: str) -> None:
             raise ValueError("Invalid WebP file")
         return
     raise ValueError("Invalid file type. Only PNG, JPG, and WebP are supported")
+
+
+def validate_logo_content(data: bytes, ext: str) -> None:
+    """Verify the actual image container and cap decompressed dimensions."""
+    from PIL import Image, UnidentifiedImageError
+
+    if not data:
+        raise ValueError("Empty file")
+    if len(data) > MAX_LOGO_BYTES:
+        raise LogoResourceLimitError("File too large. Maximum size is 2MB")
+    check_logo_magic_bytes(data, ext)
+    expected_format = {
+        "png": "PNG",
+        "jpg": "JPEG",
+        "jpeg": "JPEG",
+        "webp": "WEBP",
+    }.get(ext.lower())
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            width, height = image.size
+            actual_format = image.format
+            if actual_format != expected_format:
+                raise _LogoContentValidationError(
+                    "Image content does not match its file type"
+                )
+            if width < 1 or height < 1:
+                raise _LogoContentValidationError("Invalid image dimensions")
+            if (
+                width > MAX_LOGO_WIDTH
+                or height > MAX_LOGO_HEIGHT
+                or width * height > MAX_LOGO_PIXELS
+            ):
+                raise LogoResourceLimitError(
+                    f"Logo dimensions exceed {MAX_LOGO_WIDTH}x{MAX_LOGO_HEIGHT} pixels"
+                )
+            image.verify()
+    except (LogoResourceLimitError, Image.DecompressionBombError) as exc:
+        if isinstance(exc, LogoResourceLimitError):
+            raise
+        raise LogoResourceLimitError("Logo dimensions exceed the safe processing limit") from exc
+    except _LogoContentValidationError:
+        raise
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
+        raise ValueError("Invalid or corrupted image file") from exc
+
+
+async def validate_logo_content_async(
+    data: bytes,
+    ext: str,
+    *,
+    timeout_s: float = LOGO_VALIDATION_TIMEOUT_SECONDS,
+) -> None:
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(validate_logo_content, data, ext),
+            timeout=timeout_s,
+        )
+    except asyncio.TimeoutError as exc:
+        raise LogoValidationTimeoutError(
+            "Logo validation exceeded the processing time limit"
+        ) from exc
 
 
 def build_logo_path(company_id: str, ext: str) -> str:
@@ -131,5 +212,13 @@ def delete_logo(path: str) -> None:
 
 def assert_company_logo_path(path: str, company_id: str) -> None:
     """Scope check: a logo path must live under its owning company prefix."""
-    if not path.startswith(f"{company_id}/"):
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+    if (
+        normalized != path
+        or len(parts) < 2
+        or parts[0] != company_id
+        or any(part in {"", ".", ".."} for part in parts)
+        or any(ord(character) < 32 or ord(character) == 127 for character in path)
+    ):
         raise LogoStorageError("Forbidden")

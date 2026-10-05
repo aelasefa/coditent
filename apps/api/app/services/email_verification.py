@@ -24,7 +24,7 @@ logger = get_logger("email_verification")
 OTP_LENGTH = 6
 OTP_MODULUS = 10**OTP_LENGTH
 VERIFICATION_ART_CONTENT_ID = "coditent-verification-art"
-VERIFICATION_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "verification-email-art.png"
+VERIFICATION_ART_PATH = Path(__file__).resolve().parent.parent / "assets" / "verification-email-art.jpg"
 
 
 def generate_otp() -> str:
@@ -147,9 +147,7 @@ def build_otp_email(full_name: str, otp: str) -> tuple[str, str]:
     return subject, html
 
 
-def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
-    from app.services.email import send_email
-
+def build_email_change_email(full_name: str, otp: str) -> tuple[str, str]:
     first = html_module.escape((full_name or "there").strip().split()[0])
     subject = "Confirm your new CODITENT email address"
     body = f"""
@@ -160,6 +158,13 @@ def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
       <p style="font-size:12px;color:#71717A;">If you did not request this change, keep your current email and change your password.</p>
     </div>
     """
+    return subject, body
+
+
+def send_email_change_code(to_email: str, full_name: str, otp: str) -> None:
+    from app.services.email import send_email
+
+    subject, body = build_email_change_email(full_name, otp)
     send_email(to_email, subject, body)
 
 
@@ -170,6 +175,8 @@ def send_otp_email(to_email: str, full_name: str, otp: str, expires_at: datetime
     try:
         send_email(to_email, subject, html, attachments=[verification_art_attachment()])
     except Exception as exc:
-        # Log provider status only — message contains no OTP, no key.
-        logger.warning("otp_email_failed", email=to_email, error=str(exc)[:300])
+        logger.warning(
+            "otp_email_failed",
+            exception_type=type(exc).__name__,
+        )
         raise RuntimeError("Could not send verification email") from exc
