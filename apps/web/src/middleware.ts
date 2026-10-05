@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 
 import { createClient as createSupabaseClient } from "@/utils/supabase/middleware";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
-import { isCompanyPreviewEnabled } from "@/lib/company-preview";
 
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/register" || pathname === "/verify-email" || pathname === "/admin/login" || pathname.startsWith("/invite") || pathname === "/company/invite/accept") return false;
@@ -82,15 +81,6 @@ function roleLogic(request: NextRequest): NextResponse {
 }
 
 export async function middleware(request: NextRequest) {
-  if (
-    isCompanyPreviewEnabled() &&
-    (request.nextUrl.pathname.startsWith("/api-preview") ||
-      (request.nextUrl.pathname.startsWith("/company") &&
-        request.nextUrl.pathname !== "/company/invite/accept"))
-  ) {
-    return NextResponse.next();
-  }
-
   const { supabase, supabaseResponse } = createSupabaseClient(request);
 
   // Refresh the Supabase session so auth cookies stay valid.
