@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
     <AppShell>
       <div className="space-y-8">
         <PageHeader
-          tone="dark"
+          tone="green"
           title="Insights"
           subtitle="Current hiring snapshot from live jobs and applications. No historical trends available yet."
         />

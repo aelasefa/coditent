@@ -73,6 +73,19 @@
   white-space: nowrap;
 }
 
+.companyNav {
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.companyNav .navLink,
+.companyNav .navLinkActive {
+  box-sizing: border-box;
+  min-width: 5.25rem;
+  padding-inline: 0.75rem;
+  text-align: center;
+}
+
 .navLink,
 .navLinkActive {
   position: relative;

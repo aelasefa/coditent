@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
-import { ThemeProvider } from "@/lib/theme-context";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
@@ -25,11 +24,9 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className="min-h-full bg-background text-foreground">
         <QueryProvider>
-          <ThemeProvider>
-            <ToastProvider>
-              <div className="siteContentLayer">{children}</div>
-            </ToastProvider>
-          </ThemeProvider>
+          <ToastProvider>
+            <div className="siteContentLayer">{children}</div>
+          </ToastProvider>
         </QueryProvider>
       </body>
     </html>

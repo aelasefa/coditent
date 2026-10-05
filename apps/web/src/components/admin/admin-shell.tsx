@@ -13,6 +13,7 @@ import { getMe, logoutSession } from "@/lib/api";
 import {
   FiActivity,
   FiGrid,
+  FiHelpCircle,
   FiMail,
   FiSettings,
   FiShield,
@@ -28,6 +29,7 @@ const NAV = [
   { label: "Users", href: "/admin/users", icon: FiUsers },
   { label: "Institutions", href: "/admin/institutions", icon: FiBookOpen },
   { label: "Practice Missions", href: "/admin/missions", icon: FiAward },
+  { label: "Support", href: "/admin/support", icon: FiHelpCircle },
   { label: "Platform Activity", href: "/admin/activity", icon: FiActivity },
   { label: "Settings", href: "/admin/settings", icon: FiSettings },
 ];

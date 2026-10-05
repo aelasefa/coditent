@@ -14,7 +14,7 @@ from app.health import router as health_router
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
-from app.routers import account_recovery, admin, applications, auth, audit, candidates, chat, companies, friends, institutions, missions, notifications, offers, invitations, recommendations, requests, two_factor
+from app.routers import account_recovery, admin, applications, auth, audit, candidates, chat, companies, friends, institutions, missions, notifications, offers, invitations, recommendations, requests, support, two_factor
 
 
 
@@ -58,6 +58,7 @@ app.include_router(missions.router, prefix="/missions", tags=["Practice Missions
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(institutions.router, prefix="/institutions", tags=["Institutions"])
 app.include_router(health_router, tags=["Health"])
+app.include_router(support.router, tags=["Support"])
 
 
 

@@ -122,7 +122,7 @@ export default function CompanyInvitationsPage() {
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6">
         <PageHeader
-          tone="dark"
+          tone="green"
           title="Invitations"
           subtitle="Invite colleagues by email. They register through the link and join this company."
         />
