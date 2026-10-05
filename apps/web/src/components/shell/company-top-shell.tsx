@@ -19,6 +19,7 @@ interface CompanyTopShellProps {
 export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellProps) {
   const pathname = usePathname();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const accountButtonRef = useRef<HTMLButtonElement>(null);
   const accountPanelId = useId();
@@ -26,6 +27,26 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
   useEffect(() => {
     setAccountOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = (event?: Event) => {
+      const target = event?.target;
+      const nestedScroll = target instanceof HTMLElement ? target.scrollTop : 0;
+      const pageScroll = Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop);
+      setScrolled(!reducedMotion.matches && Math.max(pageScroll, nestedScroll) > 48);
+    };
+    const onMotionChange = () => update();
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    document.addEventListener("scroll", update, { passive: true, capture: true });
+    reducedMotion.addEventListener("change", onMotionChange);
+    return () => {
+      window.removeEventListener("scroll", update);
+      document.removeEventListener("scroll", update, { capture: true });
+      reducedMotion.removeEventListener("change", onMotionChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!accountOpen) return;
@@ -50,7 +71,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
   return (
     <div className={styles.shell}>
       <a className={styles.skipLink} href="#company-content">Skip to content</a>
-      <header className={homeStyles.homeHeader}>
+      <header className={`${homeStyles.homeHeader} ${scrolled ? homeStyles.homeHeaderScrolled : ""}`}>
         <div className={homeStyles.homeNav}>
           <Link href="/company" aria-label="Coditent home" className={homeStyles.homeBrand}>
             <Logo size="md" />

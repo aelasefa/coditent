@@ -99,7 +99,11 @@ function variantFor(key: string): CanonicalVariant {
 export function StatusBadge({ status, variant, size = "sm", showDot = true }: StatusBadgeProps) {
   const key = variant || status || "neutral";
   return (
-    <Badge variant={variantFor(key)} dot={showDot} className={size === "md" ? "px-3 py-1" : undefined}>
+    <Badge
+      variant={variantFor(key)}
+      dot={showDot}
+      className={[size === "md" ? "px-3 py-1" : "", key === "rejected" ? "border-danger/30 bg-danger-background font-semibold text-danger" : ""].filter(Boolean).join(" ")}
+    >
       {labelFor(key)}
     </Badge>
   );

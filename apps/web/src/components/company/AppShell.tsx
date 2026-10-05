@@ -16,7 +16,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="company-theme">
       <CompanyTopShell user={{ name: me?.full_name || "Recruiter", email: me?.email, avatarUrl: me?.avatar_url }} onLogout={logout}>
-        <PageContainer>{children}</PageContainer>
+        <PageContainer>
+          {children}
+        </PageContainer>
       </CompanyTopShell>
     </div>
   );
