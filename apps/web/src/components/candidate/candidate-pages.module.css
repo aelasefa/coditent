@@ -14,15 +14,12 @@
   animation: candidate-panel-in 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.overviewHero::before {
-  position: absolute;
-  inset: -70% -18% auto auto;
-  width: 560px;
-  height: 560px;
-  border-radius: 50%;
-  background: repeating-radial-gradient(circle at center, transparent 0 11px, rgb(233 241 224 / 17%) 12px 13px, transparent 14px 23px);
-  content: "";
-  pointer-events: none;
+.overviewStars {
+  z-index: 0;
+  inset: 0 0 18% 48%;
+  opacity: 0.52;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 38%);
 }
 
 .heroCopy,
@@ -65,6 +62,8 @@
 .journeyItem:hover { background: #f2f6ef; }
 .journeyItem > span { color: #6a806f; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; }
 .journeyItem > strong { margin-top: 0.7rem; color: #194d38; font-family: Georgia, "Times New Roman", serif; font-size: 2.25rem; font-weight: 400; line-height: 1; }
+.journeyItem > .journeyCompleteMark { display: flex; height: 2.25rem; align-items: center; }
+.journeyCompleteMark svg { width: 2.35rem; height: 2.35rem; stroke-width: 1.8; }
 .journeyItem > p { margin: 0.35rem 0 0; color: #617369; font-size: 0.78rem; }
 .journeyItem .statusProgress { margin-top: auto; }
 .actionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
@@ -386,7 +385,7 @@
 
 @media (max-width: 767px) {
   .overviewHero { grid-template-columns: 1fr; gap: 1.3rem; min-height: 0; }
-  .overviewHero::before { right: -290px; top: -320px; }
+  .overviewStars { inset: 0 -4% 32% 36%; opacity: 0.42; }
   .journeyRail { grid-template-columns: 1fr; }
   .journeyItem { min-height: 0; padding: 1rem 1.2rem; }
   .journeyItem + .journeyItem { border-left: 0; border-top: 1px solid #e3e9df; }
@@ -431,4 +430,273 @@
   .heroLink, .messageRow, .statusProgress span { transition: none; }
   .heroLink:hover { transform: none; }
   .overviewHero, .journeyRail, .profilePanel, .saveBar { animation: none; }
+}
+
+/* Discover combines the dashboard palette with a focused search workspace. */
+.discoverPage {
+  max-width: 1224px;
+  padding-top: clamp(1.25rem, 2.5vw, 2rem);
+  padding-bottom: 5rem;
+}
+
+.discoverHero {
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  align-items: center;
+  min-height: 310px;
+  margin-bottom: 0;
+  padding: clamp(2rem, 4.5vw, 3.5rem);
+  text-align: left;
+  animation: none;
+}
+
+.discoverHero::before {
+  top: -95%;
+  right: -20%;
+  opacity: 0.42;
+}
+
+.discoverHero .heroCopy {
+  width: 100%;
+  max-width: 44rem;
+}
+
+.discoverHero .heroTitle {
+  max-width: 16ch;
+  color: #f4f1e8;
+  font-size: clamp(2.45rem, 4.3vw, 4.2rem);
+  line-height: 1.01;
+  text-wrap: balance;
+}
+
+.discoverHero .heroDescription {
+  max-width: 54ch;
+  margin: 1.15rem 0 0;
+  color: #dce8d9;
+  font-size: 0.95rem;
+  text-wrap: pretty;
+}
+
+.discoverHeroArt {
+  position: relative;
+  justify-self: end;
+  width: min(100%, 290px);
+  aspect-ratio: 1;
+}
+
+.discoveryOrbit {
+  position: absolute;
+  inset: 7%;
+  border: 1px solid rgb(226 236 217 / 28%);
+  border-radius: 50%;
+}
+
+.discoveryOrbit::before,
+.discoveryOrbit::after {
+  position: absolute;
+  border: 1px solid rgb(226 236 217 / 20%);
+  border-radius: 50%;
+  content: "";
+}
+
+.discoveryOrbit::before { inset: 17%; }
+.discoveryOrbit::after { inset: 34%; }
+
+.discoveryOrbit span {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #194d38;
+  border-radius: 50%;
+  background: #cfddbd;
+  box-shadow: 0 0 0 1px rgb(255 254 250 / 25%);
+}
+
+.discoveryOrbit span:nth-child(1) { top: 10%; left: 24%; }
+.discoveryOrbit span:nth-child(2) { top: 37%; right: -2%; background: #c9785a; }
+.discoveryOrbit span:nth-child(3) { right: 24%; bottom: 5%; }
+.discoveryOrbit span:nth-child(4) { bottom: 28%; left: 2%; background: #e7d5bb; }
+
+.discoveryPath {
+  position: absolute;
+  inset: 23%;
+  border: 1px solid rgb(226 236 217 / 32%);
+  border-radius: 42% 58% 52% 48%;
+  transform: rotate(-16deg);
+}
+
+.discoveryPath::before,
+.discoveryPath::after {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(226 236 217 / 58%), transparent);
+  content: "";
+  transform-origin: center;
+}
+
+.discoveryPath::before {
+  top: 46%;
+  right: -28%;
+  left: -28%;
+  transform: rotate(36deg);
+}
+
+.discoveryPath::after {
+  top: 48%;
+  right: -20%;
+  left: -20%;
+  transform: rotate(-42deg);
+}
+
+.discoveryPath i {
+  position: absolute;
+  border-radius: 50%;
+  background: #f4f1e8;
+}
+
+.discoveryPath i:nth-child(1) { top: 10%; left: 47%; width: 8px; height: 8px; }
+.discoveryPath i:nth-child(2) { top: 52%; right: 8%; width: 6px; height: 6px; }
+.discoveryPath i:nth-child(3) { bottom: 8%; left: 28%; width: 7px; height: 7px; }
+
+.filterPanel {
+  position: relative;
+  z-index: 2;
+  margin: -2rem 1.25rem 0;
+  padding: clamp(1rem, 2vw, 1.6rem);
+  border-color: #d7e2d5;
+  border-radius: 16px;
+  background: rgb(255 254 250 / 97%);
+  box-shadow: 0 14px 38px rgb(25 77 56 / 10%);
+}
+
+.discoverToolbar { gap: 1.15rem 1.4rem; }
+.toolbarActions { padding-top: 0.2rem; }
+.toolbarActions > span { max-width: 34ch; line-height: 1.45; }
+
+.resultsHeading {
+  margin-top: 2.75rem;
+  padding-inline: 0.25rem;
+}
+
+.resultsHeading h2 { font-size: clamp(1.55rem, 2.2vw, 2rem); }
+.jobList { gap: 0.8rem; }
+
+.jobRow {
+  padding: 1.15rem 1.2rem;
+  border-radius: 14px;
+  background: #fffefa;
+  box-shadow: 0 4px 16px rgb(25 77 56 / 5%);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.jobRow:hover {
+  background: #fffefa;
+  box-shadow: 0 8px 24px rgb(25 77 56 / 9%);
+  transform: translateY(-1px);
+}
+
+.jobDetail {
+  top: 6.5rem;
+  border-radius: 16px;
+  background: #fffefa;
+  box-shadow: 0 14px 35px rgb(25 77 56 / 8%);
+}
+
+@media (max-width: 1023px) {
+  .discoverHero {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    min-height: 285px;
+  }
+
+  .discoverHeroArt { width: 220px; }
+}
+
+@media (max-width: 767px) {
+  .discoverPage {
+    padding-top: 1rem;
+    padding-bottom: 3.5rem;
+  }
+
+  .discoverHero {
+    grid-template-columns: 1fr;
+    min-height: 260px;
+    padding: 2rem 1.4rem 3.25rem;
+  }
+
+  .discoverHero .heroTitle {
+    max-width: 18ch;
+    font-size: clamp(2.15rem, 9vw, 3.1rem);
+  }
+
+  .discoverHero .heroDescription {
+    max-width: 38ch;
+    font-size: 0.875rem;
+  }
+
+  .discoverHeroArt {
+    position: absolute;
+    top: 50%;
+    right: -4rem;
+    width: 210px;
+    opacity: 0.28;
+    transform: translateY(-50%);
+  }
+
+  .filterPanel {
+    margin: -1.5rem 0.75rem 0;
+    padding: 0.9rem;
+  }
+
+  .discoverToolbar { gap: 0.85rem; }
+  .toolbarPair { gap: 0.6rem; }
+  .toolbarActions { align-items: flex-start; flex-direction: column; }
+  .toolbarActions > span { max-width: none; }
+  .resultsHeading { margin-top: 2.2rem; }
+  .jobRow { padding: 1rem; }
+}
+
+@media (max-width: 479px) {
+  .discoverHero {
+    min-height: 280px;
+    padding-inline: 1.2rem;
+  }
+
+  .filterPanel { margin-inline: 0.4rem; }
+  .toolbarPair { grid-template-columns: 1fr; }
+  .resultsHeading { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jobRow { transition: none; }
+  .jobRow:hover { transform: none; }
+}
+
+/* Job skills are informational labels, including inside the mobile details portal. */
+.roleSkills {
+  margin-top: 1.75rem;
+  padding: clamp(1rem, 2vw, 1.4rem);
+  border: 1px solid #dce6da;
+  border-radius: 14px;
+  background: #f6f8f2;
+}
+.roleSkills h3 {
+  margin: 0;
+  color: #203d2e;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.4rem;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+.roleSkills > p { margin: 0.4rem 0 0; color: #617369; font-size: 0.8rem; line-height: 1.6; }
+.roleSkillList { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.roleSkillList li {
+  max-width: 100%;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid #cfdbcf;
+  border-radius: 8px;
+  background: #fffefa;
+  color: #244735;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }

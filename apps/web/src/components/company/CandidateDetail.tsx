@@ -5,12 +5,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { StatusBadge } from "@/components/company/StatusBadge";
 import { AiScore } from "./CandidateCard";
 import { candidateName, jobTitleFor } from "./hiring";
 import { createInterviewFeedback, getApiBaseUrl, getMe, listInterviewFeedback, retryApplicationScreening, updateInterviewFeedback } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { ApplicationItem, InterviewRecommendation } from "@/lib/types";
+import {
+  FiActivity,
+  FiAlertCircle,
+  FiAward,
+  FiCheckCircle,
+  FiDownload,
+  FiExternalLink,
+  FiFileText,
+  FiGitBranch,
+  FiMessageSquare,
+  FiX,
+} from "react-icons/fi";
 
 const NEXT_STAGES: Record<string, string[]> = {
   applied: ["under_review", "rejected"],
@@ -21,11 +32,17 @@ const NEXT_STAGES: Record<string, string[]> = {
   rejected: [],
 };
 
+const STAGE_LABELS: Record<string, string> = {
+  under_review: "Review",
+  shortlisted: "Shortlist",
+  accepted: "Hire",
+};
+
 function parseScreeningReport(report?: string | null): { summary: string; strengths: string[]; gaps: string[] } | null {
   if (!report) return null;
   try {
     const parsed = JSON.parse(report) as { summary?: unknown; strengths?: unknown; gaps?: unknown };
-    if (typeof parsed.summary !== "string") return null;
+    if (typeof parsed.summary !== "string") return { summary: report, strengths: [], gaps: [] };
     return {
       summary: parsed.summary,
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
@@ -76,6 +93,13 @@ export function CandidateDetail({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const screening = parseScreeningReport(app.ai_report);
+  const screeningTextLength = screening
+    ? [screening.summary, ...screening.strengths, ...screening.gaps].join(" ").length
+    : 0;
+  const screeningNeedsWideLayout = Boolean(
+    screening &&
+      (screeningTextLength > 360 || screening.strengths.length + screening.gaps.length >= 4)
+  );
   const meQ = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
   const feedbackQ = useQuery({
     queryKey: ["interview-feedback", app.id],
@@ -139,37 +163,39 @@ export function CandidateDetail({
   );
 
   return (
-    <div>
-      <div className="flex items-start gap-3">
-        <Avatar name={candidateName(app)} size="lg" src={c?.avatar_url} />
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-lg font-bold text-foreground">{candidateName(app)}</h3>
-          <p className="truncate text-[13px] text-muted-foreground">
-            {jobTitle}
-            {c?.email ? ` · ${c.email}` : ""}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <StatusBadge status={app.status} size="sm" />
-            <AiScore app={app} />
-          </div>
-        </div>
-      </div>
-
+    <div className={`company-candidate-detail${canMoveStage ? " company-candidate-detail-manageable" : ""}`}>
       {canMoveStage && (
-        <div className="mt-4 space-y-3" aria-label="Stage actions">
-          <div className="flex flex-wrap gap-2">
-          {nonInterviewStages.map((st) => (
-            <Button
-              key={st}
-              size="sm"
-              variant={app.status === st ? "primary" : "outline"}
+        <section
+          className="company-candidate-stage-actions"
+          aria-labelledby="candidate-stage-actions-title"
+          aria-busy={stagePending}
+        >
+          <div className="company-candidate-stage-field">
+            <label id="candidate-stage-actions-title" htmlFor="candidate-stage-select">
+              <FiGitBranch aria-hidden="true" /> Stage
+            </label>
+            <select
+              id="candidate-stage-select"
+              value={app.status}
               disabled={stagePending}
-              loading={stagePending}
-              onClick={() => onStage(st)}
+              aria-describedby="candidate-stage-save-status"
+              onChange={(event) => {
+                const status = event.target.value;
+                if (status === app.status || stagePending) return;
+                setRejectConfirm(false);
+                onStage(status);
+              }}
             >
-              {st.replace(/_/g, " ")}
-            </Button>
-          ))}
+              <option value={app.status} disabled>
+                {app.status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+              </option>
+              {nonInterviewStages.map((stage) => (
+                <option key={stage} value={stage}>{STAGE_LABELS[stage] ?? stage}</option>
+              ))}
+            </select>
+            <p id="candidate-stage-save-status" role="status" className="sr-only">
+              {stagePending ? "Updating pipeline…" : "Stage changes save automatically."}
+            </p>
           </div>
           {nextStages.includes("interview") ? (
             <div className="rounded-xl border border-border-subtle bg-surface-secondary/30 p-3">
@@ -207,51 +233,67 @@ export function CandidateDetail({
               </Button>
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-          {rejectConfirm ? (
-            <span className="inline-flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-background px-2 py-1">
-              <span className="text-xs font-medium text-danger">Reject candidate?</span>
-              <Button size="sm" variant="danger" disabled={stagePending} onClick={onReject}>
-                Confirm
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(false)}>
-                Keep
-              </Button>
-            </span>
-          ) : (
-            nextStages.includes("rejected") && (
-              <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(true)}>
-                Reject
-              </Button>
-            )
-          )}
+          <div className="company-candidate-stage-secondary">
+            {rejectConfirm ? (
+              <span className="company-candidate-reject-confirm">
+                <span>Reject candidate?</span>
+                <Button size="sm" variant="danger" disabled={stagePending} onClick={onReject}>
+                  Confirm
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRejectConfirm(false)}>
+                  Keep
+                </Button>
+              </span>
+            ) : (
+              nextStages.includes("rejected") && (
+                <Button size="sm" variant="ghost" className="company-candidate-reject-trigger" aria-label="Reject application" disabled={stagePending} onClick={() => setRejectConfirm(true)}>
+                  <FiX aria-hidden="true" /> Reject
+                </Button>
+              )
+            )}
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="mt-4">
+      <div className="company-candidate-tabs">
         <Tabs
           items={[
             {
               id: "overview",
               label: "Overview",
               content: (
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                  {[
-                    ["Stage", app.status.replace(/_/g, " ")],
-                    ["Applied", dateTime(app.created_at)],
-                    ["Last update", dateTime(app.updated_at)],
-                    ["Interview", dateTime(app.interview_scheduled_at)],
-                    ["Email", c?.email ?? "Not shared"],
-                    ["Job", jobTitle],
-                    ["Chat", chatUnlocked ? "Available" : "Locked until next stage"],
-                  ].map(([k, v]) => (
-                    <div key={k} className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                      <dt className="text-xs text-muted-foreground">{k}</dt>
-                      <dd className="mt-0.5 font-medium text-foreground">{v}</dd>
+                <div className="company-candidate-overview company-candidate-overview-panel">
+                  <dl className="company-candidate-detail-grid">
+                    <div>
+                      <dt className="company-detail-label">Applied</dt>
+                      <dd>{dateTime(app.created_at)}</dd>
                     </div>
-                  ))}
-                </dl>
+                    <div>
+                      <dt className="company-detail-label">Last update</dt>
+                      <dd>{dateTime(app.updated_at)}</dd>
+                    </div>
+                    <div>
+                      <dt className="company-detail-label">Email</dt>
+                      <dd>{c?.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : "Not shared"}</dd>
+                    </div>
+                    <div>
+                      <dt className="company-detail-label">Job</dt>
+                      <dd>{jobTitle}</dd>
+                    </div>
+                    <div>
+                      <dt className="company-detail-label">Interview</dt>
+                      <dd>{app.interview_scheduled_at ? dateTime(app.interview_scheduled_at) : "Not scheduled"}</dd>
+                    </div>
+                  </dl>
+
+                  <section className={chatUnlocked ? "company-candidate-chat-status company-candidate-chat-status-open" : "company-candidate-chat-status"} aria-label="Recruitment chat">
+                    <div>
+                      <p className="company-detail-label">Recruitment chat</p>
+                      <p>{chatUnlocked ? "Chat is available for this candidate." : "Chat unlocks when the candidate reaches the next stage."}</p>
+                    </div>
+                    <span>{chatUnlocked ? "Available" : "Locked"}</span>
+                  </section>
+                </div>
               ),
             },
             {
@@ -305,100 +347,174 @@ export function CandidateDetail({
             {
               id: "skills",
               label: "Skills",
-              content: skills.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {skills.map((s) => (
-                    <span key={s} className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-medium text-foreground-secondary">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No profile skills shared for this candidate.</p>
+              content: (
+                <section className="candidate-profile-skills" aria-labelledby="candidate-skills-title">
+                  <div className="candidate-profile-skills-heading">
+                    <span className="candidate-section-icon" aria-hidden="true"><FiAward /></span>
+                    <div className="candidate-section-heading-copy">
+                      <h3 id="candidate-skills-title">Skills & expertise</h3>
+                      <p>Candidate-reported strengths</p>
+                    </div>
+                    {skills.length ? (
+                      <span className="candidate-section-count candidate-skills-count" aria-label={`${skills.length} skills`}>
+                        <strong>{skills.length}</strong>
+                        <span>skills</span>
+                      </span>
+                    ) : null}
+                  </div>
+                  {skills.length ? (
+                    <ul className={`candidate-profile-skills-list${skills.length >= 3 ? " candidate-profile-skills-list-three" : ""}`}>
+                      {skills.map((skill, index) => (
+                        <li key={`${skill}-${index}`}>
+                          {skill}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="candidate-profile-skills-empty">
+                      <p>No skills shared yet</p>
+                      <p>This candidate has not added skills to their profile.</p>
+                    </div>
+                  )}
+                </section>
               ),
             },
             {
               id: "screening",
               label: "Screening",
               content: (
-                <div className="space-y-4">
-                  <div className="mb-4 rounded-xl border border-border-subtle p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-foreground">AI screening</p>
-                    <AiScore app={app} />
-                  </div>
-                  {app.ai_status === "failed" ? (
-                    <div className="mt-2">
-                      <p className="text-[13px] text-muted-foreground">Screening did not complete. Retry runs it again.</p>
-                      {canMoveStage ? (
-                        <Button size="sm" variant="outline" loading={screenMut.isPending} onClick={() => screenMut.mutate()} className="mt-2">
-                          Retry screening
-                        </Button>
-                      ) : null}
+                <div
+                  className={`candidate-screening-stack${screeningNeedsWideLayout ? " candidate-screening-stack-wide" : ""}`}
+                >
+                  <section className="candidate-screening" aria-labelledby="candidate-screening-title">
+                    <div className="candidate-screening-heading">
+                      <div className="candidate-screening-heading-main">
+                        <span className="candidate-section-icon" aria-hidden="true"><FiActivity /></span>
+                        <div className="candidate-section-heading-copy">
+                          <h3 id="candidate-screening-title">AI screening</h3>
+                          <p>AI-generated application review</p>
+                        </div>
+                      </div>
+                      <div className="candidate-screening-score">
+                        <AiScore app={app} />
+                      </div>
                     </div>
-                  ) : screening ? (
-                    <div className="mt-2 space-y-1.5">
-                      <p className="text-[13px] leading-relaxed text-foreground-secondary">{screening.summary}</p>
-                      {screening.strengths.length > 0 ? (
-                        <p className="text-[13px] text-foreground-secondary"><span className="font-semibold text-foreground">Strengths: </span>{screening.strengths.join("; ")}</p>
-                      ) : null}
-                      {screening.gaps.length > 0 ? (
-                        <p className="text-[13px] text-foreground-secondary"><span className="font-semibold text-foreground">Gaps: </span>{screening.gaps.join("; ")}</p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[13px] text-muted-foreground">
-                      {app.ai_status === "processing" ? "Screening is running." : "Screening has not run yet."}
-                    </p>
-                  )}
-                </div>
+                    {app.ai_status === "failed" ? (
+                      <div className="candidate-screening-state">
+                        <p>Screening did not complete. Retry runs it again.</p>
+                        {canMoveStage ? (
+                          <Button size="sm" variant="outline" loading={screenMut.isPending} onClick={() => screenMut.mutate()}>
+                            Retry screening
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {screening ? (
+                      <div className="candidate-screening-report">
+                        <div className="candidate-screening-summary">
+                          <div>
+                            <span>Screening summary</span>
+                            <p>{screening.summary}</p>
+                          </div>
+                        </div>
+                        {screening.strengths.length > 0 ? (
+                          <section className="candidate-screening-findings" aria-label="AI screening strengths">
+                            <h4><FiCheckCircle aria-hidden="true" /> Strengths</h4>
+                            <ul>{screening.strengths.map((strength, index) => <li key={index}>{strength}</li>)}</ul>
+                          </section>
+                        ) : null}
+                        {screening.gaps.length > 0 ? (
+                          <section className="candidate-screening-findings candidate-screening-gaps" aria-label="AI screening gaps">
+                            <h4><FiAlertCircle aria-hidden="true" /> Gaps</h4>
+                            <ul>{screening.gaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul>
+                          </section>
+                        ) : null}
+                      </div>
+                    ) : app.ai_status !== "failed" ? (
+                      <div className="candidate-screening-state">
+                        <p>{app.ai_status === "processing" ? "Screening is running." : "Screening has not run yet."}</p>
+                      </div>
+                    ) : null}
+                  </section>
                 </div>
               ),
             },
             {
               id: "resume",
               label: "Resume",
-              content: cvHref ? (
-                <div className="space-y-2">
-                  {cvFilename ? (
-                    <p className="truncate text-[13px] font-medium text-foreground" title={cvFilename}>
-                      {cvFilename}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      href={cvHref}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
-                    >
-                      Open CV
-                    </a>
-                    <a
-                      href={cvHref}
-                      download={cvFilename ?? true}
-                      className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-surface-secondary"
-                    >
-                      Download
-                    </a>
+              content: (
+                <section className="candidate-resume" aria-label="Candidate resume">
+                  <div className="candidate-resume-heading">
+                    <span className="candidate-section-icon" aria-hidden="true"><FiFileText /></span>
+                    <div className="candidate-section-heading-copy">
+                      <h3>Resume</h3>
+                    </div>
+                    <span className="candidate-section-count">{cvHref ? "Attached" : "Missing"}</span>
                   </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No CV attached to this application.</p>
+                  {cvHref ? (
+                    <>
+                      <div className="candidate-resume-file">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5Z" strokeLinejoin="round" />
+                          <path d="M14 3v5h5M8 12h8M8 16h5" strokeLinecap="round" />
+                        </svg>
+                        <div>
+                          <p className="company-detail-label">Attached document</p>
+                          <p className="candidate-resume-filename">{cvFilename || "Candidate CV"}</p>
+                        </div>
+                      </div>
+                      <div className="candidate-resume-actions">
+                        <a href={cvHref} target="_blank" rel="noreferrer noopener" className="candidate-resume-open">
+                          <FiExternalLink aria-hidden="true" /> Open CV <span className="sr-only">in a new tab</span>
+                        </a>
+                        <a href={cvHref} download={cvFilename ?? true} className="candidate-resume-download">
+                          <FiDownload aria-hidden="true" /> Download
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="candidate-resume-empty">
+                      <p>No CV attached</p>
+                      <p>No resume is available for this application.</p>
+                    </div>
+                  )}
+                </section>
               ),
             },
             {
               id: "messages",
               label: "Messages",
-              content: chatUnlocked ? (
-                <a
-                  href={`/chat/recruitment/${app.id}`}
-                  className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
-                >
-                  Open chat with {candidateName(app)}
-                </a>
-              ) : (
-                <p className="text-sm text-muted-foreground">Chat opens after candidate moves to next stage.</p>
+              content: (
+                <section className="candidate-messages" aria-label="Recruitment messages">
+                  <div className="candidate-messages-heading">
+                    <span className="candidate-section-icon" aria-hidden="true"><FiMessageSquare /></span>
+                    <div className="candidate-section-heading-copy">
+                      <h3>Messages</h3>
+                    </div>
+                    <span className={chatUnlocked ? "candidate-messages-status candidate-messages-available" : "candidate-messages-status"}>
+                      {chatUnlocked ? "Available" : "Locked"}
+                    </span>
+                  </div>
+                  <div className="candidate-messages-body">
+                    <div className="candidate-messages-person">
+                      <Avatar name={candidateName(app)} size="md" src={c?.avatar_url} />
+                      <div>
+                        <p>{candidateName(app)}</p>
+                        <p>{jobTitle}</p>
+                      </div>
+                    </div>
+                    <p className="candidate-messages-description">
+                      {chatUnlocked
+                        ? "Continue the conversation and coordinate next steps with this candidate."
+                        : "Chat opens after the candidate moves to the next stage."}
+                    </p>
+                    {chatUnlocked ? (
+                      <a href={`/chat/recruitment/${app.id}`} className="candidate-messages-link">
+                        <FiMessageSquare aria-hidden="true" /> Open chat <span className="sr-only">with {candidateName(app)}</span>
+                      </a>
+                    ) : null}
+                  </div>
+                </section>
               ),
             },
           ]}

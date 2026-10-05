@@ -19,7 +19,7 @@ import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers,
 import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
-import { FiBriefcase, FiPlus, FiSearch } from "react-icons/fi";
+import { FiBriefcase, FiSearch } from "react-icons/fi";
 
 function getErrorMessage(err: unknown): string {
   const d = (err as { response?: { data?: { detail?: unknown } }; message?: string })?.response?.data?.detail;
@@ -52,7 +52,7 @@ function compensationDetails(description: string): { salary?: string; equity?: s
 export default function CompanyJobsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const { data: me, isLoading: meLoading } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   const canCreate = can(me ?? null, "create_offers");
   const canEdit = can(me ?? null, "edit_offers");
@@ -233,8 +233,16 @@ export default function CompanyJobsPage() {
         />
 
         <div className="company-hero-actions-bar">
+          <Button
+            size="sm"
+            className="min-w-[7.5rem] justify-center"
+            onClick={() => setCreateOpen(true)}
+            disabled={meLoading || !canCreate}
+            title={!canCreate && !meLoading ? "Only owners, admins, HR, and recruiters can create jobs" : undefined}
+          >
+            Create job
+          </Button>
           <span className="rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-muted-foreground">{offers?.length ?? 0} total</span>
-          {canCreate ? <Button size="sm" onClick={() => setCreateOpen(true)}><FiPlus aria-hidden className="h-3.5 w-3.5" /> Create a job</Button> : null}
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 sm:flex-row sm:items-center">
@@ -251,7 +259,7 @@ export default function CompanyJobsPage() {
               className="h-9 w-full rounded-lg border border-border bg-surface-secondary/60 pl-8 pr-3 text-[13px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="Status filter" className="h-9 rounded-lg border border-border bg-surface px-2.5 text-xs">
               <option value="all">All statuses</option>
               <option value="active">Active</option>

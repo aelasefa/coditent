@@ -4,11 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { FiArrowRight, FiBriefcase, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiCheck, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
 import { api, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
 import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TwinklingStars } from "@/components/ui/twinkling-stars";
 import { JobCard } from "@/components/candidate/job-card";
 import { ApplicationStage } from "@/components/candidate/application-stage";
 import { NextActionCard, type NextAction } from "@/components/candidate/next-action-card";
@@ -90,10 +91,13 @@ export default function DashboardPage() {
     .slice(0, 4);
   const doneCount = completion.done;
   const totalCount = completion.total;
+  const completionPercent = Math.round((doneCount / totalCount) * 100);
+  const profileIsComplete = completion.missing.length === 0;
 
   return (
     <PageContainer>
       <section className={styles.overviewHero} aria-labelledby="dashboard-heading">
+        <TwinklingStars className={styles.overviewStars} />
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>Your career space</p>
           <h1 id="dashboard-heading" className={styles.heroTitle}>
@@ -115,9 +119,11 @@ export default function DashboardPage() {
           <section className={styles.journeyRail} aria-label="Your career at a glance">
             <Link href="/profile" className={styles.journeyItem}>
               <span>Profile</span>
-              <strong>{Math.round((doneCount / totalCount) * 100)}%</strong>
+              <strong className={profileIsComplete ? styles.journeyCompleteMark : undefined}>
+                {profileIsComplete ? <FiCheck aria-hidden="true" /> : `${completionPercent}%`}
+              </strong>
               <p>{completion.missing.length ? `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} left to add` : "Your profile is complete"}</p>
-              <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} /></div>
+              <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${completionPercent}%` }} /></div>
             </Link>
             <Link href="/dashboard/applications" className={styles.journeyItem}>
               <span>Applications</span><strong>{apps.length}</strong><p>Track each stage and next step</p>

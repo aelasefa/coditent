@@ -3,7 +3,6 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: coditent-api
     restart: on-failure
     security_opt:
       - no-new-privileges:true
@@ -61,7 +60,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    container_name: coditent-worker
     depends_on:
       api:
         condition: service_started
@@ -102,7 +100,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    container_name: coditent-ai-dispatcher
     depends_on:
       api:
         condition: service_started
@@ -137,7 +134,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: coditent-redis
     ports:
       - "127.0.0.1:6380:6379"
     healthcheck:
@@ -157,7 +153,6 @@ services:
         BACKEND_PROXY_URL: http://api:8001
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-    container_name: coditent-web
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -179,7 +174,6 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    container_name: coditent-proxy
     restart: always
     ports:
       - "127.0.0.1:3001:80"

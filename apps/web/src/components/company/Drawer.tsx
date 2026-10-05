@@ -8,9 +8,12 @@ interface DrawerProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  headerLeading?: React.ReactNode;
+  headerMeta?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: "sm" | "md" | "lg" | "xl";
+  panelClassName?: string;
 }
 
 const sizeMap = {
@@ -25,9 +28,12 @@ export function Drawer({
   onClose,
   title,
   subtitle,
+  headerLeading,
+  headerMeta,
   children,
   footer,
   width = "md",
+  panelClassName,
 }: DrawerProps) {
   // Compat wrapper around canonical Sheet. Preserves API.
   return (
@@ -36,9 +42,12 @@ export function Drawer({
       onClose={onClose}
       title={title}
       description={subtitle}
+      headerLeading={headerLeading}
+      headerMeta={headerMeta}
       footer={footer}
       side="right"
       size={sizeMap[width]}
+      panelClassName={panelClassName}
     >
       {children}
     </Sheet>

@@ -11,6 +11,8 @@ interface SheetProps {
   onClose: () => void;
   title: string;
   description?: string;
+  headerLeading?: React.ReactNode;
+  headerMeta?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
   side?: "right" | "left" | "bottom";
@@ -24,7 +26,7 @@ const widths: Record<string, string> = {
   lg: "max-w-2xl",
 };
 
-export function Sheet({ open, onClose, title, description, children, footer, side = "right", size = "md", panelClassName }: SheetProps) {
+export function Sheet({ open, onClose, title, description, headerLeading, headerMeta, children, footer, side = "right", size = "md", panelClassName }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
   // Latest onClose without re-running setup on parent re-renders,
@@ -88,10 +90,14 @@ export function Sheet({ open, onClose, title, description, children, footer, sid
           side === "bottom" && "inset-x-0 bottom-0 max-h-[90vh] rounded-t-2xl border-t border-border"
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border-subtle px-6 py-5">
-          <div>
-            <h2 className="text-lg font-semibold leading-tight">{title}</h2>
-            {description ? <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p> : null}
+        <div className="sheet-header flex items-start justify-between gap-4 border-b border-border-subtle px-6 py-5">
+          <div className="sheet-header-main flex min-w-0 items-center gap-3">
+            {headerLeading ? <div className="sheet-header-leading shrink-0">{headerLeading}</div> : null}
+            <div className="min-w-0">
+              <h2 className="sheet-header-title text-lg font-semibold leading-tight">{title}</h2>
+              {description ? <p className="sheet-header-description mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
+              {headerMeta ? <div className="sheet-header-meta mt-3 flex flex-wrap items-center gap-2">{headerMeta}</div> : null}
+            </div>
           </div>
           <IconButton label="Close panel" onClick={onClose}>
             <FiX />

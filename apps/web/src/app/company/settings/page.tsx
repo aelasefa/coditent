@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
@@ -14,9 +13,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/api";
-import { useTheme } from "@/lib/theme-context";
 import { can } from "@/lib/permissions";
-import { FiCheck, FiMoon, FiSun } from "react-icons/fi";
+import { FiCheck } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 import { AccountDataControls } from "@/components/security/account-data-controls";
 
@@ -40,7 +38,6 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { theme, setTheme } = useTheme();
 
   const companyId = me?.company_id;
   const canEditCompany = can(me ?? null, "edit_company");
@@ -245,37 +242,6 @@ export default function SettingsPage() {
               id: "security",
               label: "Security",
               content: <div className="space-y-5"><TwoFactorSecurity /><AccountDataControls /></div>,
-            },
-            {
-              id: "appearance",
-              label: "Appearance",
-              content: (
-                <div className="rounded-xl border border-border-subtle bg-surface p-5">
-                  <h3 className="text-sm font-semibold text-foreground">Interface theme</h3>
-                  <p className="mt-0.5 text-[13px] text-muted-foreground">Stored on this device. Applies immediately.</p>
-                  <div className="mt-3 grid max-w-md grid-cols-2 gap-3" role="group" aria-label="Theme">
-                    {(
-                      [
-                        { id: "light", label: "Light", Icon: FiSun },
-                        { id: "dark", label: "Dark", Icon: FiMoon },
-                      ] as const
-                    ).map(({ id, label, Icon }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setTheme(id)}
-                        aria-pressed={theme === id}
-                        className={theme === id ? "flex items-center gap-3 rounded-xl border border-primary bg-primary/5 p-3 text-xs font-semibold text-foreground" : "flex items-center gap-3 rounded-xl border border-border p-3 text-xs font-semibold text-muted-foreground hover:text-foreground"}
-                      >
-                        <Icon aria-hidden className="h-4 w-4" />
-                        <span>{label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-4 text-[13px] text-muted-foreground">Choose which hiring events create alerts from the notification center.</p>
-                  <Link href="/company/notifications" className="mt-2 inline-flex text-sm font-semibold text-primary hover:underline">Manage notifications</Link>
-                </div>
-              ),
             },
           ]}
         />
