@@ -14,10 +14,11 @@ interface PageHeaderProps {
   center?: boolean;
   icon?: React.ReactNode;
   eyebrow?: string;
+  decorative?: boolean;
 }
 
 // Compat wrapper around shell PageHeader. Preserves API, uses tokens.
-export function PageHeader({ title, subtitle, badge, actions, breadcrumbs, tone = "soft", variant = "hero", center = false, icon, eyebrow }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, badge, actions, breadcrumbs, tone = "soft", variant = "hero", center = false, icon, eyebrow, decorative = true }: PageHeaderProps) {
   const content = (
     <>
       {eyebrow ? <p className="company-hero-eyebrow">{eyebrow}</p> : null}
@@ -54,5 +55,5 @@ export function PageHeader({ title, subtitle, badge, actions, breadcrumbs, tone 
     />
     </>
   );
-  return variant === "plain" ? content : <section className={`company-page-hero ${tone === "green" ? "company-page-hero-green" : ""} ${center ? "company-page-hero-center" : ""}`}>{content}</section>;
+  return variant === "plain" ? content : <section className={`company-page-hero ${tone === "green" ? "company-page-hero-green" : ""} ${center ? "company-page-hero-center" : ""} ${decorative ? "" : "company-page-hero-plain"}`}>{content}</section>;
 }

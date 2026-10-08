@@ -116,6 +116,7 @@ export default function TeamPage() {
         <PageHeader
           tone="green"
           center
+          decorative={false}
           eyebrow="Workspace access"
           title="Your hiring team, organized."
           subtitle={`${members.length} ${members.length === 1 ? "teammate" : "teammates"} with clear roles and access to the work that matters.`}
@@ -200,35 +201,43 @@ export default function TeamPage() {
                     <StatusBadge status={m.company_role} size="sm" showDot={false} />
                   </div>
 
-                  <div className="mt-5 flex-1 border-t border-border-subtle pt-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">Access and permissions</p>
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        {capabilities.length} permissions
+                  <section className="mt-5 flex-1 rounded-xl border border-border-subtle bg-surface-secondary/35 p-3.5 sm:p-4" aria-label={`${roleLabel(m.company_role)} access and permissions`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                          <FiShield aria-hidden className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-foreground">Access and permissions</span>
+                          <span className="block truncate text-[11px] font-medium text-muted-foreground">{roleLabel(m.company_role)} access level</span>
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-border-subtle bg-surface px-2.5 py-1 text-[11px] font-semibold text-foreground-secondary">
+                        {capabilities.length} {capabilities.length === 1 ? "permission" : "permissions"}
                       </span>
                     </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2" role="list" aria-label={`${roleLabel(m.company_role)} permissions`}>
+                    <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label={`${roleLabel(m.company_role)} permissions`}>
                       {capabilities.map((capability) => (
-                        <div key={capability} role="listitem" className="flex min-h-12 items-center gap-3 rounded-lg border border-border-subtle bg-surface-secondary/55 px-3 py-2.5 text-xs font-medium leading-5 text-foreground-secondary">
-                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-surface text-primary shadow-sm">
+                        <li key={capability} className="flex min-h-12 items-center gap-3 rounded-lg border border-border-subtle bg-surface px-3 py-2.5 text-xs font-medium leading-5 text-foreground-secondary">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
                             <FiCheck aria-hidden className="h-3 w-3" />
                           </span>
                           <span>{capability}</span>
-                        </div>
+                        </li>
                       ))}
-                      {isOwner ? (
-                        <div role="listitem" className="flex min-h-14 items-center gap-3 rounded-lg border border-primary/20 bg-primary/[0.06] px-3 py-2.5 sm:col-span-2">
+                    </ul>
+                    {isOwner ? (
+                      <aside className="mt-3 flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/[0.07] px-3 py-3" aria-label="Owner role protection">
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
                             <FiShield aria-hidden className="h-4 w-4" />
                           </span>
-                          <span className="min-w-0 text-xs leading-5 text-muted-foreground">
-                            <strong className="block font-semibold text-foreground">Owner role protected</strong>
-                            Ownership cannot be changed from the team page.
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                          <div className="min-w-0 text-xs leading-5 text-muted-foreground">
+                            <p className="font-semibold text-foreground">Owner role protected</p>
+                            <p>Ownership cannot be changed from the team page.</p>
+                          </div>
+                      </aside>
+                    ) : null}
+                  </section>
                   </div>
 
                   {showMemberControls ? (
