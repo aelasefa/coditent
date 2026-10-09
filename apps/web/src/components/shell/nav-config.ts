@@ -40,7 +40,6 @@ export function isNavActive(pathname: string, item: NavItem): boolean {
 }
 
 export const candidateNavItems: NavItem[] = [
-  { label: "Home", href: "/dashboard", icon: FiHome, match: "exact" },
   { label: "Discover", href: "/dashboard/recommendations", icon: FiSearch, match: "prefix" },
   { label: "My Applications", href: "/dashboard/applications", icon: FiBriefcase, match: "prefix" },
   { label: "Practice", href: "/dashboard/missions", icon: FiAward, match: "prefix" },
