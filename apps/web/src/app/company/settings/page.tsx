@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
 import { CompanyLogoSection } from "@/components/company/CompanyLogoSection";
@@ -97,13 +97,20 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState<CompanyForm>(EMPTY_COMPANY_FORM);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const initialFormRef = useRef<CompanyForm>(EMPTY_COMPANY_FORM);
 
   useEffect(() => {
-    if (company) setForm(companyFormValues(company));
+    if (company) {
+      const initial = companyFormValues(company);
+      initialFormRef.current = initial;
+      setForm(initial);
+    }
   }, [company]);
 
-  const savedForm = companyFormValues(company);
-  const isDirty = company ? (Object.keys(form) as Array<keyof CompanyForm>).some((key) => form[key] !== savedForm[key]) : false;
+  const savedForm = company ? companyFormValues(company) : initialFormRef.current;
+  const isDirty = (Object.keys(form) as Array<keyof CompanyForm>).some(
+    (key) => (form[key] ?? "") !== (savedForm[key] ?? "")
+  );
   const websiteError = form.website && !/^https?:\/\//i.test(form.website) ? "Use a full URL starting with https://" : undefined;
 
   const updateMut = useMutation({
@@ -138,8 +145,10 @@ export default function SettingsPage() {
         qc.invalidateQueries({ queryKey: ["company", activeCompanyId] });
         qc.invalidateQueries({ queryKey: ["company-profile", activeCompanyId] });
         if (updated) {
+          const fresh = companyFormValues(updated);
+          initialFormRef.current = fresh;
           qc.setQueryData(["company", activeCompanyId], updated);
-          setForm(companyFormValues(updated));
+          setForm(fresh);
         }
       }
       toast("Company settings saved", { variant: "success" });
@@ -165,18 +174,22 @@ export default function SettingsPage() {
 
   const handleResetClick = () => {
     if (updateMut.isPending) return;
-    if (!isDirty) {
-      const initial = company ? companyFormValues(company) : EMPTY_COMPANY_FORM;
-      setForm({ ...initial });
-      toast("Form is already up to date", { variant: "info" });
-      return;
-    }
     setResetConfirmOpen(true);
   };
 
   const handleConfirmReset = () => {
-    const initial = company ? companyFormValues(company) : EMPTY_COMPANY_FORM;
-    setForm({ ...initial });
+    const base = company ? companyFormValues(company) : (initialFormRef.current.name ? initialFormRef.current : EMPTY_COMPANY_FORM);
+    setForm({
+      name: base.name || "",
+      industry: base.industry || "",
+      region: base.region || "",
+      location: base.location || "",
+      website: base.website || "",
+      company_size: base.company_size || "",
+      contact_email: base.contact_email || "",
+      contact_phone: base.contact_phone || "",
+      description: base.description || "",
+    });
     setResetConfirmOpen(false);
     toast("All changes discarded", { variant: "info" });
   };
@@ -227,9 +240,9 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Input label="Company name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
-                            <Input label="Industry" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
-                            <Select label="Company size" value={form.company_size} onChange={(e) => setForm({ ...form, company_size: e.target.value })} disabled={!canEditCompany}>
+                            <Input label="Company name" required value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
+                            <Input label="Industry" value={form.industry ?? ""} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
+                            <Select label="Company size" value={form.company_size ?? ""} onChange={(e) => setForm({ ...form, company_size: e.target.value })} disabled={!canEditCompany}>
                               <option value="">Select size</option>
                               <option value="1-10">1-10</option>
                               <option value="11-50">11-50</option>
@@ -237,9 +250,9 @@ export default function SettingsPage() {
                               <option value="201-1000">201-1,000</option>
                               <option value="1000+">1,000+</option>
                             </Select>
-                            <Input label="Website" type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://example.com" error={websiteError} />
+                            <Input label="Website" type="url" value={form.website ?? ""} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://example.com" error={websiteError} />
                           </div>
-                          <Textarea label="Company description" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} helper="Share what your company does and what makes it a strong place to work." />
+                          <Textarea label="Company description" rows={4} value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} helper="Share what your company does and what makes it a strong place to work." />
                         </section>
 
                         <section className="space-y-4 border-t border-border-subtle p-5 sm:p-6" aria-labelledby="company-location-heading">
@@ -251,8 +264,8 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Input label="Region" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
-                            <Input label="Office location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca Marina" />
+                            <Input label="Region" value={form.region ?? ""} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
+                            <Input label="Office location" value={form.location ?? ""} onChange={(e) => setForm({ ...form, location: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca Marina" />
                           </div>
                         </section>
 
@@ -265,8 +278,8 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Input label="Contact email" type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} disabled={!canEditCompany} autoComplete="email" placeholder="hiring@company.com" />
-                            <Input label="Contact phone" type="tel" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} disabled={!canEditCompany} autoComplete="tel" placeholder="+212 5 00 00 00 00" />
+                            <Input label="Contact email" type="email" value={form.contact_email ?? ""} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} disabled={!canEditCompany} autoComplete="email" placeholder="hiring@company.com" />
+                            <Input label="Contact phone" type="tel" value={form.contact_phone ?? ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} disabled={!canEditCompany} autoComplete="tel" placeholder="+212 5 00 00 00 00" />
                           </div>
                         </section>
 
@@ -291,15 +304,6 @@ export default function SettingsPage() {
 
                             <div className="company-settings-actions flex items-center gap-2.5">
                               <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleResetClick}
-                                disabled={updateMut.isPending}
-                                className="h-10 rounded-lg border border-[#b34538]/40 bg-[#f9e5df]/50 px-4 text-xs font-semibold text-[#b34538] shadow-xs transition-colors hover:border-[#b34538] hover:bg-[#b34538] hover:text-white active:scale-[0.98] cursor-pointer"
-                              >
-                                Reset
-                              </Button>
-                              <Button
                                 type="submit"
                                 variant="primary"
                                 size="sm"
@@ -307,6 +311,15 @@ export default function SettingsPage() {
                                 className="h-10 min-w-[9.5rem] rounded-lg bg-[#194d38] px-5 text-xs font-bold text-[#fffefa] shadow-md hover:bg-[#123e2d] active:scale-[0.98] transition-all cursor-pointer"
                               >
                                 Save changes
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                onClick={handleResetClick}
+                                disabled={updateMut.isPending}
+                                className="h-10 min-w-[7.5rem] rounded-lg bg-[#b34538] px-5 text-xs font-bold text-white shadow-md hover:bg-[#8e2e23] active:scale-[0.98] transition-all cursor-pointer"
+                              >
+                                Reset
                               </Button>
                             </div>
                           </div>
