@@ -233,8 +233,8 @@ export default function CompanyJobsPage() {
           subtitle={`${offers?.length ?? 0} roles in one workspace · ${activeCount(offers)} active and ready for candidates.`}
         />
 
-        <div className="company-results-toolbar">
-          <span className="rounded-full bg-surface-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground">{offers?.length ?? 0} total</span>
+        <div className="company-results-toolbar -my-2">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{offers?.length ?? 0} total</span>
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 sm:flex-row sm:items-center">

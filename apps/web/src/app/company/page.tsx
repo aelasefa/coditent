@@ -97,6 +97,7 @@ export default function CompanyDashboard() {
             sizes="(max-width: 639px) 100vw, (max-width: 1023px) 768px, 1200px"
           />
           <div className="relative z-10 max-w-lg">
+            <p className="company-hero-eyebrow">Your hiring workspace</p>
             <h1 className="ct-page-title">
               <span className="block">{timeGreeting},</span>
               <span className="block">{me?.full_name?.split(" ")[0] || "Recruiter"}</span>

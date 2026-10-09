@@ -15,7 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import type { Company } from "@/lib/types";
-import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiRotateCcw, FiSave, FiSettings, FiShield } from "react-icons/fi";
+import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiRotateCcw, FiSave, FiShield } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 import { AccountDataControls } from "@/components/security/account-data-controls";
 
@@ -127,10 +127,14 @@ export default function SettingsPage() {
         <PageHeader
           tone="green"
           center
-          icon={<FiSettings />}
           eyebrow="Workspace settings"
-          title="Shape your company workspace."
+          title={
+            <>
+              Shape your company <span className="block">workspace.</span>
+            </>
+          }
           subtitle="Keep your company profile, team access, plan and account security in one place."
+          className="company-settings-hero"
         />
 
         <Tabs

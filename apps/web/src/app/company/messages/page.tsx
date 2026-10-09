@@ -55,8 +55,8 @@ function InboxContent() {
           subtitle="Keep candidate conversations focused, responsive and easy to follow."
         />
 
-        <div className="company-hero-actions-bar">
-          <span className="rounded-full bg-surface-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground">{chats.length} {chats.length === 1 ? "thread" : "threads"}</span>
+        <div className="company-results-toolbar -my-2">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{chats.length} {chats.length === 1 ? "thread" : "threads"}</span>
         </div>
 
         {chatsQ.isLoading ? (

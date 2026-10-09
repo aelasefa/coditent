@@ -121,17 +121,8 @@ export default function TeamPage() {
           subtitle={`${members.length} ${members.length === 1 ? "teammate" : "teammates"} with clear roles and access to the work that matters.`}
         />
 
-        <div className="company-hero-actions-bar">
-          {canInvite ? (
-            <Link
-              href="/company/invitations"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-primary-hover hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
-            >
-              <FiUserPlus aria-hidden className="h-4 w-4" />
-              Invite member
-            </Link>
-          ) : <span className="text-sm font-medium text-muted-foreground">Team overview</span>}
-          <span className="rounded-full bg-surface-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground">{members.length} total</span>
+        <div className="company-results-toolbar -my-2">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{members.length} total</span>
         </div>
 
         <div className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-surface p-3 shadow-sm sm:flex-row sm:items-center">
@@ -156,6 +147,15 @@ export default function TeamPage() {
             <option value="RECRUITER">Recruiter</option>
             <option value="HIRING_MANAGER">Hiring Manager</option>
           </select>
+          {canInvite && (
+            <Link
+              href="/company/invitations"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-primary-hover hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+            >
+              <FiUserPlus aria-hidden className="h-4 w-4" />
+              <span>Invite member</span>
+            </Link>
+          )}
         </div>
 
         {isLoading ? (
