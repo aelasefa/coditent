@@ -116,7 +116,6 @@ export default function TeamPage() {
         <PageHeader
           tone="green"
           center
-          decorative={false}
           eyebrow="Workspace access"
           title="Your hiring team, organized."
           subtitle={`${members.length} ${members.length === 1 ? "teammate" : "teammates"} with clear roles and access to the work that matters.`}
