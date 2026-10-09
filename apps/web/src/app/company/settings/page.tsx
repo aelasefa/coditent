@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
 import { CompanyLogoSection } from "@/components/company/CompanyLogoSection";
+import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { PageHeader } from "@/components/company/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import type { Company } from "@/lib/types";
-import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiRotateCcw, FiSave, FiShield } from "react-icons/fi";
+import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiShield } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 import { AccountDataControls } from "@/components/security/account-data-controls";
 
@@ -80,7 +81,7 @@ export default function SettingsPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   const companyId = me?.company_id;
-  const canEditCompany = can(me ?? null, "edit_company");
+  const canEditCompany = me?.role === "PLATFORM_ADMIN" || can(me ?? null, "edit_company");
 
   const { data: company, isLoading, isError, refetch } = useQuery({
     queryKey: ["company", companyId],
@@ -95,6 +96,7 @@ export default function SettingsPage() {
   });
 
   const [form, setForm] = useState<CompanyForm>(EMPTY_COMPANY_FORM);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (company) setForm(companyFormValues(company));
@@ -106,20 +108,78 @@ export default function SettingsPage() {
 
   const updateMut = useMutation({
     mutationFn: async () => {
-      if (!companyId) return;
+      const activeCompanyId = companyId || company?.id;
+      if (!activeCompanyId) throw new Error("No company attached to your account");
       if (!form.name.trim()) throw new Error("Company name cannot be empty");
-      return updateCompany(companyId, form);
+
+      const cleanWebsite = form.website?.trim()
+        ? (form.website.trim().startsWith("http://") || form.website.trim().startsWith("https://")
+            ? form.website.trim()
+            : `https://${form.website.trim()}`)
+        : null;
+
+      const payload = {
+        name: form.name.trim(),
+        industry: form.industry?.trim() || null,
+        region: form.region?.trim() || null,
+        location: form.location?.trim() || null,
+        website: cleanWebsite,
+        company_size: form.company_size?.trim() || null,
+        contact_email: form.contact_email?.trim() || null,
+        contact_phone: form.contact_phone?.trim() || null,
+        description: form.description?.trim() || null,
+      };
+
+      return updateCompany(activeCompanyId, payload);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["company", companyId] });
-      qc.invalidateQueries({ queryKey: ["company-profile", companyId] });
-      toast("Company updated", { variant: "success" });
+    onSuccess: (updated) => {
+      const activeCompanyId = companyId || company?.id;
+      if (activeCompanyId) {
+        qc.invalidateQueries({ queryKey: ["company", activeCompanyId] });
+        qc.invalidateQueries({ queryKey: ["company-profile", activeCompanyId] });
+        if (updated) {
+          qc.setQueryData(["company", activeCompanyId], updated);
+          setForm(companyFormValues(updated));
+        }
+      }
+      toast("Company settings saved", { variant: "success" });
     },
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail || (e as Error)?.message || "Save failed";
       toast("Save failed", { description: String(msg), variant: "error" });
     },
   });
+
+  const handleSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!canEditCompany) {
+      toast("Permission required", { description: "Only Owner and Admin can edit company details.", variant: "error" });
+      return;
+    }
+    if (!form.name.trim()) {
+      toast("Company name required", { description: "Please enter a valid company name.", variant: "error" });
+      return;
+    }
+    updateMut.mutate();
+  };
+
+  const handleResetClick = () => {
+    if (updateMut.isPending) return;
+    if (!isDirty) {
+      const initial = company ? companyFormValues(company) : EMPTY_COMPANY_FORM;
+      setForm({ ...initial });
+      toast("Form is already up to date", { variant: "info" });
+      return;
+    }
+    setResetConfirmOpen(true);
+  };
+
+  const handleConfirmReset = () => {
+    const initial = company ? companyFormValues(company) : EMPTY_COMPANY_FORM;
+    setForm({ ...initial });
+    setResetConfirmOpen(false);
+    toast("All changes discarded", { variant: "info" });
+  };
 
   return (
     <AppShell>
@@ -155,11 +215,8 @@ export default function SettingsPage() {
                     <div className="space-y-4">
                       <CompanyLogoSection company={company ?? null} canEdit={canEditCompany} />
                       <form
-                        className="company-settings-form overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-sm"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (canEditCompany && isDirty && !websiteError) updateMut.mutate();
-                        }}
+                        className="company-settings-form relative rounded-xl border border-border-subtle bg-surface shadow-sm"
+                        onSubmit={handleSave}
                       >
                         <section className="space-y-4 p-5 sm:p-6" aria-labelledby="company-profile-heading">
                           <div className="flex items-start gap-3">
@@ -214,21 +271,49 @@ export default function SettingsPage() {
                         </section>
 
                         {canEditCompany ? (
-                          <div className="company-settings-save flex flex-col gap-3 border-t border-border-subtle bg-surface-secondary/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                            <p className="text-xs font-medium text-muted-foreground" aria-live="polite">{isDirty ? "You have unsaved changes." : "All company details are up to date."}</p>
-                            <div className="flex gap-2">
-                              <Button type="button" variant="ghost" onClick={() => setForm(savedForm)} disabled={!isDirty || updateMut.isPending}>
-                                <FiRotateCcw aria-hidden className="h-4 w-4" />
+                          <div className="company-settings-save sticky bottom-0 z-20 flex flex-col gap-3 rounded-b-xl border-t border-border-subtle bg-surface/95 p-4 backdrop-blur-md shadow-[0_-4px_16px_rgb(0_0_0/6%)] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div className="flex items-center gap-2">
+                              {isDirty ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-600/25 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Unsaved changes
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#194d38]/20 bg-[#edf4eb] px-2.5 py-1 text-xs font-medium text-[#194d38]">
+                                  <FiCheck className="h-3.5 w-3.5" />
+                                  All details up to date
+                                </span>
+                              )}
+                              <span className="hidden text-xs text-muted-foreground md:inline">
+                                {isDirty ? "Remember to save before leaving this tab." : "Changes save directly to your workspace."}
+                              </span>
+                            </div>
+
+                            <div className="company-settings-actions flex items-center gap-2.5">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleResetClick}
+                                disabled={updateMut.isPending}
+                                className="h-10 rounded-lg border border-[#b34538]/40 bg-[#f9e5df]/50 px-4 text-xs font-semibold text-[#b34538] shadow-xs transition-colors hover:border-[#b34538] hover:bg-[#b34538] hover:text-white active:scale-[0.98] cursor-pointer"
+                              >
                                 Reset
                               </Button>
-                              <Button type="submit" loading={updateMut.isPending} disabled={!isDirty || Boolean(websiteError)}>
-                                <FiSave aria-hidden className="h-4 w-4" />
+                              <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                loading={updateMut.isPending}
+                                className="h-10 min-w-[9.5rem] rounded-lg bg-[#194d38] px-5 text-xs font-bold text-[#fffefa] shadow-md hover:bg-[#123e2d] active:scale-[0.98] transition-all cursor-pointer"
+                              >
                                 Save changes
                               </Button>
                             </div>
                           </div>
                         ) : (
-                          <p className="border-t border-border-subtle bg-surface-secondary/40 p-4 text-xs text-muted-foreground sm:px-6">Read-only for your role. Only Owner and Admin can edit company details.</p>
+                          <p className="border-t border-border-subtle bg-surface-secondary/40 p-4 text-xs text-muted-foreground sm:px-6">
+                            Read-only for your role. Only Owner and Admin can edit company details.
+                          </p>
                         )}
                       </form>
                     </div>
@@ -335,6 +420,24 @@ export default function SettingsPage() {
           ]}
         />
       </div>
+
+      <ConfirmDialog
+        isOpen={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={handleConfirmReset}
+        title="Discard unsaved changes?"
+        message={
+          <div className="space-y-2">
+            <p>Are you sure you want to reset the form? All unsaved edits to your company profile will be discarded.</p>
+            <div className="rounded-lg border border-border-subtle bg-surface-secondary/40 p-2.5 text-xs text-muted-foreground">
+              Form will revert back to: <strong className="text-foreground">{savedForm.name || "Original company details"}</strong>
+            </div>
+          </div>
+        }
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        isDestructive
+      />
     </AppShell>
   );
 }
