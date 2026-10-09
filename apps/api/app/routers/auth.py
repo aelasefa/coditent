@@ -337,6 +337,14 @@ async def _optional_authenticated_cookie_user(
     return user
 
 
+def _legacy_oauth_link_matches(user: User, identity: OAuthIdentity) -> bool:
+    """Recognize a provider link created by the legacy user-column schema."""
+    return (
+        (user.oauth_provider or "").strip().lower() == identity.provider
+        and (user.oauth_id or "").strip() == identity.oauth_id
+    )
+
+
 async def _resolve_oauth_user(
     db: AsyncSession,
     request: Request,
@@ -346,8 +354,9 @@ async def _resolve_oauth_user(
 
     A verified provider email may create a new candidate account. It never
     silently links to an existing local account: that requires a valid current
-    local session for the same user, after which the provider subject is stored
-    under a database uniqueness constraint.
+    local session for the same user. The only compatibility exception is an
+    exact provider + subject already recorded by the legacy schema, after
+    which the subject is stored under the hardened uniqueness constraints.
     """
     linked_row = (
         await db.execute(
@@ -379,12 +388,16 @@ async def _resolve_oauth_user(
             raise HTTPException(status_code=400, detail="sso_email_unverified")
         user = await _create_sso_candidate(db, identity, commit=False)
     else:
-        authenticated = await _optional_authenticated_cookie_user(request, db)
-        if authenticated is None or authenticated.id != existing.id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="sso_link_confirmation_required",
-            )
+        # Older releases stored the already-verified provider link directly on
+        # the user row. Recover that link only when the immutable provider
+        # subject matches exactly; a matching email alone is never sufficient.
+        if not _legacy_oauth_link_matches(existing, identity):
+            authenticated = await _optional_authenticated_cookie_user(request, db)
+            if authenticated is None or authenticated.id != existing.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="sso_link_confirmation_required",
+                )
         user = existing
         await _sync_existing_sso_user(db, user, identity, commit=False)
 

@@ -32,6 +32,7 @@ const errorMessages: Record<string, string> = {
   google_token_exchange_failed: "Google could not validate this sign-in code. Start a new sign-in attempt.",
   sso_invalid_code: "This sign-in code expired or was already used.",
   sso_token_exchange_failed: "The sign-in provider is temporarily unavailable.",
+  sso_link_confirmation_required: "This email already has a Coditent account. Sign in with your existing password first before connecting this social account.",
 };
 
 export default function SsoCallbackPage() {
