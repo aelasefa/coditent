@@ -2,6 +2,9 @@
 const backendTarget = process.env.BACKEND_PROXY_URL || process.env.NEXT_PUBLIC_API_URL || "http://34.205.255.37";
 
 const nextConfig = {
+  // Produce a self-contained production server so the runtime image does not
+  // have to run a second, memory-heavy `npm ci --omit=dev`.
+  output: "standalone",
   images: {
     remotePatterns: [
       {

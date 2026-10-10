@@ -1,14 +1,16 @@
 FROM python:3.12-slim AS builder
 
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
 WORKDIR /build
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt ./
-RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+# Every locked production dependency publishes a Python 3.12 Linux wheel.
+# Refuse source builds so this stage never needs the large compiler toolchain
+# that can exhaust Docker Desktop's memory during a parallel Compose build.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --only-binary=:all: --wheel-dir /wheels -r requirements.txt
 
 
 FROM python:3.12-slim AS runtime

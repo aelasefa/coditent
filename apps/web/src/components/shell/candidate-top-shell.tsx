@@ -4,7 +4,7 @@ import Link from "next/link";
 import { SupportButton } from "@/components/support/support-button";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { FiChevronDown, FiMenu, FiX } from "react-icons/fi";
+import { FiChevronDown, FiMenu, FiMoreHorizontal, FiX } from "react-icons/fi";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
 import { candidateNavItems, isNavActive, type NavItem } from "./nav-config";
@@ -17,6 +17,7 @@ interface CandidateTopShellProps {
 }
 
 const CandidateAvatarPreviewContext = createContext<Dispatch<SetStateAction<string | null>> | null>(null);
+const secondaryNavLabels = new Set(["Practice", "Friends"]);
 
 export function useCandidateAvatarPreview() {
   const setAvatarPreview = useContext(CandidateAvatarPreviewContext);
@@ -31,24 +32,33 @@ function activeForPath(pathname: string, item: NavItem): boolean {
 export function CandidateTopShell({ user, onLogout, children }: CandidateTopShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const accountButtonRef = useRef<HTMLButtonElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const mobileNavId = useId();
+  const morePanelId = useId();
   const accountPanelId = useId();
+  const primaryNavItems = candidateNavItems.filter((item) => !secondaryNavLabels.has(item.label));
+  const secondaryNavItems = candidateNavItems.filter((item) => secondaryNavLabels.has(item.label));
+  const moreIsActive = secondaryNavItems.some((item) => activeForPath(pathname, item));
 
   useEffect(() => {
     setMobileOpen(false);
+    setMoreOpen(false);
     setAccountOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    if (!mobileOpen && !accountOpen) return;
+    if (!mobileOpen && !moreOpen && !accountOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       if (accountOpen && accountRef.current && !accountRef.current.contains(event.target as Node)) setAccountOpen(false);
+      if (moreOpen && moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
       if (mobileOpen && headerRef.current && !headerRef.current.contains(event.target as Node)) setMobileOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -56,6 +66,10 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
       if (accountOpen) {
         setAccountOpen(false);
         accountButtonRef.current?.focus();
+      }
+      if (moreOpen) {
+        setMoreOpen(false);
+        moreButtonRef.current?.focus();
       }
       if (mobileOpen) {
         setMobileOpen(false);
@@ -68,7 +82,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [mobileOpen, accountOpen]);
+  }, [mobileOpen, moreOpen, accountOpen]);
 
   return (
     <div className={styles.shell}>
@@ -80,11 +94,35 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
           </Link>
 
           <nav aria-label="Candidate navigation" className={styles.desktopNav}>
-            {candidateNavItems.map((item) => (
+            {primaryNavItems.map((item) => (
               <Link key={item.href} href={item.href} aria-current={activeForPath(pathname, item) ? "page" : undefined} className={activeForPath(pathname, item) ? styles.navLinkActive : styles.navLink}>
                 {item.label}
               </Link>
             ))}
+            <div ref={moreRef} className={styles.moreMenu}>
+              <button
+                ref={moreButtonRef}
+                type="button"
+                aria-expanded={moreOpen}
+                aria-controls={morePanelId}
+                className={moreIsActive ? styles.navLinkActive : styles.navLink}
+                onClick={() => setMoreOpen((open) => !open)}
+              >
+                <FiMoreHorizontal aria-hidden="true" />
+                <span>More</span>
+                <FiChevronDown aria-hidden="true" />
+              </button>
+              {moreOpen ? (
+                <div id={morePanelId} className={styles.morePanel}>
+                  {secondaryNavItems.map((item) => (
+                    <Link key={item.href} href={item.href} aria-current={activeForPath(pathname, item) ? "page" : undefined} className={activeForPath(pathname, item) ? styles.moreLinkActive : styles.moreLink}>
+                      <item.icon aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </nav>
 
           <div ref={accountRef} className={styles.account}>

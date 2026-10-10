@@ -351,6 +351,7 @@ function readableOAuthError(error: string): string {
     google_token_exchange_failed: "Google could not validate this sign-in code. Please start a new sign-in.",
     sso_invalid_code: "The sign-in code expired or was already used. Please start again.",
     sso_token_exchange_failed: "The sign-in provider is temporarily unavailable. Please try again.",
+    sso_link_confirmation_required: "This email already has a Coditent account. Sign in with your existing password first before connecting this social account.",
   };
   return messages[error] ?? "Social sign-in failed. Please try again.";
 }

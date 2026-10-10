@@ -13,6 +13,7 @@ from app.models import CandidateProfile, User, UserRole
 from app.routers.auth import (
     _build_sso_response,
     _create_sso_candidate,
+    _legacy_oauth_link_matches,
     exchange_oauth_handoff,
 )
 from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
@@ -173,6 +174,18 @@ def test_oauth_identity_requires_verified_email_stable_subject_and_known_issuer(
     identity = oauth_service._parse_identity_payload(provider, base)
     assert identity.oauth_id == "stable-provider-subject"
     assert identity.email_verified is True
+
+    legacy_user = User(
+        email=identity.email,
+        full_name="Legacy Candidate",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        oauth_provider="Google",
+        oauth_id=identity.oauth_id,
+    )
+    assert _legacy_oauth_link_matches(legacy_user, identity) is True
+    legacy_user.oauth_id = "different-provider-subject"
+    assert _legacy_oauth_link_matches(legacy_user, identity) is False
 
     for invalid in (
         {**base, "email_verified": False},
