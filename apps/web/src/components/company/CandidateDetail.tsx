@@ -14,12 +14,15 @@ import {
   FiActivity,
   FiAlertCircle,
   FiAward,
+  FiCalendar,
   FiCheckCircle,
+  FiClock,
   FiDownload,
   FiExternalLink,
   FiFileText,
   FiGitBranch,
   FiMessageSquare,
+  FiVideo,
   FiX,
 } from "react-icons/fi";
 
@@ -197,42 +200,6 @@ export function CandidateDetail({
               {stagePending ? "Updating pipeline…" : "Stage changes save automatically."}
             </p>
           </div>
-          {nextStages.includes("interview") ? (
-            <div className="rounded-xl border border-border-subtle bg-surface-secondary/30 p-3">
-              <p className="text-xs font-semibold text-foreground">Schedule interview</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <input
-                  type="datetime-local"
-                  value={interviewAt}
-                  onChange={(event) => setInterviewAt(event.target.value)}
-                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-                  aria-label="Interview date and time"
-                />
-                <input
-                  type="text"
-                  maxLength={2000}
-                  value={interviewNotes}
-                  onChange={(event) => setInterviewNotes(event.target.value)}
-                  placeholder="Location or meeting details (optional)"
-                  className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-                  aria-label="Interview notes"
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                disabled={stagePending || !interviewAt}
-                loading={stagePending}
-                onClick={() => onStage("interview", {
-                  scheduledAt: new Date(interviewAt).toISOString(),
-                  notes: interviewNotes,
-                })}
-              >
-                Schedule interview
-              </Button>
-            </div>
-          ) : null}
           <div className="company-candidate-stage-secondary">
             {rejectConfirm ? (
               <span className="company-candidate-reject-confirm">
@@ -252,6 +219,80 @@ export function CandidateDetail({
               )
             )}
           </div>
+          {nextStages.includes("interview") ? (
+            <div className="company-candidate-schedule-card w-full basis-full rounded-xl border border-[#dce6da] bg-[#fffefa] p-3.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#194d38]/10 text-[#194d38]">
+                    <FiCalendar className="h-3.5 w-3.5" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-foreground">Schedule interview</p>
+                    <p className="text-[11px] text-muted-foreground">Pick a date & meeting details to advance candidate to interview</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="candidate-interview-datetime" className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+                    <FiClock className="h-3 w-3 text-[#194d38]" />
+                    <span>Date & time <span className="text-[#b34538]">*</span></span>
+                  </label>
+                  <input
+                    id="candidate-interview-datetime"
+                    type="datetime-local"
+                    value={interviewAt}
+                    onChange={(event) => setInterviewAt(event.target.value)}
+                    className="h-9 w-full rounded-lg border border-[#c0d2c0] bg-surface px-2.5 text-xs text-foreground shadow-xs transition-colors focus:border-[#194d38] focus:outline-none focus:ring-1 focus:ring-[#194d38]"
+                    aria-label="Interview date and time"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="candidate-interview-notes" className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+                    <FiVideo className="h-3 w-3 text-[#194d38]" />
+                    <span>Location / meeting link <span className="font-normal text-muted-foreground">(optional)</span></span>
+                  </label>
+                  <input
+                    id="candidate-interview-notes"
+                    type="text"
+                    maxLength={2000}
+                    value={interviewNotes}
+                    onChange={(event) => setInterviewNotes(event.target.value)}
+                    placeholder="e.g. Google Meet link, Zoom, or Office Room"
+                    className="h-9 w-full rounded-lg border border-[#c0d2c0] bg-surface px-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 shadow-xs transition-colors focus:border-[#194d38] focus:outline-none focus:ring-1 focus:ring-[#194d38]"
+                    aria-label="Interview notes"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between border-t border-[#edf3ec] pt-2.5">
+                <span className="text-[11px] text-muted-foreground">
+                  {interviewAt ? (
+                    <span className="inline-flex items-center gap-1 font-medium text-[#194d38]">
+                      <FiCheckCircle className="h-3 w-3" /> Date selected
+                    </span>
+                  ) : (
+                    "Select a date & time to confirm"
+                  )}
+                </span>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="h-8 gap-1.5 rounded-lg bg-[#194d38] px-3.5 text-xs font-semibold text-[#fffefa] shadow-xs hover:bg-[#123e2d] disabled:opacity-50"
+                  disabled={stagePending || !interviewAt}
+                  loading={stagePending}
+                  onClick={() => onStage("interview", {
+                    scheduledAt: new Date(interviewAt).toISOString(),
+                    notes: interviewNotes,
+                  })}
+                >
+                  <FiCalendar className="h-3.5 w-3.5" />
+                  Schedule interview
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </section>
       )}
 
@@ -301,9 +342,27 @@ export function CandidateDetail({
               label: "Interview",
               content: app.interview_scheduled_at ? (
                 <div className="space-y-5">
-                  <div className="rounded-lg bg-surface-secondary/50 p-3 text-sm">
-                    <p className="font-semibold text-foreground">Scheduled {dateTime(app.interview_scheduled_at)}</p>
-                    {app.interview_notes ? <p className="mt-1 text-muted-foreground">{app.interview_notes}</p> : null}
+                  <div className="rounded-xl border border-[#dce6da] bg-[#f8faf7] p-4 shadow-xs">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#194d38]/10 text-[#194d38]">
+                        <FiCalendar className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold uppercase tracking-wider text-[#194d38]">Confirmed Interview</p>
+                          <span className="inline-flex items-center rounded-full bg-[#194d38]/10 px-2 py-0.5 text-[10px] font-semibold text-[#194d38]">Scheduled</span>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {dateTime(app.interview_scheduled_at)}
+                        </p>
+                        {app.interview_notes ? (
+                          <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-[#e2ece0] bg-surface p-2.5 text-xs text-foreground">
+                            <FiVideo className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#194d38]" />
+                            <p className="break-words leading-relaxed">{app.interview_notes}</p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                   {canMoveStage ? (
                     <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); feedbackMut.mutate(); }}>

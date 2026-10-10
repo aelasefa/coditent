@@ -50,11 +50,14 @@ function InboxContent() {
         <PageHeader
           tone="green"
           center
+          eyebrow="Conversations"
           title="Every conversation, in clear view."
           subtitle="Keep candidate conversations focused, responsive and easy to follow."
         />
 
-        <div className="company-results-toolbar"><span className="text-xs font-medium text-muted-foreground">{chats.length} {chats.length === 1 ? "thread" : "threads"}</span></div>
+        <div className="company-results-toolbar -my-2">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{chats.length} {chats.length === 1 ? "thread" : "threads"}</span>
+        </div>
 
         {chatsQ.isLoading ? (
           <div className="space-y-2" role="status" aria-label="Loading conversations">
