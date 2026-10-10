@@ -14,7 +14,7 @@ import { getMe, getApplications, getAuditLogs, getCompany, getApiBaseUrl, offerL
 import { Avatar } from "@/components/ui/avatar";
 import { candidateName, jobTitleFor } from "@/components/company/hiring";
 import type { ApplicationItem, Offer } from "@/lib/types";
-import { FiArrowRight, FiBriefcase, FiPlus, FiUserCheck, FiUsers } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiUserCheck, FiUsers } from "react-icons/fi";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -91,15 +91,6 @@ export default function CompanyDashboard() {
           <PageHeader
             title={`${timeGreeting}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
             subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
-            actions={
-              <Link
-                href="/company/jobs"
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
-              >
-                <FiPlus aria-hidden className="h-4 w-4" />
-                <span>Create job</span>
-              </Link>
-            }
           />
         </div>
 
