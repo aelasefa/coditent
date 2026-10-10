@@ -1,14 +1,13 @@
 """Email OTP verification for password registration.
 
-Run: pytest tests/test_email_otp.py -v (needs API on localhost:8001)
+Run: python -m pytest tests/test_email_otp.py -v
 
-Live tests that need a pending row insert it directly with a KNOWN OTP hash,
-because real SMTP delivery is environment-dependent. Anything asserting on
-email delivery itself is covered by the rollback unit paths below.
+HTTP tests run against the FastAPI ASGI app in-process. Tests that need a
+pending row insert it directly with a KNOWN OTP hash because real SMTP
+delivery is environment-dependent.
 """
 import hashlib
 import asyncio
-import time
 import uuid
 
 import httpx
@@ -22,7 +21,6 @@ from app.services import email_outbox
 from app.services import email_verification as ev
 from app.services.passwords import hash_password, verify_password
 
-BASE = "http://localhost:8001"
 KNOWN_OTP = "123456"
 
 
@@ -80,6 +78,15 @@ async def _user_row(email: str):
 
 def _email(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:6]}@example.com"
+
+
+def _api_client(*, timeout: int = 30) -> httpx.AsyncClient:
+    """Return an isolated HTTP client without requiring a live API server."""
+    from app.main import app
+
+    client_host = f"otp-{uuid.uuid4().hex}"
+    transport = httpx.ASGITransport(app=app, client=(client_host, 41000))
+    return httpx.AsyncClient(transport=transport, base_url="http://test", timeout=timeout)
 
 
 # ---------- pure unit tests (no HTTP, no SMTP) ----------
@@ -293,14 +300,14 @@ async def test_concurrent_registration_attempts_never_mix_identity_bundle():
 @pytest.mark.asyncio
 async def test_register_does_not_activate_without_verification():
     email = _email("noop")
-    async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
+    async with _api_client(timeout=30) as c:
         r = await c.post(
             "/auth/register",
             json={"email": email, "password": "LiveTestPass123!", "full_name": "No Act", "role": "CANDIDATE"},
         )
-        # Either the code was emailed (202) or delivery failed and the
-        # pending row was rolled back (502). Either way: no token, no user.
-        assert r.status_code in (202, 502), r.text
+        # Starting registration creates only a pending challenge: no token or
+        # active user exists until the code is verified.
+        assert r.status_code == 202, r.text
         assert "token" not in r.json()
     assert await _user_row(email) is None
     if await _pending_row(email) is not None:
@@ -314,7 +321,7 @@ async def test_register_does_not_activate_without_verification():
 async def test_login_impossible_before_verification():
     email = _email("nologin")
     await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         r = await c.post("/auth/login", json={"email": email, "password": "LiveTest123!"})
         assert r.status_code == 401
 
@@ -323,7 +330,7 @@ async def test_login_impossible_before_verification():
 async def test_wrong_otp_rejected_and_counts_attempt():
     email = _email("wrong")
     registration_id = await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         r = await c.post(
             "/auth/verify-email",
             json={"email": email, "registration_id": registration_id, "otp": "000000"},
@@ -339,7 +346,7 @@ async def test_wrong_otp_rejected_and_counts_attempt():
 async def test_attempts_limit_blocks_and_clears():
     email = _email("locked")
     registration_id = await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
+    async with _api_client(timeout=30) as c:
         final_wrong = None
         for _ in range(5):
             r = await c.post(
@@ -357,15 +364,13 @@ async def test_attempts_limit_blocks_and_clears():
         assert "invalid or expired" in r.text.lower()
     assert await _pending_row(email) is None
     assert await _user_row(email) is None
-    # let the shared IP rate window drain before the remaining verify tests
-    time.sleep(65)
 
 
 @pytest.mark.asyncio
 async def test_expired_otp_rejected_and_cleaned():
     email = _email("expired")
     registration_id = await _insert_pending(email, expired=True)
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         r = await c.post(
             "/auth/verify-email",
             json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
@@ -380,7 +385,7 @@ async def test_expired_otp_rejected_and_cleaned():
 async def test_correct_otp_creates_account_and_rejects_reuse():
     email = _email("happy")
     registration_id = await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         payload = {"email": email, "registration_id": registration_id, "otp": KNOWN_OTP}
         r = await c.post("/auth/verify-email", json=payload)
         assert r.status_code == 200, r.text
@@ -410,7 +415,7 @@ async def test_rotating_code_invalidates_previous_code():
         )
         await db.commit()
 
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         old = await c.post(
             "/auth/verify-email",
             json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
@@ -424,17 +429,21 @@ async def test_rotating_code_invalidates_previous_code():
 
 
 @pytest.mark.asyncio
-async def test_resend_cooldown_then_rollback_keeps_old_code():
+async def test_resend_cooldown_then_rotation_invalidates_old_code():
+    from unittest.mock import patch
+
+    from app.routers import auth as auth_router
+
     email = _email("resend")
     registration_id = await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         r = await c.post(
             "/auth/resend-verification",
             json={"email": email, "registration_id": registration_id},
         )
         assert r.status_code == 429
         assert "retry_after_seconds" in r.text
-    # SMTP is down here, so a real resend 502s — and the previous code must survive.
+    # After cooldown, a successful resend must replace the previous code.
     await engine.dispose()
     async with AsyncSessionLocal() as db:
         from datetime import datetime, timedelta
@@ -444,24 +453,30 @@ async def test_resend_cooldown_then_rollback_keeps_old_code():
             {"email": email, "past": datetime.utcnow() - timedelta(minutes=5)},
         )
         await db.commit()
-    async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
-        r = await c.post(
-            "/auth/resend-verification",
-            json={"email": email, "registration_id": registration_id},
-        )
-        assert r.status_code == 502
-        r = await c.post(
-            "/auth/verify-email",
-            json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
-        )
-        assert r.status_code == 200, r.text
+    with patch.object(auth_router, "generate_otp", return_value="654321"):
+        async with _api_client(timeout=30) as c:
+            r = await c.post(
+                "/auth/resend-verification",
+                json={"email": email, "registration_id": registration_id},
+            )
+            assert r.status_code == 202, r.text
+            old = await c.post(
+                "/auth/verify-email",
+                json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
+            )
+            assert old.status_code == 400
+            fresh = await c.post(
+                "/auth/verify-email",
+                json={"email": email, "registration_id": registration_id, "otp": "654321"},
+            )
+            assert fresh.status_code == 200, fresh.text
 
 
 @pytest.mark.asyncio
 async def test_verified_email_cannot_register_again():
     email = _email("taken")
     registration_id = await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         r = await c.post(
             "/auth/verify-email",
             json={"email": email, "registration_id": registration_id, "otp": KNOWN_OTP},
@@ -478,7 +493,7 @@ async def test_verified_email_cannot_register_again():
 async def test_pending_reregister_does_not_duplicate():
     email = _email("again")
     await _insert_pending(email)
-    async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
+    async with _api_client(timeout=30) as c:
         # last_otp_sent_at is now → cooldown path, no duplicate row possible
         r = await c.post(
             "/auth/register",
@@ -498,7 +513,7 @@ async def test_concurrent_verify_creates_single_user():
     email = _email("race")
     registration_id = await _insert_pending(email)
     payload = {"email": email, "registration_id": registration_id, "otp": KNOWN_OTP}
-    async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:
+    async with _api_client(timeout=30) as c:
         results = await asyncio.gather(
             c.post("/auth/verify-email", json=payload),
             c.post("/auth/verify-email", json=payload),
@@ -514,6 +529,6 @@ async def test_concurrent_verify_creates_single_user():
 
 @pytest.mark.asyncio
 async def test_sso_providers_untouched():
-    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
+    async with _api_client(timeout=20) as c:
         r = await c.get("/auth/sso/providers")
         assert r.status_code == 200
