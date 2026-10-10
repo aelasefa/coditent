@@ -229,7 +229,12 @@ def test_company_without_logo_still_works():
 # 10. UI falls back to company initials (never a broken image).
 def test_ui_falls_back_to_initials():
     avatar = (WEB_SRC / "components" / "ui" / "avatar.tsx").read_text()
-    assert "{src ? (" in avatar  # image only when a URL exists
+    # The component first normalizes relative API asset paths. It must render
+    # an image only when that normalization produces a usable URL; otherwise
+    # it falls back to initials instead of handing Next/Image an empty source.
+    assert "const resolvedSrc = resolveApiAssetUrl(src)" in avatar
+    assert "{resolvedSrc ? (" in avatar
+    assert "src={resolvedSrc}" in avatar
     assert "initials(name)" in avatar
     for page in (
         "components/candidate/job-card.tsx",
