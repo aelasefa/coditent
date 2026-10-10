@@ -529,7 +529,9 @@ async def test_removed_hr_loses_access(client, flow):
         flow["hr"].company_id = None
         flow["hr"].company_role = None
         r = await client.get(f"/chat/recruitment/{flow['application'].id}", headers=auth(flow["hr"]))
-        assert r.status_code == 403
+        # Membership removal invalidates the company account before the
+        # conversation authorization check runs.
+        assert r.status_code == 401, r.text
     finally:
         async def _restore():
             async with AsyncSessionLocal() as db:
@@ -600,12 +602,16 @@ async def test_hr_can_create_offer_and_move_stage(client, flow):
     assert r.json()["responsible_hr_id"] == str(flow["hr"].id)
     offer_id = r.json()["id"]
     try:
-        r = await client.patch(
-            f"/applications/{flow['application'].id}",
-            json={"status": "shortlisted"},
-            headers=auth(flow["hr"]),
-        )
-        assert r.status_code == 200, r.text
+        version = flow["application"].stage_version
+        for stage in ("under_review", "shortlisted"):
+            r = await client.patch(
+                f"/applications/{flow['application'].id}",
+                json={"status": stage, "expected_version": version},
+                headers=auth(flow["hr"]),
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["stage_version"] == version + 1
+            version = r.json()["stage_version"]
         assert r.json()["chat_enabled"] is True
     finally:
         async def _cleanup_offer():

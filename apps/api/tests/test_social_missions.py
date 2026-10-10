@@ -11,7 +11,8 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models import CandidateProfile, Friendship, User, UserRole
 from app.routers import friends, missions
-from app.schemas import MissionAttemptCreate, MissionAttemptReview, PracticeMissionCreate
+from app.schemas import MissionAttemptCreate, MissionAttemptReview, PracticeMissionCreate, PresenceHeartbeatIn
+from app.services.friendships import canonical_pair
 
 
 @pytest_asyncio.fixture
@@ -53,22 +54,45 @@ async def _users(db):
 
 
 @pytest.mark.asyncio
-async def test_friend_add_list_presence_and_remove_are_symmetric(db):
+async def test_friend_request_accept_list_presence_and_remove_are_symmetric(db, monkeypatch):
+    online_users = set()
+
+    async def touch(user_id, connection_id):
+        assert connection_id == "http:social-test"
+        online_users.add(user_id)
+
+    async def presence_map(user_ids):
+        return {user_id: user_id in online_users for user_id in user_ids}
+
+    revoked = []
+
+    async def publish_revoked(first, second):
+        revoked.append((first, second))
+
+    monkeypatch.setattr(friends, "touch_presence", touch)
+    monkeypatch.setattr(friends, "presence_map", presence_map)
+    monkeypatch.setattr(friends, "_publish_relationship_revoked", publish_revoked)
     candidate, peer, _admin = await _users(db)
-    added = await friends.add_friend(peer.id, candidate, db)
-    assert added.id == peer.id
+    sent = await friends.send_friend_request(peer.id, candidate, db)
+    assert sent.status == "PENDING"
+    assert (await friends.list_friends(candidate, db, (20, 0), "name")).total == 0
+    accepted = await friends.accept_friend_request(sent.id, peer, db)
+    assert accepted.status == "ACCEPTED"
     pairs = list((await db.execute(Friendship.__table__.select())).mappings())
-    assert {(row["user_id"], row["friend_id"]) for row in pairs} == {
-        (candidate.id, peer.id),
-        (peer.id, candidate.id),
-    }
+    assert len(pairs) == 1
+    assert (pairs[0]["pair_low_id"], pairs[0]["pair_high_id"]) == canonical_pair(candidate.id, peer.id)
+    assert pairs[0]["status"] == "ACCEPTED"
     page = await friends.list_friends(candidate, db, (20, 0), "name")
     assert page.total == 1 and page.friends[0].id == peer.id
-    await friends.presence_heartbeat(peer, db)
+    reverse_page = await friends.list_friends(peer, db, (20, 0), "name")
+    assert reverse_page.total == 1 and reverse_page.friends[0].id == candidate.id
+    await friends.presence_heartbeat(PresenceHeartbeatIn(connection_id="social-test"), peer, db)
     page = await friends.list_friends(candidate, db, (20, 0), "recent")
     assert page.friends[0].online is True
     await friends.remove_friend(peer.id, candidate, db)
     assert (await friends.list_friends(candidate, db, (20, 0), "name")).total == 0
+    assert (await friends.list_friends(peer, db, (20, 0), "name")).total == 0
+    assert revoked == [(candidate.id, peer.id)]
 
 
 @pytest.mark.asyncio

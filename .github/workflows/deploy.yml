@@ -159,6 +159,8 @@ jobs:
             tests/test_database_url.py \
             tests/test_email_otp.py \
             tests/test_email_outbox.py \
+            tests/test_friend_presence.py \
+            tests/test_friendships.py \
             tests/test_entitlements.py \
             tests/test_health_readiness.py \
             tests/test_institutions.py \
