@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
+import { resolveAssetUrl } from "@/lib/asset-url";
 
 import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
@@ -157,6 +158,7 @@ export async function resendVerification(
 export async function login(payload: {
   email: string;
   password: string;
+  account_type: "candidate" | "recruiter";
 }): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>(
     "/auth/login",
@@ -253,10 +255,7 @@ export async function uploadAvatar(file: File, onProgress?: (percent: number) =>
 }
 
 export function resolveApiAssetUrl(src?: string | null): string | null {
-  if (!src) return null;
-  if (/^(https?:|data:|blob:)/i.test(src)) return src;
-  const base = getApiBaseUrl().replace(/\/$/, "");
-  return `${base}${src.startsWith("/") ? "" : "/"}${src}`;
+  return resolveAssetUrl(src, getApiBaseUrl());
 }
 
 export async function updateAccountName(fullName: string): Promise<User> {

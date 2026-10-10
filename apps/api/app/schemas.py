@@ -61,6 +61,8 @@ class ResendVerificationRequest(APIModel):
 class LoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    # Existing API clients may omit this; the tabbed website always supplies it.
+    account_type: Literal["candidate", "recruiter"] | None = None
     trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 

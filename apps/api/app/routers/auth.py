@@ -77,6 +77,7 @@ from app.services.authentication import (
     complete_authentication,
     ensure_access_session_active,
     ensure_account_can_authenticate,
+    ensure_login_account_type,
     ensure_credential_matches_account,
     ensure_mfa_challenge_active,
     issue_access_token,
@@ -1105,6 +1106,13 @@ async def login(
         logger.warning("login_failed", reason="invalid_credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    # Reject the wrong tab before any access cookie, trusted-device bypass,
+    # password rehash, or pending MFA challenge can be created.
+    try:
+        ensure_login_account_type(user, data.account_type)
+    except AuthenticationRejected as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
     if user.role == UserRole.RECRUITER and not user.is_approved:
         logger.warning("login_failed", reason="recruiter_unapproved")
         raise HTTPException(
@@ -1122,6 +1130,7 @@ async def login(
         completion = await complete_authentication(
             user,
             trusted_device_token=trusted_device,
+            account_type=data.account_type,
         )
     except AuthenticationRejected as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active") from exc

@@ -24,6 +24,21 @@ class AuthenticationRejected(ValueError):
     pass
 
 
+def ensure_login_account_type(user: User, account_type: str | None) -> None:
+    if account_type is None:
+        return  # Shared login API compatibility, including OAuth/admin flows.
+    role = user.role.value
+    if account_type == "candidate" and role == "CANDIDATE":
+        return
+    if account_type == "recruiter" and role in {"RECRUITER", "COMPANY_USER"}:
+        return
+    if role in {"ADMIN", "PLATFORM_ADMIN"}:
+        raise AuthenticationRejected("This account is an administrator. Use the admin sign-in page.")
+    if role == "CANDIDATE":
+        raise AuthenticationRejected("This account is registered as a Candidate. Use the Candidate tab to sign in.")
+    raise AuthenticationRejected("This account is registered as a Recruiter. Use the Recruiter tab to sign in.")
+
+
 class AuthenticationStoreUnavailable(RuntimeError):
     pass
 
@@ -111,8 +126,8 @@ async def trusted_device_is_valid(user: User, token: str | None) -> bool:
     return revoked is None
 
 
-async def _issue_mfa_challenge(user: User) -> str:
-    token = create_mfa_token(str(user.id), auth_version=account_auth_version(user))
+async def _issue_mfa_challenge(user: User, account_type: str | None = None) -> str:
+    token = create_mfa_token(str(user.id), auth_version=account_auth_version(user), account_type=account_type)
     payload = verify_mfa_token(token)
     try:
         stored = await get_async_redis().set(
@@ -132,12 +147,14 @@ async def complete_authentication(
     user: User,
     *,
     trusted_device_token: str | None = None,
+    account_type: str | None = None,
 ) -> AuthenticationCompletion:
     """Finish primary authentication without allowing OAuth to bypass local MFA."""
     ensure_account_can_authenticate(user)
+    ensure_login_account_type(user, account_type)
     if user.is_2fa_enabled and not await trusted_device_is_valid(user, trusted_device_token):
         return AuthenticationCompletion(
-            token=await _issue_mfa_challenge(user),
+            token=await _issue_mfa_challenge(user, account_type),
             requires_2fa=True,
         )
     return AuthenticationCompletion(token=issue_access_token(user), requires_2fa=False)
