@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -85,7 +86,12 @@ class User(Base):
     # Account availability is deliberately separate from registration or
     # recruiter approval. Administrative suspension must invalidate sessions
     # without pretending that the account never verified its email.
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=true(),
+        nullable=False,
+    )
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     oauth_provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
     oauth_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
