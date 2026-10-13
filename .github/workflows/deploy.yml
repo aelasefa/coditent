@@ -59,6 +59,9 @@ jobs:
       - name: Type-check source
         run: npx tsc --noEmit
 
+      - name: Test frontend regressions
+        run: node --test --experimental-strip-types tests/*.test.mts tests/*.test.mjs
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
