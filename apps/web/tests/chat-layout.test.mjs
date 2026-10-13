@@ -1,21 +1,27 @@
-const assert = require("node:assert/strict");
-const test = require("node:test");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
-const ts = require("typescript");
-const React = require("react");
-const { renderToStaticMarkup } = require("react-dom/server");
+import assert from "node:assert/strict";
+import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import vm from "node:vm";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+// Only the in-memory CommonJS produced by TypeScript needs this loader.
+const loadDependency = createRequire(import.meta.url);
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 function loadSource(relativePath, mocks = {}) {
-  const filename = path.join(__dirname, "..", relativePath);
+  const filename = path.join(testDirectory, "..", relativePath);
   const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, {
     exports,
-    require: (name) => Object.hasOwn(mocks, name) ? mocks[name] : require(name),
+    require: (name) => Object.hasOwn(mocks, name) ? mocks[name] : loadDependency(name),
   }, { filename });
   return exports;
 }
