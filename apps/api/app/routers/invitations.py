@@ -498,7 +498,16 @@ async def accept_company_invite(
     company = Company(name=row["company_name"], description="Invited company", status="active")
     db.add(company)
     await db.flush()
-    user = User(email=row["email"], password_hash=hash_password(data.password), role=UserRole.COMPANY_USER, is_approved=True, full_name=data.full_name, company_id=company.id, company_role="OWNER")
+    user = User(
+        email=row["email"],
+        password_hash=hash_password(data.password),
+        role=UserRole.COMPANY_USER,
+        is_approved=True,
+        is_active=True,
+        full_name=data.full_name,
+        company_id=company.id,
+        company_role="OWNER",
+    )
     db.add(user)
     # SQLAlchemy's UUID default is assigned during flush, not necessarily when
     # the object is constructed. Flush before linking the company owner so the
@@ -717,7 +726,16 @@ async def accept_employee_invite(
     existing = await db.execute(select(User).where(User.email == row["email"]))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already in use — use existing account flow")
-    user = User(email=row["email"], password_hash=hash_password(data.password), role=UserRole.COMPANY_USER, is_approved=True, full_name=data.full_name, company_id=UUID(str(row["company_id"])), company_role=row["role"])
+    user = User(
+        email=row["email"],
+        password_hash=hash_password(data.password),
+        role=UserRole.COMPANY_USER,
+        is_approved=True,
+        is_active=True,
+        full_name=data.full_name,
+        company_id=UUID(str(row["company_id"])),
+        company_role=row["role"],
+    )
     db.add(user)
     await db.execute(text("UPDATE employee_invitations SET status='accepted', accepted_at=:now WHERE id=:id"), {"now": datetime.utcnow(), "id": row["id"]})
     await db.commit()

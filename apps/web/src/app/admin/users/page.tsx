@@ -81,7 +81,7 @@ export default function AdminUsersPage() {
       saveToken(data.token);
       try { localStorage.setItem("user", JSON.stringify(data.user)); } catch { /* storage optional */ }
       if (data.user.role === "COMPANY_USER") return router.push("/company");
-      if (data.user.role === "RECRUITER") return router.push("/recruiter");
+      if (data.user.role === "RECRUITER") return router.push("/companies");
       router.push("/dashboard");
     },
     onError: (error) => toast(apiMessage(error, "Impersonation failed"), { variant: "error" }),

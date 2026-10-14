@@ -1,7 +1,6 @@
 const CACHE_VERSION = "coditent-v1";
 const APP_SHELL = [
   "/",
-  "/offline",
   "/manifest.webmanifest",
   "/pwa-icon-192.svg",
   "/pwa-icon-512.svg",
@@ -37,7 +36,7 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(async () => (await caches.match(request)) || (await caches.match("/offline")))
+        .catch(async () => (await caches.match(request)) || (await caches.match("/")))
     );
     return;
   }

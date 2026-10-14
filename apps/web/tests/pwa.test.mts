@@ -13,7 +13,7 @@ test("web manifest includes standalone install metadata and required icon sizes"
 test("service worker provides offline navigation and versioned cache cleanup", async () => {
   const worker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
   assert.match(worker, /request\.mode === "navigate"/);
-  assert.match(worker, /caches\.match\("\/offline"\)/);
+  assert.match(worker, /caches\.match\("\/"\)/);
   assert.match(worker, /caches\.delete/);
   assert.match(worker, /request\.method !== "GET"/);
 });

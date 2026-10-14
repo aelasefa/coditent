@@ -26,6 +26,7 @@ async def seed_admin_user(
             password_hash=hash_password(password),
             role=UserRole.PLATFORM_ADMIN,
             is_approved=True,
+            is_active=True,
             full_name=normalized_full_name,
         )
         db.add(user)

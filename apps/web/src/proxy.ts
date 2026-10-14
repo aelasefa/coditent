@@ -10,7 +10,6 @@ function isProtectedPath(pathname: string): boolean {
     pathname.startsWith("/profile") ||
     pathname.startsWith("/get-started") ||
     pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/recruiter") ||
     pathname.startsWith("/admin") ||
     pathname.startsWith("/company") ||
     pathname.startsWith("/companies")
@@ -48,32 +47,31 @@ function roleLogic(request: NextRequest): NextResponse {
   if ((pathname === "/login" || pathname === "/register" || pathname === "/verify-email" || pathname === "/admin/login") && token) {
     if (role === "PLATFORM_ADMIN" || role === "ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
-    if (role === "RECRUITER") return NextResponse.redirect(new URL("/recruiter", request.url));
+    if (role === "RECRUITER") return NextResponse.redirect(new URL("/companies", request.url));
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
-  if (pathname.startsWith("/recruiter") && role === "CANDIDATE") return NextResponse.redirect(new URL("/profile", request.url));
   if (pathname.startsWith("/get-started") && role && role !== "CANDIDATE") {
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
     if (role === "PLATFORM_ADMIN" || role === "ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
-    return NextResponse.redirect(new URL("/recruiter", request.url));
+    return NextResponse.redirect(new URL("/companies", request.url));
   }
   if ((pathname.startsWith("/profile") || pathname.startsWith("/dashboard")) && (role === "RECRUITER" || role === "COMPANY_USER" || role === "PLATFORM_ADMIN")) {
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
     if (role === "PLATFORM_ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
-    return NextResponse.redirect(new URL("/recruiter", request.url));
+    return NextResponse.redirect(new URL("/companies", request.url));
   }
   if (pathname === "/admin/login") return NextResponse.next();
   if (pathname.startsWith("/admin") && role !== "PLATFORM_ADMIN" && role !== "ADMIN") {
     if (!token) return NextResponse.redirect(buildLoginRedirect(request));
     if (role === "COMPANY_USER") return NextResponse.redirect(new URL("/company/invitations", request.url));
-    if (role === "RECRUITER") return NextResponse.redirect(new URL("/recruiter", request.url));
+    if (role === "RECRUITER") return NextResponse.redirect(new URL("/companies", request.url));
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
   if (pathname.startsWith("/company") && pathname !== "/company/invite/accept" && role !== "COMPANY_USER" && role !== "PLATFORM_ADMIN") {
     if (!token) return NextResponse.redirect(buildLoginRedirect(request));
     return NextResponse.redirect(new URL("/profile", request.url));
   }
-  if ((pathname.startsWith("/profile") || pathname.startsWith("/dashboard") || pathname.startsWith("/recruiter")) && (role === "PLATFORM_ADMIN" || role === "ADMIN")) {
+  if ((pathname.startsWith("/profile") || pathname.startsWith("/dashboard")) && (role === "PLATFORM_ADMIN" || role === "ADMIN")) {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 

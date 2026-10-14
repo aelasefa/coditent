@@ -16,8 +16,16 @@ def test_orphaned_revision_is_resolvable_and_follows_known_predecessor():
     scripts = ScriptDirectory.from_config(config)
     revision = scripts.get_revision("ac1b2c3d4e5f")
     assert revision.down_revision == "ab1b2c3d4e5f"
-    assert len(scripts.get_heads()) == 1
+    assert scripts.get_heads() == ["ad1b2c3d4e5f"]
     assert any(item.revision == revision.revision for item in scripts.walk_revisions())
+
+
+def test_active_user_default_follows_compatibility_marker():
+    config = Config(str(API_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(API_ROOT / "alembic"))
+    scripts = ScriptDirectory.from_config(config)
+    revision = scripts.get_revision("ad1b2c3d4e5f")
+    assert revision.down_revision == "ac1b2c3d4e5f"
 
 
 def test_compatibility_marker_emits_no_schema_or_data_operations():
