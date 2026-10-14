@@ -1,7 +1,7 @@
 """Keep a database default for active user accounts.
 
-Revision ID: ac1b2c3d4e5f
-Revises: ab1b2c3d4e5f
+Revision ID: ad1b2c3d4e5f
+Revises: ac1b2c3d4e5f
 Create Date: 2026-10-11 12:00:00.000000
 """
 
@@ -13,8 +13,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "ac1b2c3d4e5f"
-down_revision: Union[str, Sequence[str], None] = "ab1b2c3d4e5f"
+revision: str = "ad1b2c3d4e5f"
+down_revision: Union[str, Sequence[str], None] = "ac1b2c3d4e5f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
