@@ -124,6 +124,7 @@ jobs:
           from cryptography.fernet import Fernet
           print(f"CI_JWT_SECRET={secrets.token_urlsafe(48)}")
           print(f"CI_TOTP_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
+          print(f"CI_EMAIL_OUTBOX_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
           PY
 
       - name: Sanity check imports (Supabase-only, no local DB)
@@ -131,6 +132,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
+          EMAIL_OUTBOX_ENCRYPTION_KEY: ${{ env.CI_EMAIL_OUTBOX_ENCRYPTION_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6380/0' }}
           FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
@@ -143,6 +145,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
+          EMAIL_OUTBOX_ENCRYPTION_KEY: ${{ env.CI_EMAIL_OUTBOX_ENCRYPTION_KEY }}
           GEMINI_API_KEY: ci-placeholder
           REDIS_URL: redis://localhost:6379/0
           FRONTEND_URL: http://localhost:3000
