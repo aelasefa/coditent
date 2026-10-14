@@ -109,7 +109,7 @@ export default function GetStartedPage() {
       .then(([user, state]) => {
         if (!active) return;
         if (user.role !== "CANDIDATE") {
-          router.replace(user.role === "COMPANY_USER" ? "/company/invitations" : user.role.includes("ADMIN") ? "/admin" : "/recruiter");
+          router.replace(user.role === "COMPANY_USER" ? "/company/invitations" : user.role.includes("ADMIN") ? "/admin" : "/companies");
           return;
         }
         if (state.onboarding_completed) {

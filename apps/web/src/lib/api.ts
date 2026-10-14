@@ -55,7 +55,7 @@ const skipAuthRedirectConfig = {
   skipAuthRedirect: true,
 } as AxiosRequestConfig & { skipAuthRedirect: boolean };
 
-const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/company", "/chat", "/recruiter", "/admin"];
+const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/company", "/companies", "/chat", "/admin"];
 
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login") {

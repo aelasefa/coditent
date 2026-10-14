@@ -7,27 +7,27 @@
 :root {
   color-scheme: light;
   /* CODITENT semantic tokens — single source of truth (light) */
-  --background: #fafaf8;
-  --surface: #ffffff;
-  --surface-secondary: #f4f4f2;
-  --surface-hover: #eeeeec;
+  --background: #f8f8f3;
+  --surface: #fffefa;
+  --surface-secondary: #edf1e9;
+  --surface-hover: #e4ebe0;
 
-  --foreground: #18181b;
-  --foreground-secondary: #3f3f46;
-  --muted: #71717a;
-  --muted-foreground: #71717a;
+  --foreground: #192b23;
+  --foreground-secondary: #3e5147;
+  --muted: #617369;
+  --muted-foreground: #617369;
 
-  --border: #e4e4e7;
-  --border-subtle: #e9e7e2;
-  --border-strong: #d4d4d8;
+  --border: #cfdbcf;
+  --border-subtle: #e3e9df;
+  --border-strong: #9bb3a0;
 
-  --primary: #6d28d9;
-  --primary-hover: #5b21b6;
-  --primary-active: #4c1d95;
-  --primary-foreground: #ffffff;
+  --primary: #194d38;
+  --primary-hover: #123e2d;
+  --primary-active: #0d3023;
+  --primary-foreground: #fffefa;
 
-  --accent: #6d28d9;
-  --accent-foreground: #ffffff;
+  --accent: #a25c38;
+  --accent-foreground: #fffefa;
 
   --success: #15803d;
   --success-background: #dcfce7;
@@ -38,9 +38,9 @@
   --info: #1d4ed8;
   --info-background: #dbeafe;
 
-  --focus-ring: #6d28d9;
-  --overlay: rgba(9, 9, 11, 0.5);
-  --shadow-color: rgba(24, 24, 27, 0.08);
+  --focus-ring: #a25c38;
+  --overlay: rgb(17 38 28 / 52%);
+  --shadow-color: rgb(25 77 56 / 9%);
 
   /* Motion */
   --duration-fast: 150ms;
@@ -71,7 +71,7 @@
 
   /* Landing tokens — isolated, deprecated for product UI */
   --ct-primary: var(--primary);
-  --ct-secondary: #7c3aed;
+  --ct-secondary: #356456;
   --ct-accent: var(--accent);
   --ct-live: var(--success);
   --ct-border: var(--border-subtle);
@@ -79,8 +79,8 @@
   --ct-text-primary: var(--foreground);
   --ct-text-secondary: var(--foreground-secondary);
   --ct-text-muted: var(--muted);
-  --ct-gradient: linear-gradient(135deg, #5b21b6 0%, #6d28d9 48%, #7c3aed 100%);
-  --ct-glow: rgba(109, 40, 217, 0.25);
+  --ct-gradient: linear-gradient(135deg, #123e2d 0%, #194d38 55%, #356456 100%);
+  --ct-glow: rgb(25 77 56 / 20%);
 }
 
 /* Candidate workspace follows the warm, green identity established on the home page.

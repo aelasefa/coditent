@@ -23,7 +23,7 @@ function AcceptRedirectInner() {
     }
   }, [token, type, router]);
 
-  return <main className="p-6 text-sm text-zinc-500">Redirecting to invitation...</main>;
+  return <main className="flex min-h-screen items-center justify-center bg-background p-6 text-sm font-medium text-muted-foreground">Preparing your invitation…</main>;
 }
 
 export default function AcceptInvitationPage() {

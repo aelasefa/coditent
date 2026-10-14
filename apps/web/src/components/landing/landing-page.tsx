@@ -197,7 +197,6 @@ export function LandingPage() {
             <Link href="/register">Get started</Link>
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/terms">Terms of Service</Link>
-            <Link href="/status">System Status</Link>
           </nav>
         </div>
       </footer>

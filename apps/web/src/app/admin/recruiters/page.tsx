@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { MdButton } from "@/components/ui/md-button";
-import { MdCard } from "@/components/ui/md-card";
+import { AdminShell } from "@/components/admin/admin-shell";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/shell/page-container";
 import { approveRecruiter, getPendingRecruiters, rejectRecruiter } from "@/lib/api";
 
 export default function AdminRecruitersPage() {
@@ -30,53 +31,44 @@ export default function AdminRecruitersPage() {
   });
 
   return (
-    <main className="min-h-screen bg-md-background pb-14">
-      <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">Admin workspace</p>
-            <h1 className="mt-1 text-3xl font-medium tracking-tight">Pending recruiter approvals</h1>
-          </div>
-          <Link className="rounded-full border border-md-outline/60 px-4 py-2 text-sm text-md-primary" href="/admin">
-            Back to dashboard
-          </Link>
-        </header>
+    <AdminShell>
+      <div className="py-2">
+        <PageHeader title="Pending recruiter approvals" description="Review access requests before recruiters enter company workspaces." />
 
-        {pendingQuery.isLoading ? <MdCard className="mt-6 p-6">Loading pending recruiters...</MdCard> : null}
+        {pendingQuery.isLoading ? <Card className="p-6">Loading pending recruiters…</Card> : null}
 
         <div className="mt-6 space-y-4">
           {pendingQuery.data?.map((user) => (
-            <MdCard key={user.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <Card key={user.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
               <div>
                 <p className="font-medium">{user.full_name}</p>
-                <p className="text-sm text-md-onSurfaceVariant">{user.email}</p>
+                <p className="text-sm text-muted-foreground">{user.email}</p>
               </div>
               <div className="flex items-center gap-2">
-                <MdButton
+                <Button
                   disabled={approveMutation.isPending || rejectMutation.isPending}
                   onClick={() => approveMutation.mutate(user.id)}
                   size="sm"
-                  variant="filled"
                 >
                   Approve
-                </MdButton>
-                <MdButton
+                </Button>
+                <Button
                   disabled={approveMutation.isPending || rejectMutation.isPending}
                   onClick={() => rejectMutation.mutate(user.id)}
                   size="sm"
-                  variant="outlined"
+                  variant="outline"
                 >
                   Reject
-                </MdButton>
+                </Button>
               </div>
-            </MdCard>
+            </Card>
           ))}
 
           {pendingQuery.data && pendingQuery.data.length === 0 ? (
-            <MdCard className="p-6 text-md-onSurfaceVariant">No pending recruiters.</MdCard>
+            <Card className="border-dashed p-8 text-center text-muted-foreground">No pending recruiters.</Card>
           ) : null}
         </div>
       </div>
-    </main>
+    </AdminShell>
   );
 }
