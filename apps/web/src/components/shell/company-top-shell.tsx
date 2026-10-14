@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { FiChevronDown } from "react-icons/fi";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { companyNavItems, isNavActive } from "./nav-config";
 import styles from "./candidate-top-shell.module.css";
 import homeStyles from "@/components/landing/landing-page.module.css";
@@ -86,7 +87,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
             ))}
           </nav>
 
-          <div ref={accountRef} className={`${styles.account} ${homeStyles.homeActions}`}>
+          <div ref={accountRef} className={`${styles.account} ${styles.companyAccount} ${homeStyles.homeActions}`}>
             <button ref={accountButtonRef} type="button" aria-label="Account menu" aria-expanded={accountOpen} aria-controls={accountPanelId} onClick={() => setAccountOpen((open) => !open)} className={styles.accountButton}>
               <Avatar name={user.name} src={user.avatarUrl} size="sm" />
               <span className={styles.accountName}>{user.name}</span>
@@ -96,6 +97,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
               <div id={accountPanelId} className={styles.accountPanel}>
                 <p className={styles.accountEmail}>{user.email ?? "Company account"}</p>
                 <Link href="/company/settings" onClick={() => setAccountOpen(false)}>Company settings</Link>
+                <LegalLinks layout="column" onNavigate={() => setAccountOpen(false)} />
                 <button type="button" onClick={onLogout}>Log out</button>
               </div>
             ) : null}

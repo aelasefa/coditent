@@ -64,12 +64,18 @@ async def test_friend_request_accept_list_presence_and_remove_are_symmetric(db, 
     async def presence_map(user_ids):
         return {user_id: user_id in online_users for user_id in user_ids}
 
+    async def remove(user_id, connection_id):
+        assert connection_id == "http:social-test"
+        online_users.discard(user_id)
+        return False
+
     revoked = []
 
     async def publish_revoked(first, second):
         revoked.append((first, second))
 
     monkeypatch.setattr(friends, "touch_presence", touch)
+    monkeypatch.setattr(friends, "remove_presence", remove)
     monkeypatch.setattr(friends, "presence_map", presence_map)
     monkeypatch.setattr(friends, "_publish_relationship_revoked", publish_revoked)
     candidate, peer, _admin = await _users(db)
@@ -89,6 +95,9 @@ async def test_friend_request_accept_list_presence_and_remove_are_symmetric(db, 
     await friends.presence_heartbeat(PresenceHeartbeatIn(connection_id="social-test"), peer, db)
     page = await friends.list_friends(candidate, db, (20, 0), "recent")
     assert page.friends[0].online is True
+    await friends.presence_disconnect(PresenceHeartbeatIn(connection_id="social-test"), peer)
+    page = await friends.list_friends(candidate, db, (20, 0), "recent")
+    assert page.friends[0].online is False
     await friends.remove_friend(peer.id, candidate, db)
     assert (await friends.list_friends(candidate, db, (20, 0), "name")).total == 0
     assert (await friends.list_friends(peer, db, (20, 0), "name")).total == 0

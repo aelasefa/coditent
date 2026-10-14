@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FiCheck, FiMessageCircle, FiSearch, FiUserPlus, FiUsers, FiX } from "react-icons/fi";
 import { PageContainer } from "@/components/shell/page-container";
@@ -23,7 +23,6 @@ import {
   removeFriend,
   searchPeople,
   sendFriendRequest,
-  sendPresenceHeartbeat,
   unblockCandidate,
 } from "@/lib/api";
 import type { FriendItem } from "@/lib/types";
@@ -42,12 +41,12 @@ export default function FriendsPage() {
   const [search, setSearch] = useState("");
   const [profileId, setProfileId] = useState<string | null>(null);
   const normalizedSearch = search.trim();
-  const presenceId = useRef<string>("");
-  if (!presenceId.current && typeof crypto !== "undefined") {
-    presenceId.current = crypto.randomUUID();
-  }
-
-  const friends = useQuery({ queryKey: ["friends", sort], queryFn: () => listFriends(sort) });
+  const friends = useQuery({
+    queryKey: ["friends", sort],
+    queryFn: () => listFriends(sort),
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
   const incoming = useQuery({ queryKey: ["friend-requests", "incoming"], queryFn: listIncomingFriendRequests });
   const sent = useQuery({ queryKey: ["friend-requests", "sent"], queryFn: listSentFriendRequests });
   const blocked = useQuery({ queryKey: ["friends", "blocked"], queryFn: listBlockedCandidates });
@@ -55,22 +54,16 @@ export default function FriendsPage() {
     queryKey: ["friend-search", normalizedSearch],
     queryFn: () => searchPeople(normalizedSearch),
     enabled: normalizedSearch.length >= 2,
+    refetchInterval: normalizedSearch.length >= 2 ? 10_000 : false,
+    refetchOnWindowFocus: true,
   });
   const profile = useQuery({
     queryKey: ["friend-profile", profileId],
     queryFn: () => getPublicCandidateProfile(profileId!),
     enabled: Boolean(profileId),
+    refetchInterval: profileId ? 10_000 : false,
+    refetchOnWindowFocus: true,
   });
-
-  useEffect(() => {
-    const connectionId = presenceId.current;
-    if (!connectionId) return;
-    void sendPresenceHeartbeat(connectionId).catch(() => undefined);
-    const timer = window.setInterval(() => {
-      void sendPresenceHeartbeat(connectionId).catch(() => undefined);
-    }, 45_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["friends"] });

@@ -3,6 +3,7 @@ import io
 import secrets
 import json
 from datetime import datetime, timedelta, timezone
+from html import escape
 from uuid import UUID, uuid4
 from typing import Annotated
 from urllib.parse import urlencode
@@ -24,6 +25,8 @@ from app.observability import get_logger
 from app.schemas import (
     AccountNameUpdate,
     AccountDataExportRequest,
+    AccountDataImportOut,
+    AccountDataImportRequest,
     AccountDeletionCreate,
     AccountDeletionOut,
     EmailChangeConfirm,
@@ -109,7 +112,7 @@ from app.services.company_logo import (
     validate_logo_file,
 )
 from app.services.upload_limits import UploadTooLargeError, read_upload_limited
-from app.services.privacy import DELETION_GRACE_DAYS, build_account_export
+from app.services.privacy import DELETION_GRACE_DAYS, build_account_export, serialize_account_export
 
 
 router = APIRouter()
@@ -224,6 +227,33 @@ async def _queue_email_change_code(
         subject=subject,
         html=html,
         expires_at=expires_at,
+    )
+
+
+async def _queue_data_operation_confirmation(
+    db: AsyncSession,
+    *,
+    user: User,
+    operation: str,
+    detail: str,
+) -> EmailDelivery:
+    safe_name = escape(user.full_name)
+    safe_detail = escape(detail)
+    subject = f"CODITENT data {operation} confirmation"
+    html = (
+        f"<p>Hello {safe_name},</p><p>{safe_detail}</p>"
+        "<p>If you did not perform this action, contact support immediately.</p>"
+    )
+    return await enqueue_email_delivery(
+        db,
+        kind="account_data_confirmation",
+        dedupe_key=f"account-data-{operation}:{user.id}:{uuid4()}",
+        resource_type="user",
+        resource_id=user.id,
+        to_email=user.email,
+        subject=subject,
+        html=html,
+        text=f"Hello {user.full_name},\n\n{detail}\n\nIf you did not perform this action, contact support immediately.",
     )
 
 
@@ -1184,7 +1214,22 @@ async def export_account_data(
         db, current_user, data.current_password, data.two_factor_code
     )
     payload = await build_account_export(db, current_user)
+    content, media_type = serialize_account_export(payload, data.format)
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="export",
+            detail=f"Your account data was exported in {data.format.upper()} format.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
     await db.commit()
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
     await log_audit(
         db,
         action="ACCOUNT_DATA_EXPORTED",
@@ -1193,11 +1238,60 @@ async def export_account_data(
         resource_type="user",
         resource_id=current_user.id,
     )
-    filename = f"coditent-account-{current_user.id}.json"
+    filename = f"coditent-account-{current_user.id}.{data.format}"
     return Response(
-        content=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-        media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/account/data-import", response_model=AccountDataImportOut)
+async def import_account_data(
+    data: AccountDataImportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDataImportOut:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    profile = await db.scalar(
+        select(CandidateProfile).where(CandidateProfile.user_id == current_user.id).with_for_update()
+    )
+    if profile is None:
+        raise HTTPException(status_code=409, detail="Only candidate profile data can be imported")
+    updates = data.profile.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(profile, field, value)
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="import",
+            detail=f"{len(updates)} profile fields were imported into your account.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
+    await db.commit()
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
+    await log_audit(
+        db,
+        action="ACCOUNT_DATA_IMPORTED",
+        actor=current_user,
+        resource_type="user",
+        resource_id=current_user.id,
+        details=f"updated_fields={','.join(sorted(updates))}",
+    )
+    return AccountDataImportOut(
+        updated_fields=sorted(updates),
+        detail=f"Imported {len(updates)} profile fields.",
     )
 
 
@@ -1266,8 +1360,22 @@ async def schedule_account_deletion(
         deletion.requested_at = now
         deletion.canceled_at = None
         deletion.completed_at = None
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="deletion request",
+            detail=f"Your account deletion is scheduled for {execute_after.isoformat()}Z. You can cancel it before processing begins.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
     await db.commit()
     await db.refresh(deletion)
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
     await log_audit(
         db,
         action="ACCOUNT_DELETION_SCHEDULED",
@@ -1302,8 +1410,22 @@ async def cancel_account_deletion(
     deletion.canceled_at = datetime.now(timezone.utc).replace(tzinfo=None)
     deletion.lease_owner = None
     deletion.lease_expires_at = None
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="deletion cancellation",
+            detail="Your scheduled account deletion was canceled. Your account remains active.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
     await db.commit()
     await db.refresh(deletion)
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
     await log_audit(
         db,
         action="ACCOUNT_DELETION_CANCELED",

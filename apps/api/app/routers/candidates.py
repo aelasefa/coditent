@@ -435,6 +435,7 @@ async def get_cv_meta(
 async def download_candidate_cv(
     current_user: Annotated[User, Depends(require_candidate)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    preview: bool = False,
 ):
     profile = await _get_profile(db, current_user.id)
     try:
@@ -447,10 +448,14 @@ async def download_candidate_cv(
         data = await asyncio.to_thread(download_cv, asset.storage_path)
     except CVStorageError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV not found") from exc
+    disposition = "inline" if preview and asset.content_type == "application/pdf" else "attachment"
     return StreamingResponse(
         iter([data]),
         media_type=asset.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{asset.original_filename}"'},
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{asset.original_filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

@@ -11,11 +11,21 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import AccountDeletionRequest, CandidateProfile, ChatMessage, Notification, User, UserRole
+from app.models import AccountDeletionRequest, CandidateProfile, ChatMessage, EmailDelivery, Notification, User, UserRole
 from app.routers import auth
-from app.schemas import AccountDataExportRequest, AccountDeletionCreate
+from app.schemas import AccountDataExportRequest, AccountDataImportRequest, AccountDeletionCreate, ProfileUpdate
 from app.services.passwords import hash_password
-from app.services.privacy import run_account_deletion_cycle
+from app.services.privacy import run_account_deletion_cycle, serialize_account_export
+
+
+def test_account_export_serializes_json_csv_and_xml_safely():
+    payload = {"format": "coditent-account-export-v1", "profile": {"headline": "=unsafe", "bio": "A & B"}}
+    csv_content, csv_type = serialize_account_export(payload, "csv")
+    xml_content, xml_type = serialize_account_export(payload, "xml")
+    json_content, json_type = serialize_account_export(payload, "json")
+    assert "'=unsafe" in csv_content and csv_type.startswith("text/csv")
+    assert "A &amp; B" in xml_content and xml_type == "application/xml"
+    assert json.loads(json_content)["profile"]["bio"] == "A & B" and json_type == "application/json"
 
 
 @pytest_asyncio.fixture
@@ -57,6 +67,24 @@ async def test_authenticated_export_is_downloaded_without_persisting_a_copy(db):
 
 
 @pytest.mark.asyncio
+async def test_export_sends_confirmation_through_durable_outbox(db, monkeypatch):
+    user, _peer, password = await _account(db)
+    delivered: list[tuple[str, str]] = []
+
+    def fake_send(to_email: str, subject: str, *_args, **_kwargs):
+        delivered.append((to_email, subject))
+        return {"id": "provider-message"}
+
+    monkeypatch.setattr("app.services.email_outbox.send_email", fake_send)
+    await auth.export_account_data(AccountDataExportRequest(current_password=password, format="csv"), user, db)
+    delivery = await db.scalar(
+        select(EmailDelivery).where(EmailDelivery.resource_id == user.id).order_by(EmailDelivery.created_at.desc())
+    )
+    assert delivery is not None and delivery.status == "sent"
+    assert delivered == [(user.email, "CODITENT data export confirmation")]
+
+
+@pytest.mark.asyncio
 async def test_deletion_is_cancelable_during_grace_period(db):
     user, _peer, password = await _account(db)
     scheduled = await auth.schedule_account_deletion(
@@ -68,6 +96,22 @@ async def test_deletion_is_cancelable_during_grace_period(db):
         AccountDataExportRequest(current_password=password), user, db
     )
     assert canceled.status == "canceled" and canceled.canceled_at is not None
+
+
+@pytest.mark.asyncio
+async def test_validated_profile_import_updates_multiple_fields_atomically(db):
+    user, _peer, password = await _account(db)
+    result = await auth.import_account_data(
+        AccountDataImportRequest(
+            current_password=password,
+            profile=ProfileUpdate(city="Casablanca", headline="Backend engineer", years_of_experience=3),
+        ),
+        user,
+        db,
+    )
+    profile = await db.scalar(select(CandidateProfile).where(CandidateProfile.user_id == user.id))
+    assert result.updated_fields == ["city", "headline", "years_of_experience"]
+    assert profile.city == "Casablanca" and profile.headline == "Backend engineer"
 
 
 @pytest.mark.asyncio

@@ -74,7 +74,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 ### Prerequisites
 
 - Docker + Docker Compose (recommended path).
-- Node 20 + npm (frontend local dev / CI uses `npm ci`, `npm run lint`, `npm run build`).
+- Node 22 or newer + npm (frontend local dev / CI uses `npm ci`, `npm run lint`, `npm run build`).
 - Python 3.12 (backend local dev / CI).
 - An active **Supabase project** (sole persistent database — there is no local Postgres container, no SQLite).
 - A Google Gemini API key (`GEMINI_API_KEY`).
@@ -141,7 +141,7 @@ cd apps/web && npm ci && npm run dev -- --port 3000
 
 ## Technical stack
 
-- **Frontend:** Next.js 14.2 (React 18, App Router, SSR), Tailwind CSS + CSS Modules, axios, `@tanstack/react-query`, `react-hook-form` + `zod`, `@supabase/ssr` (session refresh only).
+- **Frontend:** Next.js 16.3.8 (React 19.3, App Router), Tailwind CSS + CSS Modules, axios, `@tanstack/react-query`, `react-hook-form` + `zod`, `@supabase/ssr` (session refresh only).
 - **Backend:** FastAPI (Python 3.12), SQLAlchemy 2 async (`asyncpg`) + Alembic, `python-jose` (JWT HS256), `passlib[bcrypt]`, `slowapi` (rate limits), `structlog` + `prometheus-client` (observability), Celery + Redis 7 (async jobs), `google-generativeai`, `supabase` (Storage admin only), `pypdf` / `python-docx` (CV text), Resend via stdlib `urllib` (email).
 - **Database:** **Supabase PostgreSQL** — sole persistent store. No local Postgres container, no SQLite, no localhost fallback (rejected at startup in `apps/api/app/database.py:9-33` and `apps/api/app/config.py:47-56`).
 - **Storage:** Supabase Storage, private buckets `candidate-cvs` and `company-logos` (backend service-role key only).
@@ -162,7 +162,7 @@ cd apps/web && npm ci && npm run dev -- --port 3000
 
 ```mermaid
 flowchart TD
-    Browser[Browser] --> Web[Next.js 14 - apps/web - :3001 local]
+    Browser[Browser] --> Web[Next.js 16 - apps/web - :3001 local]
     Web --> MW[middleware.ts - edge role redirects + Supabase cookie refresh]
     Web --> APIClient[lib/api.ts - axios + Bearer + /api-proxy fallback]
     APIClient --> ProxyRewrite[/api-proxy/:path* rewrite - next.config.mjs/]
@@ -231,7 +231,7 @@ CODITENT/
 │   │   │   ├── limiter.py      # slowapi Limiter
 │   │   │   └── observability.py# structlog + Prometheus metrics
 │   │   ├── alembic/            # 19 migration versions, async env
-│   │   ├── tests/              # 14 pytest suites (live-DB + offline mix)
+│   │   ├── tests/              # 47 pytest files (live-DB + offline mix)
 │   │   ├── requirements.txt    # 22 deps
 │   │   └── Dockerfile
 │   ├── web/                    # Next.js frontend
@@ -242,7 +242,7 @@ CODITENT/
 │   │   │   ├── utils/supabase/ # SSR/middleware Supabase clients (session refresh only)
 │   │   │   └── middleware.ts   # edge protection + role redirects
 │   │   ├── next.config.mjs     # /api-proxy rewrite, image hosts
-│   │   └── package.json        # next 14.2.32, react 18.3.1, axios, react-query, zod
+│   │   └── package.json        # Next 16.3.8, React 19.3.0, axios, React Query, zod
 │   └── apps/web/               # nested legacy copy — TO-VERIFY (appears unused; do not rely on it)
 ├── docker-compose.yml          # api/worker/redis/web/proxy/vault
 ├── nginx/                      # reverse-proxy build
@@ -255,11 +255,11 @@ CODITENT/
 
 | Directory | Contains | Why it exists | Used by / connects to |
 | --------- | -------- | ------------- | --------------------- |
-| `apps/api/app/routers/` | 12 routers, 89 endpoints | HTTP layer only (no business logic) | Mounted by `main.py`; call `dependencies.py`, `core/permissions.py`, `services/*` |
+| `apps/api/app/routers/` | 19 mounted routers | HTTP layer | Mounted by `main.py`; call `dependencies.py`, `core/permissions.py`, `services/*` |
 | `apps/api/app/services/` | AI, screening, CV, logo, email, chat rules, jobs | Reusable business logic + external I/O | Routers + Celery tasks |
 | `apps/api/app/core/` | permissions matrix, audit writer, vault | Centralized policy + side effects | Every write path |
-| `apps/api/alembic/` | 20 versions | Schema history for Supabase | `api` container runs `alembic upgrade head` on boot |
-| `apps/api/tests/` | 14 suites | Regression + security coverage | CI import check; manual `pytest` runs |
+| `apps/api/alembic/` | 42 version files | Schema history for Supabase | `api` container runs `alembic upgrade head` on boot |
+| `apps/api/tests/` | 47 test files | Regression + security coverage | CI import check; manual `pytest` runs |
 | `apps/web/src/app/` | Route groups + pages | User-facing screens per role | Calls `lib/api.ts` helpers |
 | `apps/web/src/components/` | Reusable UI (incl. `ui/avatar.tsx`, `company/CompanyLogoSection.tsx`) | Consistent design system | Pages |
 | `apps/web/src/lib/` | API client, auth, types, permissions mirror | Single frontend↔backend contract | All pages/components |
@@ -269,7 +269,7 @@ CODITENT/
 
 ## Frontend architecture
 
-- **Framework:** Next.js 14.2 (App Router, SSR), React 18.3.1, Tailwind + CSS Modules, `axios`, `@tanstack/react-query`, `react-hook-form` + `zod` (`apps/web/package.json`).
+- **Framework:** Next.js 16.3.8 (App Router), React 19.3.0, Tailwind + CSS Modules, `axios`, `@tanstack/react-query`, `react-hook-form` + `zod` (`apps/web/package.json`).
 - **Routing:** App Router groups — `(auth)/login`, `(auth)/register`, `admin/`, `company/`, `dashboard/`, `offers/`, `profile/`, `chat/`, `invite/`, `requests/`, `recruiter/`, `get-started/`, `verify-email/`, `choose-role/`, `accept-invitation/`, `api/ai/generate-bio/`.
 - **Layouts:** role shells (`components/company/AppShell.tsx`, `components/shell/*`) + route protection in `src/middleware.ts` (token presence + JWT `role` claim decode → redirects + `?next=`).
 - **API communication:** `src/lib/api.ts` — `getApiBaseUrl()` (HTTPS page + `http://` backend → `/api-proxy`; else `NEXT_PUBLIC_API_URL`), axios `withCredentials:true`, request interceptor injects `Bearer <coditent_token>`, response interceptor clears token + redirects protected paths on 401 (`lib/api.ts:18-90`).
@@ -826,7 +826,7 @@ Practice missions are candidate-owned learning exercises and are separate from t
 
 ### Prerequisites
 
-Docker + Compose, Node 20, Python 3.12, Supabase project, Gemini key, Resend key (email).
+Docker + Compose, Node 22+, Python 3.12, Supabase project, Gemini key, Resend key (email).
 
 ### Startup
 
@@ -959,33 +959,41 @@ bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require
 ## Planned / incomplete features
 
 - Interviews: status string only; scheduling/detail/feedback NOT IMPLEMENTED.
-- Notifications (in-app/email/push) for product events: NOT IMPLEMENTED (audit + emails for invites/OTP only).
+- Notifications are durable in-app records for recruitment and friend-message events; account data operations also use the encrypted retrying email outbox.
 - Public company self-registration; ownership transfer; org deletion: NOT IMPLEMENTED.
 - Password reset and token refresh/logout revocation: NOT IMPLEMENTED. TOTP 2FA with single-use recovery codes is implemented for login and account settings.
 - RLS policies: none in repo (bypassed by design; dashboard state TO-VERIFY).
-- WS multi-replica fan-out (needs Redis pub/sub per code comment), idempotency keys, periodic cleanup jobs (no beat): NOT IMPLEMENTED.
+- WebSocket chat uses Redis multi-replica fan-out, bounded tickets/rate limits/heartbeats, server acknowledgements, reconnect backoff and persisted-history recovery. Periodic cleanup beyond existing TTLs remains separate operations work.
 - Frontend/backend mismatches M1–M10 (join 410, company PATCH full-payload 422, OAuth key workaround, register RECRUITER rejected, sparse shapes vs rich TS types, unvalidated status strings, legacy `recruiter_id` checks, `updateRequestStatus` admin 403, admin first-page-only, WS token key) — documented, not fixed here.
 
 ---
 
 ## 42 Modules
 
-> TO-VERIFY: no 42 subject file exists in the repository (glob `**/*subject*` empty). The table below reconstructs claims from the previous README + code evidence. Do not present point totals as validated until checked against your actual subject.
+The chosen set below follows the supplied ft_transcendence subject v21.2. The score is implementation/test-supported; evaluators make the final determination. Detailed evidence, gaps and all 55 official choices are in `audit-reports/MODULE_POINTS.md`.
 
-| Module | Claimed | Requirement (assumed) | Implementation | Evidence / files | Status |
-| ------ | ------- | --------------------- | -------------- | ---------------- | ------ |
-| Web Major: Framework front+back | 2 | Next.js + FastAPI | Next 14.2 App Router + FastAPI `:8001` | `apps/web`, `apps/api/app/main.py:17` | Implemented |
-| Web Minor: ORM | 1 | ORM usage | SQLAlchemy 2 async + Alembic (19 versions) | `app/database.py`, `app/models.py`, `alembic/versions/` | Implemented |
-| Web Minor: Advanced search | 1 | Filter/search | Offer filter region/field/type; rec criteria | `routers/offers.py:36`, `services/recommendation_jobs.py:82-89` | Implemented |
-| Web Minor: File upload | 1 | Upload files | Avatar URL + CV upload + company logos | `routers/auth.py:739`, `routers/candidates.py:195`, `routers/companies.py:204` | Implemented |
-| User Major: Standard user mgmt | 2 | Profile + friends + online (assumed) | Profile + avatar done; friends/online NOT FOUND | `routers/candidates.py`, `routers/auth.py` | Partially implemented |
-| User Minor: OAuth 2.0 | 1 | OAuth login | Google/LinkedIn SSO + handoff | `routers/auth.py:252-475`, `oauth-popup.ts` | Implemented |
-| User Major: Advanced permissions | 2 | Roles/permissions | Platform + 5 company roles, `can()` matrix, 404 isolation | `dependencies.py`, `core/permissions.py` | Implemented |
-| AI Major: Recommendation system | 2 | Recommendations | Gemini ranking + fallback + per-offer lifecycle | `services/ai.py:14`, `services/recommendation_jobs.py:23`, `services/match_scoring.py` | Implemented |
-| **Implemented total** | **10** | — | Excludes partial User-mgmt major | — | TO-VERIFY |
-| **Partially implemented** | **2** | User mgmt major (friends/online missing) | Needs `POST /friends`-class scope or replacement module | — | TO-VERIFY |
+| Chosen module | Points | Implemented scope | Primary evidence |
+| --- | ---: | --- | --- |
+| Web — frontend and backend frameworks (major) | 2 | Next.js App Router frontend and FastAPI backend | `apps/web/package.json`, `apps/api/app/main.py` |
+| Web — realtime features (major) | 2 | Cross-process Redis fan-out, short-lived socket tickets, acknowledgements, heartbeats, reconnect/backoff, persisted recovery and stage/relationship revocation | `apps/api/app/services/chat_realtime.py`, `apps/api/app/routers/chat.py`, `apps/web/src/hooks/` |
+| Web — basic user interaction (major) | 2 | Candidate profiles, friend requests/approval/removal, persistent approved-friend chat | `apps/api/app/routers/friends.py`, `apps/api/app/routers/chat.py`, `apps/web/src/app/dashboard/friends/page.tsx` |
+| Web — ORM (minor) | 1 | SQLAlchemy async relational models and Alembic migrations | `apps/api/app/database.py`, `apps/api/app/models.py`, `apps/api/alembic/` |
+| Web — server-side rendering (minor) | 1 | Public category routes fetch and filter offer data on the server and emit category SEO metadata before hydration | `apps/web/src/app/offers/[category]/page.tsx`, `apps/web/src/lib/offer-category.ts` |
+| Web — progressive web app (minor) | 1 | Install manifest, 192/512 icons, registered service worker, versioned static cache and offline navigation fallback | `apps/web/public/manifest.webmanifest`, `apps/web/public/sw.js`, `apps/web/src/app/offline/page.tsx` |
+| Web — custom design system (minor) | 1 | Shared palette, typography, icons and more than10 reusable UI components | `apps/web/src/app/globals.css`, `apps/web/src/components/ui/` |
+| Web — advanced search (minor) | 1 | Discover text/field/region/type filters, match/newest sorting and 9-result pagination | `apps/web/src/lib/discover-search.ts`, `apps/web/src/app/dashboard/recommendations/page.tsx`, `apps/web/tests/discover-search.test.mts` |
+| Web — file upload and management (minor) | 1 | Images plus PDF/DOCX; client/server MIME, extension, signature and size validation; progress, secured storage, preview/download and deletion | `apps/web/src/lib/file-validation.ts`, `apps/api/app/routers/candidates.py`, `apps/web/src/app/dashboard/profile/page.tsx` |
+| User management — standard management/authentication (major) | 2 | Editable/displayed profiles, avatar/default, friends, global multi-tab online status and last-seen display | `apps/web/src/components/candidate/candidate-presence.tsx`, `apps/api/app/services/presence.py`, `apps/api/app/routers/friends.py` |
+| User management — advanced permissions (major) | 2 | Platform user lifecycle plus organization roles and role-specific actions | `apps/api/app/core/permissions.py`, `apps/api/app/routers/admin.py`, `apps/api/app/routers/companies.py` |
+| User management — organization system (major) | 2 | Company create/read/update/archive, employee membership lifecycle and organization-scoped actions | `apps/api/app/routers/companies.py`, `apps/api/app/routers/invitations.py`, `apps/web/src/app/company/` |
+| User management — complete 2FA (minor) | 1 | TOTP enrollment/login challenge, recovery codes and disable flow | `apps/api/app/routers/two_factor.py`, `apps/api/tests/test_two_factor.py`, `apps/web/src/app/dashboard/security/page.tsx` |
+| DevOps — health/status and backup/DR (minor) | 1 | Liveness/readiness probes, public status page, scheduled verified encrypted offsite backups and isolated restore procedure | `apps/api/app/health.py`, `apps/web/src/app/status/page.tsx`, `ansible/roles/coditent/tasks/backups.yml`, `docs/operations/backup-restore-rollback.md` |
+| Data — export/import (minor) | 1 | JSON/CSV/XML export, validated JSON profile import and atomic multi-field bulk update | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/web/src/components/security/account-data-controls.tsx` |
+| Data — GDPR features (minor) | 1 | Authenticated readable export, confirmed/cancelable erasure and durable confirmation emails for data operations | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/api/tests/test_account_data_lifecycle.py` |
+| **Completed raw module total** | **22** | Eight raw points above the 14-point minimum | `audit-reports/MODULE_POINTS.md`, `audit-reports/TEST_RESULTS.md` |
+| **Official counted score** | **19 / 19** | The subject counts at most five bonus points above 14 | `audit-reports/MODULE_POINTS.md` |
 
-Previous README claimed 12 pts including the full User-mgmt major "needs friends+online to validate (add `POST /friends`)". Code shows no friends/online system, so validated-from-code total is **10 implemented + 2 partial**. If your subject allows substituting Analytics (candidate `overall_score`/`validated_skills` + admin stats exist as partial evidence) or Public API key modules, confirm against the subject before claiming.
+User and organization deletion are implemented as retention-safe logical deactivation/archive. Present that design and retained-history behavior clearly during evaluation. The repository now contains 22 raw implementation/test-supported points, giving a three-point buffer above the official 19-point counted cap. Demonstrate two-client realtime delivery/reconnect, PWA offline/install behavior, actual object-storage backup/restore, and configured email delivery during evaluation; local checks do not fabricate external-provider success.
 
 ---
 

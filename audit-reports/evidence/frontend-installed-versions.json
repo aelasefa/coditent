@@ -1,0 +1,80 @@
+[
+  {
+    "name": "next",
+    "declared": "16.3.8",
+    "installed": "14.2.32",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/next@14.2.32_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/package.json"
+  },
+  {
+    "name": "react",
+    "declared": "19.3.0",
+    "installed": "18.3.1",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/react@18.3.1/node_modules/react/package.json"
+  },
+  {
+    "name": "react-dom",
+    "declared": "19.3.0",
+    "installed": "18.3.1",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/package.json"
+  },
+  {
+    "name": "eslint",
+    "declared": "9.39.5",
+    "installed": "8.57.1",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/eslint@8.57.1/node_modules/eslint/package.json"
+  },
+  {
+    "name": "eslint-config-next",
+    "declared": "16.3.8",
+    "installed": "14.2.32",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/eslint-config-next@14.2.32_eslint@8.57.1_typescript@5.9.3/node_modules/eslint-config-next/package.json"
+  },
+  {
+    "name": "axios",
+    "declared": "1.20.0",
+    "installed": "1.14.0",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/axios@1.14.0/node_modules/axios/package.json"
+  },
+  {
+    "name": "tailwindcss",
+    "declared": "3.4.19",
+    "installed": "3.4.17",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss/package.json"
+  },
+  {
+    "name": "typescript",
+    "declared": "5.9.3",
+    "installed": "5.9.3",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/package.json"
+  },
+  {
+    "name": "@types/react",
+    "declared": "19.3.0",
+    "installed": "18.3.12",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/@types+react@18.3.12/node_modules/@types/react/package.json"
+  },
+  {
+    "name": "@types/react-dom",
+    "declared": "19.3.0",
+    "installed": "18.3.1",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/@types+react-dom@18.3.1/node_modules/@types/react-dom/package.json"
+  },
+  {
+    "name": "@supabase/ssr",
+    "declared": "^0.12.5",
+    "installed": "0.12.6",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/@supabase+ssr@0.12.6_@supabase+supabase-js@2.115.0/node_modules/@supabase/ssr/package.json"
+  },
+  {
+    "name": "@supabase/supabase-js",
+    "declared": "^2.112.4",
+    "installed": "2.115.0",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/@supabase+supabase-js@2.115.0/node_modules/@supabase/supabase-js/package.json"
+  },
+  {
+    "name": "@tanstack/react-query",
+    "declared": "^5.96.2",
+    "installed": "5.96.2",
+    "path": "/home/maelmahf/Desktop/coditent/node_modules/.pnpm/@tanstack+react-query@5.96.2_react@18.3.1/node_modules/@tanstack/react-query/package.json"
+  }
+]

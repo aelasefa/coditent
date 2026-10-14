@@ -5,38 +5,50 @@ import { createRecruitmentSocketTicket, getRecruitmentWsUrl } from "@/lib/api";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type { ChatMessage } from "@/lib/types";
 
-type SocketFrame =
-  | { type: "message_send"; content: string }
-  | { type: "messages_read" }
-  | { type: "pong" };
-
 type IncomingFrame = {
   type?: string;
+  detail?: string;
+  client_message_id?: string;
   message?: ChatMessage;
   message_ids?: string[];
   read_at?: string;
 };
 
-type UseRecruitmentChatSocketOptions = {
-  applicationId: string;
-  onMessage: (message: ChatMessage) => void;
-  onMessagesRead: (messageIds: string[], readAt: string) => void;
+type PendingSend = {
+  resolve: (message: ChatMessage) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 };
+
+const ACK_TIMEOUT_MS = 10_000;
+const MAX_RECONNECT_MS = 15_000;
 
 export function useRecruitmentChatSocket({
   applicationId,
   onMessage,
   onMessagesRead,
-}: UseRecruitmentChatSocketOptions) {
+  onReady,
+}: {
+  applicationId: string;
+  onMessage: (message: ChatMessage) => void;
+  onMessagesRead: (messageIds: string[], readAt: string) => void;
+  onReady?: () => void;
+}) {
   const [live, setLive] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
-  const onMessageRef = useRef(onMessage);
-  const onMessagesReadRef = useRef(onMessagesRead);
+  const pendingRef = useRef(new Map<string, PendingSend>());
+  const handlers = useRef({ onMessage, onMessagesRead, onReady });
+  handlers.current = { onMessage, onMessagesRead, onReady };
 
-  onMessageRef.current = onMessage;
-  onMessagesReadRef.current = onMessagesRead;
+  const rejectPending = useCallback((reason: string) => {
+    for (const pending of pendingRef.current.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(reason));
+    }
+    pendingRef.current.clear();
+  }, []);
 
-  const sendFrame = useCallback((frame: SocketFrame): boolean => {
+  const sendFrame = useCallback((frame: object): boolean => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return false;
     try {
@@ -47,86 +59,104 @@ export function useRecruitmentChatSocket({
     }
   }, []);
 
-  const sendMessage = useCallback((content: string): boolean => {
-    return sendFrame({ type: "message_send", content });
+  const sendMessage = useCallback((content: string): Promise<ChatMessage> | null => {
+    const clientMessageId = crypto.randomUUID();
+    if (!sendFrame({ type: "message_send", content, client_message_id: clientMessageId })) return null;
+    return new Promise<ChatMessage>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingRef.current.delete(clientMessageId);
+        reject(new Error("Realtime message acknowledgement timed out"));
+      }, ACK_TIMEOUT_MS);
+      pendingRef.current.set(clientMessageId, { resolve, reject, timer });
+    });
   }, [sendFrame]);
 
-  const markMessagesRead = useCallback((): boolean => {
-    return sendFrame({ type: "messages_read" });
-  }, [sendFrame]);
+  const markMessagesRead = useCallback(() => sendFrame({ type: "messages_read" }), [sendFrame]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !localStorage.getItem(AUTH_TOKEN_KEY)) return;
-    let closed = false;
+    if (!localStorage.getItem(AUTH_TOKEN_KEY)) return;
+    let disposed = false;
     let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempt = 0;
+
+    const scheduleReconnect = () => {
+      if (disposed || retryTimer || !navigator.onLine) return;
+      const delay = Math.min(MAX_RECONNECT_MS, 500 * 2 ** reconnectAttempt) + Math.floor(Math.random() * 250);
+      reconnectAttempt += 1;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        void connect();
+      }, delay);
+    };
 
     async function connect() {
-      let safeSocketEndpoint = "recruitment chat endpoint";
+      if (disposed || !navigator.onLine) return;
       try {
         const { ticket } = await createRecruitmentSocketTicket(applicationId);
-        if (closed) return;
-        const socketUrl = getRecruitmentWsUrl(applicationId, ticket);
-        const parsed = new URL(socketUrl);
-        safeSocketEndpoint = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
-        socket = new WebSocket(socketUrl);
+        if (disposed) return;
+        socket = new WebSocket(getRecruitmentWsUrl(applicationId, ticket));
         socketRef.current = socket;
-
-        socket.onopen = () => {
-          if (!closed) setLive(true);
-        };
         socket.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data as string) as IncomingFrame;
-            if (payload.type === "ping") {
-              try {
-                socket?.send(JSON.stringify({ type: "pong" } satisfies SocketFrame));
-              } catch {
-                socket?.close();
+            if (payload.type === "ready") {
+              reconnectAttempt = 0;
+              setLive(true);
+              handlers.current.onReady?.();
+            } else if (payload.type === "ping") {
+              if (!sendFrame({ type: "pong" })) socket?.close();
+            } else if (payload.type === "message" && payload.message) {
+              handlers.current.onMessage(payload.message);
+            } else if (payload.type === "message_ack" && payload.message && payload.client_message_id) {
+              handlers.current.onMessage(payload.message);
+              const pending = pendingRef.current.get(payload.client_message_id);
+              if (pending) {
+                clearTimeout(pending.timer);
+                pendingRef.current.delete(payload.client_message_id);
+                pending.resolve(payload.message);
               }
-              return;
-            }
-            if (payload.type === "message" && payload.message) {
-              onMessageRef.current(payload.message);
-              return;
-            }
-            if (payload.type === "messages_read" && payload.message_ids?.length && payload.read_at) {
-              onMessagesReadRef.current(payload.message_ids, payload.read_at);
+            } else if (payload.type === "messages_read" && payload.message_ids?.length && payload.read_at) {
+              handlers.current.onMessagesRead(payload.message_ids, payload.read_at);
+            } else if (payload.type === "conversation_state") {
+              handlers.current.onReady?.();
+            } else if (payload.type === "error" && payload.client_message_id) {
+              const pending = pendingRef.current.get(payload.client_message_id);
+              if (pending) {
+                clearTimeout(pending.timer);
+                pendingRef.current.delete(payload.client_message_id);
+                pending.reject(new Error(payload.detail || "Realtime message was rejected"));
+              }
             }
           } catch {
-            /* Ignore malformed frames and keep the conversation connected. */
+            // A malformed remote frame cannot alter local state.
           }
         };
-        socket.onclose = () => {
-          if (!closed) setLive(false);
-        };
-        socket.onerror = (error) => {
-          console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
-          try {
-            socket?.close();
-          } catch {
-            /* noop */
-          }
-        };
-      } catch (error) {
-        if (!closed) {
+        socket.onclose = (event) => {
+          if (socketRef.current === socket) socketRef.current = null;
           setLive(false);
-          console.error("[RecruitmentChat] WebSocket connection failed", safeSocketEndpoint, error);
-        }
+          rejectPending("Realtime connection closed before acknowledgement");
+          if (![4401, 4403, 4429].includes(event.code)) scheduleReconnect();
+        };
+        socket.onerror = () => socket?.close();
+      } catch {
+        setLive(false);
+        scheduleReconnect();
       }
     }
 
+    const reconnectOnline = () => { reconnectAttempt = 0; void connect(); };
+    window.addEventListener("online", reconnectOnline);
     void connect();
-
     return () => {
-      closed = true;
-      try {
-        socket?.close();
-      } catch {
-        /* noop */
-      }
+      disposed = true;
+      window.removeEventListener("online", reconnectOnline);
+      if (retryTimer) clearTimeout(retryTimer);
+      rejectPending("Conversation closed");
+      socket?.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [applicationId]);
+  }, [applicationId, rejectPending, sendFrame]);
 
   return { live, markMessagesRead, sendMessage };
 }

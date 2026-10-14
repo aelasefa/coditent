@@ -28,7 +28,13 @@ from app.services.friendships import (
     relationship_state,
 )
 from app.services.notifications import create_notification
-from app.services.presence import is_online, presence_map, safe_last_seen, touch_presence
+from app.services.presence import (
+    is_online,
+    presence_map,
+    remove_presence,
+    safe_last_seen,
+    touch_presence,
+)
 
 
 router = APIRouter()
@@ -317,6 +323,15 @@ async def presence_heartbeat(
     current_user.last_seen = datetime.utcnow()
     await db.commit()
     await touch_presence(current_user.id, f"http:{data.connection_id}")
+
+
+@router.delete("/presence", status_code=status.HTTP_204_NO_CONTENT)
+async def presence_disconnect(
+    data: PresenceHeartbeatIn,
+    current_user: Annotated[User, Depends(require_candidate_account)],
+) -> None:
+    """Remove only this browser tab while preserving other active tabs."""
+    await remove_presence(current_user.id, f"http:{data.connection_id}")
 
 
 @router.get("/presence/{candidate_id}", response_model=PresenceOut)

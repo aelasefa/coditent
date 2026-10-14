@@ -12,6 +12,8 @@ DATABASE_URL='<managed-postgresql-url>' scripts/database-backup.sh /secure/backu
 
 The result is a PostgreSQL custom-format archive plus a SHA-256 checksum. Store both in encrypted, access-controlled object storage with retention and immutability appropriate to the environment. This database archive does not include Supabase Storage objects; enable provider bucket versioning/backup separately for `candidate-cvs`, `company-logos`, and `user-avatars`.
 
+Production provisioning installs `/usr/local/sbin/coditent-backup` and a root-only daily cron entry when `BACKUP_S3_URI` is configured. The runner creates and verifies the custom archive, uploads the archive and checksum with server-side encryption, and removes its temporary local copy. Use an instance role restricted to the configured prefix. Enable bucket versioning, object lock, and a lifecycle policy that retains daily copies for 35 days and monthly copies for 12 months. Monitor `/var/log/coditent-backup.log` and alert when no new object appears within 26 hours.
+
 ## Restore drill
 
 Restore only into a newly created, isolated target. The explicit confirmation variable prevents accidental execution:
@@ -23,6 +25,8 @@ scripts/database-restore.sh /secure/backups/coditent-YYYYMMDDTHHMMSSZ.dump
 ```
 
 Then point a disposable API instance at the restored target with `APP_ENV=test`, run `alembic current`, `/ready`, and the critical candidate-to-hire smoke test. `scripts/test-backup-restore.sh` performs an automated marker-table round trip against two disposable databases and is run in CI.
+
+Run the restore drill after each PostgreSQL major upgrade and at least monthly against a new isolated database. Record the object key, checksum result, recovery point, recovery duration, migration revision, and operator. Never restore over the live database.
 
 ## Migration-compatible rollback
 

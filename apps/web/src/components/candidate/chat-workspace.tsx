@@ -36,7 +36,12 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
   const identity = chatWorkspaceIdentity(me?.role);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
-  const inboxQuery = useQuery({ queryKey: ["conversation-inbox"], queryFn: getCombinedInbox });
+  const inboxQuery = useQuery({
+    queryKey: ["conversation-inbox"],
+    queryFn: getCombinedInbox,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
   const loading = inboxQuery.isLoading;
   const error = inboxQuery.isError;
 

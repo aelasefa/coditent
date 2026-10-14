@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
 import { resolveAssetUrl } from "@/lib/asset-url";
+import { validateManagedFile, validateManagedFileMetadata } from "@/lib/file-validation";
 
 import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
@@ -243,6 +244,8 @@ export async function getMe(): Promise<User> {
 }
 
 export async function uploadAvatar(file: File, onProgress?: (percent: number) => void): Promise<User> {
+  const validationError = await validateManagedFile(file, "avatar");
+  if (validationError) throw new Error(validationError);
   const formData = new FormData();
   formData.append("file", file, file.name);
   const { data } = await api.post<User>("/auth/me/avatar", formData, {
@@ -342,6 +345,8 @@ export async function uploadCV(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<import("@/lib/types").CVMeta> {
+  const validationError = await validateManagedFile(file, "cv");
+  if (validationError) throw new Error(validationError);
   const form = new FormData();
   form.append("file", file);
   const { data } = await api.post<import("@/lib/types").CVMeta>("/candidates/cv", form, {
@@ -371,6 +376,10 @@ export async function deleteCV(): Promise<void> {
 
 export function getCVDownloadUrl(): string {
   return `${getApiBaseUrl()}/candidates/cv`;
+}
+
+export function getCVPreviewUrl(): string {
+  return `${getApiBaseUrl()}/candidates/cv?preview=true`;
 }
 
 export async function getOffers(): Promise<Offer[]> {
@@ -795,6 +804,23 @@ export async function sendPresenceHeartbeat(connectionId: string): Promise<void>
   await api.post("/friends/presence/heartbeat", { connection_id: connectionId });
 }
 
+const PRESENCE_CONNECTION_KEY = "coditent_presence_connection";
+
+export function getPresenceConnectionId(): string {
+  if (typeof window === "undefined") return "server-render";
+  const existing = window.sessionStorage.getItem(PRESENCE_CONNECTION_KEY);
+  if (existing) return existing;
+  const connectionId = window.crypto.randomUUID();
+  window.sessionStorage.setItem(PRESENCE_CONNECTION_KEY, connectionId);
+  return connectionId;
+}
+
+export async function endPresence(connectionId: string): Promise<void> {
+  await api.delete("/friends/presence", {
+    data: { connection_id: connectionId },
+  });
+}
+
 export async function listMissions(filters?: { field?: string; level?: string }): Promise<import("@/lib/types").PracticeMission[]> {
   const { data } = await api.get<{ missions: import("@/lib/types").PracticeMission[] }>("/missions", { params: filters });
   return data.missions;
@@ -868,16 +894,9 @@ export async function updateAdminCompanySubscription(
 }
 
 export const COMPANY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
-const COMPANY_LOGO_EXTENSIONS = ["png", "jpg", "jpeg", "webp"] as const;
 
 export function validateCompanyLogoFile(file: File): string | null {
-  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
-  if (!(COMPANY_LOGO_EXTENSIONS as readonly string[]).includes(ext)) {
-    return "Invalid file type. Only PNG, JPG, and WebP are supported.";
-  }
-  if (file.size <= 0) return "Empty file.";
-  if (file.size > COMPANY_LOGO_MAX_BYTES) return "File too large. Maximum size is 2MB.";
-  return null;
+  return validateManagedFileMetadata(file, "logo");
 }
 
 /** Public stream URL for a company logo. Null when the company has no logo (caller shows initials). */
@@ -900,7 +919,7 @@ export async function uploadCompanyLogo(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<{ logo_url: string; filename?: string | null; content_type?: string | null; size_bytes?: number | null }> {
-  const validationError = validateCompanyLogoFile(file);
+  const validationError = await validateManagedFile(file, "logo");
   if (validationError) throw new Error(validationError);
   const formData = new FormData();
   formData.append("file", file, file.name);
@@ -1101,9 +1120,18 @@ export async function updateInterviewFeedback(
   return data;
 }
 
-export async function downloadAccountData(payload: { current_password: string; two_factor_code?: string }): Promise<Blob> {
+export async function downloadAccountData(payload: { current_password: string; two_factor_code?: string; format: "json" | "csv" | "xml" }): Promise<Blob> {
   const response = await api.post("/auth/account/data-export", payload, { responseType: "blob" });
   return response.data as Blob;
+}
+
+export async function importAccountData(payload: {
+  current_password: string;
+  two_factor_code?: string;
+  profile: Record<string, unknown>;
+}): Promise<{ updated_fields: string[]; detail: string }> {
+  const { data } = await api.post<{ updated_fields: string[]; detail: string }>("/auth/account/data-import", payload);
+  return data;
 }
 
 export async function getAccountDeletion(): Promise<import("@/lib/types").AccountDeletionRequest | null> {

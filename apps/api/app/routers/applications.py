@@ -593,6 +593,14 @@ async def update_application_status(
             resource_id=app.id,
             details=new_status,
         )
+    from app.routers.chat import broadcast_recruitment_state
+
+    await broadcast_recruitment_state(
+        str(app.id),
+        status=app.status,
+        stage_version=app.stage_version,
+        chat_enabled=is_chat_enabled_for_status(app.status),
+    )
     return ApplicationStatusOut(
         id=app.id,
         status=app.status,

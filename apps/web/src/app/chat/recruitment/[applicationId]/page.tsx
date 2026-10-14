@@ -53,6 +53,10 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
     applicationId,
     onMessage: handleRealtimeMessage,
     onMessagesRead: handleMessagesRead,
+    onReady: () => {
+      void qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
+    },
   });
 
   const chatQuery = useQuery({
@@ -109,11 +113,12 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
 
   const sendMut = useMutation({
     mutationFn: async (text: string) => {
-      if (ctx?.chat_enabled && sendRealtimeMessage(text)) return null;
+      const realtime = ctx?.chat_enabled ? sendRealtimeMessage(text) : null;
+      if (realtime) return realtime;
       return sendRecruitmentMessage(applicationId, text);
     },
     onSuccess: (created) => {
-      if (created) qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      handleRealtimeMessage(created);
       qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
       qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
@@ -199,7 +204,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
             <Composer
               peerName={peerName}
               pending={sendMut.isPending}
-              onSend={(text) => sendMut.mutate(text)}
+              onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)}
             />
           </>
         )}
