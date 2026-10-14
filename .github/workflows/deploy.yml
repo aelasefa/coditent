@@ -59,6 +59,9 @@ jobs:
       - name: Type-check source
         run: npx tsc --noEmit
 
+      - name: Test frontend regressions
+        run: node --test --experimental-strip-types tests/*.test.mts tests/*.test.mjs
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
@@ -121,6 +124,7 @@ jobs:
           from cryptography.fernet import Fernet
           print(f"CI_JWT_SECRET={secrets.token_urlsafe(48)}")
           print(f"CI_TOTP_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
+          print(f"CI_EMAIL_OUTBOX_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
           PY
 
       - name: Sanity check imports (Supabase-only, no local DB)
@@ -128,6 +132,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
+          EMAIL_OUTBOX_ENCRYPTION_KEY: ${{ env.CI_EMAIL_OUTBOX_ENCRYPTION_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6380/0' }}
           FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
@@ -140,6 +145,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
+          EMAIL_OUTBOX_ENCRYPTION_KEY: ${{ env.CI_EMAIL_OUTBOX_ENCRYPTION_KEY }}
           GEMINI_API_KEY: ci-placeholder
           REDIS_URL: redis://localhost:6379/0
           FRONTEND_URL: http://localhost:3000
@@ -159,12 +165,16 @@ jobs:
             tests/test_database_url.py \
             tests/test_email_otp.py \
             tests/test_email_outbox.py \
+            tests/test_friend_presence.py \
+            tests/test_friendships.py \
             tests/test_entitlements.py \
             tests/test_health_readiness.py \
             tests/test_institutions.py \
             tests/test_interview_feedback.py \
             tests/test_invitation_routes_unit.py \
             tests/test_match_scoring.py \
+            tests/test_migration_revision_recovery.py \
+            tests/test_login_account_type.py \
             tests/test_oauth_popup.py \
             tests/test_observability.py \
             tests/test_passwords.py \
@@ -181,7 +191,7 @@ jobs:
             tests/test_upload_limits.py \
             tests/test_upload_routes.py
           do
-            pytest -q "$test_file"
+            python -m pytest -q "$test_file"
           done
 
       - name: Prove backup and restore against disposable PostgreSQL

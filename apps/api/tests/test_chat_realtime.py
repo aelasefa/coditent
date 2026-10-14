@@ -5,6 +5,7 @@ from collections import defaultdict
 
 import pytest
 
+from app.routers import chat
 from app.services.chat_realtime import RedisChatBroker
 
 
@@ -103,3 +104,30 @@ def test_broker_rejects_wrong_room_and_oversized_payloads() -> None:
     wrong_room = '{"v":1,"origin":"api-b","room":"other","event":{"type":"message"}}'
     assert broker._decode_remote_event("expected", wrong_room) is None
     assert broker._decode_remote_event("expected", "x" * (64 * 1024 + 1)) is None
+
+
+@pytest.mark.asyncio
+async def test_stage_changes_publish_conversation_state(monkeypatch) -> None:
+    delivered: list[tuple[str, dict]] = []
+
+    async def capture(application_id: str, payload: dict, **_: object) -> None:
+        delivered.append((application_id, payload))
+
+    monkeypatch.setattr(chat, "_broadcast_recruitment_event", capture)
+    await chat.broadcast_recruitment_state(
+        "application-id",
+        status="rejected",
+        stage_version=4,
+        chat_enabled=False,
+    )
+    assert delivered == [
+        (
+            "application-id",
+            {
+                "type": "conversation_state",
+                "status": "rejected",
+                "stage_version": 4,
+                "chat_enabled": False,
+            },
+        )
+    ]

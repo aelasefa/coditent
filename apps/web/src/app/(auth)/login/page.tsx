@@ -9,6 +9,7 @@ import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { login, verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
@@ -36,21 +37,17 @@ function LoginInner() {
   const [mfaCode, setMfaCode] = useState("");
 
   async function finishLogin(data: TokenResponse) {
-    if (data.trusted_device_token) saveTrustedDevice(data.trusted_device_token);
-    const nextPath = safeNext(searchParams.get("next"));
-    if (data.user.role === "PLATFORM_ADMIN" || data.user.role === "ADMIN") {
-      saveToken(data.token); router.push(nextPath ?? "/admin"); return;
-    }
-    if (data.user.role === "COMPANY_USER") {
-      saveToken(data.token); router.push(nextPath ?? "/company"); return;
-    }
-    const expectedRole = activeRole === "candidate" ? "CANDIDATE" : "RECRUITER";
-    if (data.user.role !== expectedRole) {
+    const roleMatches = activeRole === "candidate"
+      ? data.user.role === "CANDIDATE"
+      : data.user.role === "RECRUITER" || data.user.role === "COMPANY_USER";
+    if (!roleMatches) {
       setErrorMessage(activeRole === "candidate"
         ? "This account is registered as a Recruiter. Use the Recruiter tab to sign in."
         : "This account is registered as a Candidate. Use the Candidate tab to sign in.");
       return;
     }
+    if (data.trusted_device_token) saveTrustedDevice(data.trusted_device_token);
+    const nextPath = safeNext(searchParams.get("next"));
     saveToken(data.token);
     router.push(await getPostAuthDestination(queryClient, data.user, { next: nextPath }));
   }
@@ -61,7 +58,7 @@ function LoginInner() {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const data = await login({ email, password });
+      const data = await login({ email, password, account_type: activeRole });
       if ("require_2fa" in data) {
         setMfaToken(data.mfa_token);
         setMfaCode("");
@@ -72,7 +69,9 @@ function LoginInner() {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const detail = String(error.response?.data?.detail ?? "").toLowerCase();
-        if (status === 400 || status === 401 || detail.includes("invalid")) {
+        if (status === 403 && detail.startsWith("this account")) {
+          setErrorMessage(String(error.response?.data?.detail));
+        } else if (status === 400 || status === 401 || detail.includes("invalid")) {
           setErrorMessage("Invalid email or password.");
         } else if (!error.response) {
           setErrorMessage("Cannot reach server. Check connection and try again.");
@@ -152,6 +151,7 @@ function LoginInner() {
                       key={r}
                       type="button"
                       role="tab"
+                      disabled={isSubmitting}
                       aria-selected={activeRole === r}
                       onClick={() => {
                         setActiveRole(r);
@@ -236,6 +236,7 @@ function LoginInner() {
                     <p className={styles.registerPrompt}>Company team accounts are created through an invitation.</p>
                   ) : null}
                 </form>}
+                <LegalLinks className="mt-6" />
               </div>
             </div>
           </section>

@@ -70,13 +70,14 @@ def create_mfa_token(
     subject: str,
     *,
     auth_version: int = 0,
+    account_type: str | None = None,
     expires_delta: timedelta = timedelta(minutes=5),
 ) -> str:
     return _new_token(
         subject=subject,
         purpose=MFA_TOKEN_PURPOSE,
         expires_delta=expires_delta,
-        claims={"auth_version": auth_version},
+        claims={"auth_version": auth_version, **({"account_type": account_type} if account_type is not None else {})},
     )
 
 

@@ -86,6 +86,5 @@ export const companyNavItems: NavItem[] = [
   { label: "Jobs", href: "/company/jobs", icon: FiBriefcase, match: "prefix" },
   { label: "Candidates", href: "/company/candidates", icon: FiUsers, match: "prefix" },
   { label: "Messages", href: "/company/messages", icon: FiMessageSquare, match: "prefix" },
-  { label: "Alerts", href: "/company/notifications", icon: FiBell, match: "prefix" },
   { label: "Team", href: "/company/team", icon: FiUser, match: "prefix" },
 ];

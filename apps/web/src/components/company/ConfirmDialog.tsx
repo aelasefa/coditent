@@ -9,7 +9,7 @@ interface ConfirmDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   isLoading?: boolean;
@@ -32,7 +32,7 @@ export function ConfirmDialog({
       isOpen={isOpen}
       onClose={onClose}
       title={title}
-      maxWidth="sm"
+      maxWidth="md"
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
@@ -44,13 +44,13 @@ export function ConfirmDialog({
         </>
       }
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3.5">
         {isDestructive && (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-danger/30 bg-danger-background text-danger" aria-hidden>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-danger/30 bg-danger-background text-danger" aria-hidden>
             <FiAlertTriangle className="h-5 w-5" />
           </span>
         )}
-        <p className="pt-0.5 text-[13px] leading-relaxed text-foreground-secondary">{message}</p>
+        <div className="min-w-0 flex-1 pt-0.5 text-sm leading-relaxed text-foreground-secondary">{message}</div>
       </div>
     </Modal>
   );

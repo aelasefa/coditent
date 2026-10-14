@@ -1,0 +1,53 @@
+[
+  {
+    "route": "/",
+    "status": 200,
+    "bytes": 45841,
+    "content_type": "text/html; charset=utf-8",
+    "h1": [
+      "Your career is more than a <em>CV.</em>"
+    ],
+    "privacy_link": false,
+    "terms_link": false,
+    "cache_control": "s-maxage=86400, stale-while-revalidate=31449600",
+    "x_nextjs_cache": "HIT"
+  },
+  {
+    "route": "/privacy",
+    "status": 200,
+    "bytes": 11995,
+    "content_type": "text/html; charset=utf-8",
+    "h1": [
+      "Privacy Policy"
+    ],
+    "privacy_link": false,
+    "terms_link": false,
+    "cache_control": "s-maxage=31536000",
+    "x_nextjs_cache": "HIT"
+  },
+  {
+    "route": "/terms",
+    "status": 200,
+    "bytes": 11397,
+    "content_type": "text/html; charset=utf-8",
+    "h1": [
+      "Terms of Service"
+    ],
+    "privacy_link": false,
+    "terms_link": false,
+    "cache_control": "s-maxage=31536000",
+    "x_nextjs_cache": "HIT"
+  },
+  {
+    "route": "/friends",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "route": "/messages",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "route": "/offers",
+    "error": "HTTP Error 404: Not Found"
+  }
+]

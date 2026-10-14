@@ -4,7 +4,8 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FiArrowUpRight, FiBriefcase, FiMessageCircle, FiSearch, FiX } from "react-icons/fi";
-import { getCombinedInbox } from "@/lib/api";
+import { getCombinedInbox, getMe } from "@/lib/api";
+import { chatWorkspaceIdentity } from "@/lib/chat-workspace-identity";
 import { filterInbox, mapCombinedInbox, type InboxFilter as Filter, type InboxItem as Conversation } from "@/lib/friend-ui";
 import { stageLabel } from "@/components/candidate/application-stage";
 import { PageContainer } from "@/components/shell/page-container";
@@ -31,9 +32,16 @@ function dateLabel(iso?: string | null): string {
 }
 
 function ChatInbox({ activeHref }: { activeHref?: string }) {
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
+  const identity = chatWorkspaceIdentity(me?.role);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
-  const inboxQuery = useQuery({ queryKey: ["conversation-inbox"], queryFn: getCombinedInbox });
+  const inboxQuery = useQuery({
+    queryKey: ["conversation-inbox"],
+    queryFn: getCombinedInbox,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
   const loading = inboxQuery.isLoading;
   const error = inboxQuery.isError;
 
@@ -77,8 +85,8 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
           <div className={styles.inboxNotice}>
             <FiMessageCircle aria-hidden="true" />
             <strong>No conversations yet</strong>
-            <p>Friend and recruitment conversations will appear here.</p>
-            <Link href="/dashboard/friends">Find candidates <FiArrowUpRight aria-hidden="true" /></Link>
+            <p>{identity.isCompany ? "Recruitment conversations will appear here." : "Friend and recruitment conversations will appear here."}</p>
+            <Link href={identity.findPeopleHref}>Find candidates <FiArrowUpRight aria-hidden="true" /></Link>
           </div>
         ) : visible.length === 0 ? (
           <div className={styles.inboxNotice} role="status">
@@ -113,6 +121,8 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
 }
 
 export function ChatWorkspace({ activeHref, profile, children }: { activeHref?: string; profile?: ChatParticipantProfile | null; children?: React.ReactNode }) {
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
+  const identity = chatWorkspaceIdentity(me?.role);
   // Scope the disclosure to a participant and conversation, including client-side route changes.
   const profileKey = activeHref && profile ? `${activeHref}:${profile.id}` : null;
   const [openProfileKey, setOpenProfileKey] = useState<string | null>(null);
@@ -170,7 +180,7 @@ export function ChatWorkspace({ activeHref, profile, children }: { activeHref?: 
     <ChatProfileContext.Provider value={profileControl}>
     <PageContainer variant="wide" className={styles.page}>
       <div className={styles.pageHeading}>
-        <div><span className={styles.eyebrow}>Career conversations</span><h1>Messages</h1><p>Keep friend and application conversations in one place.</p></div>
+        <div><span className={styles.eyebrow}>{identity.isCompany ? "Recruitment conversations" : "Career conversations"}</span><h1>Messages</h1><p>{identity.conversationDescription}</p></div>
       </div>
       <div className={`${styles.workspace} ${activeHref ? styles.workspaceWithThread : ""} ${profileOpen ? styles.workspaceWithProfile : ""}`}>
         <ChatInbox activeHref={activeHref} />
@@ -179,8 +189,8 @@ export function ChatWorkspace({ activeHref, profile, children }: { activeHref?: 
             <div className={styles.welcomeMark}><FiBriefcase aria-hidden="true" /></div>
             <span className={styles.eyebrow}>Stay connected</span>
             <h2>Your next conversation starts here.</h2>
-            <p>Choose a friend or recruitment conversation to continue where you left off.</p>
-            <Link href="/dashboard/friends">Find candidates <FiArrowUpRight aria-hidden="true" /></Link>
+            <p>{identity.isCompany ? "Choose a recruitment conversation to continue where you left off." : "Choose a friend or recruitment conversation to continue where you left off."}</p>
+            <Link href={identity.findPeopleHref}>Find candidates <FiArrowUpRight aria-hidden="true" /></Link>
           </div>}
         </section>
         {profile ? (

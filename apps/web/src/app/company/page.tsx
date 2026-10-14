@@ -5,7 +5,6 @@ import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/company/AppShell";
-import { PageHeader } from "@/components/company/PageHeader";
 import { StatCard } from "@/components/company/StatCard";
 import { StatusBadge } from "@/components/company/StatusBadge";
 import { EmptyState } from "@/components/company/EmptyState";
@@ -85,13 +84,28 @@ export default function CompanyDashboard() {
   return (
     <AppShell>
       <div className="space-y-8">
-        <div className="company-dashboard-welcome">
-          <Image src="/images/company/recruiting-network-hero.png" alt="" aria-hidden fill priority quality={55} decoding="async" className="company-dashboard-artwork" sizes="(max-width: 639px) 100vw, (max-width: 1023px) 768px, 1200px" />
-          <p className="company-hero-eyebrow">Your hiring workspace</p>
-          <PageHeader
-            title={`${timeGreeting}, ${me?.full_name?.split(" ")[0] || "Recruiter"}`}
-            subtitle={`Welcome to the ${company?.name || "company"} workspace. What needs attention today.`}
+        <div className="company-dashboard-welcome flex min-h-[19rem] flex-col justify-center p-8 sm:p-10">
+          <Image
+            src="/images/company/recruiting-network-hero.png"
+            alt=""
+            aria-hidden
+            fill
+            priority
+            quality={55}
+            decoding="async"
+            className="company-dashboard-artwork pointer-events-none"
+            sizes="(max-width: 639px) 100vw, (max-width: 1023px) 768px, 1200px"
           />
+          <div className="relative z-10 max-w-lg">
+            <p className="company-hero-eyebrow">Your hiring workspace</p>
+            <h1 className="ct-page-title">
+              <span className="block">{timeGreeting},</span>
+              <span className="block">{me?.full_name?.split(" ")[0] || "Recruiter"}</span>
+            </h1>
+            <p className="mt-2.5 max-w-md text-sm leading-relaxed text-[#f0f5eb]">
+              Welcome to the {company?.name || "company"} workspace. What needs attention today.
+            </p>
+          </div>
         </div>
 
         <section aria-label="Needs attention">

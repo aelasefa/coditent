@@ -61,6 +61,8 @@ class ResendVerificationRequest(APIModel):
 class LoginRequest(APIModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    # Existing API clients may omit this; the tabbed website always supplies it.
+    account_type: Literal["candidate", "recruiter"] | None = None
     trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
@@ -99,6 +101,8 @@ class OAuthHandoffExchangeResponse(TokenResponse):
 
 
 class ProfileUpdate(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
     city: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, max_length=30)
     headline: str | None = Field(default=None, max_length=120)
@@ -175,6 +179,23 @@ class PasswordChangeRequest(SensitiveAccountRequest):
 
 class AccountDataExportRequest(SensitiveAccountRequest):
     model_config = ConfigDict(extra="forbid")
+    format: Literal["json", "csv", "xml"] = "json"
+
+
+class AccountDataImportRequest(SensitiveAccountRequest):
+    model_config = ConfigDict(extra="forbid")
+    profile: ProfileUpdate
+
+    @model_validator(mode="after")
+    def require_profile_fields(self) -> "AccountDataImportRequest":
+        if not self.profile.model_fields_set:
+            raise ValueError("At least one profile field is required")
+        return self
+
+
+class AccountDataImportOut(APIModel):
+    updated_fields: list[str]
+    detail: str
 
 
 class AccountDeletionCreate(SensitiveAccountRequest):

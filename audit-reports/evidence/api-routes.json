@@ -1,0 +1,1157 @@
+[
+  {
+    "file": "apps/api/app/main.py",
+    "line": 73,
+    "method": "GET",
+    "path": "/metrics",
+    "function": "metrics"
+  },
+  {
+    "file": "apps/api/app/main.py",
+    "line": 78,
+    "method": "GET",
+    "path": "/protected",
+    "function": "protected"
+  },
+  {
+    "file": "apps/api/app/health.py",
+    "line": 142,
+    "method": "GET",
+    "path": "/health",
+    "function": "health"
+  },
+  {
+    "file": "apps/api/app/health.py",
+    "line": 148,
+    "method": "GET",
+    "path": "/ready",
+    "function": "ready"
+  },
+  {
+    "file": "apps/api/app/routers/account_recovery.py",
+    "line": 55,
+    "method": "POST",
+    "path": "/request",
+    "function": "request_password_recovery"
+  },
+  {
+    "file": "apps/api/app/routers/account_recovery.py",
+    "line": 110,
+    "method": "POST",
+    "path": "/confirm",
+    "function": "confirm_password_recovery"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 104,
+    "method": "GET",
+    "path": "/recruiters/pending",
+    "function": "list_pending_recruiters"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 118,
+    "method": "PATCH",
+    "path": "/recruiters/{recruiter_id}/approve",
+    "function": "approve_recruiter"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 146,
+    "method": "PATCH",
+    "path": "/recruiters/{recruiter_id}/reject",
+    "function": "reject_recruiter"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 173,
+    "method": "GET",
+    "path": "/stats",
+    "function": "get_admin_stats"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 207,
+    "method": "GET",
+    "path": "/users",
+    "function": "get_admin_users"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 221,
+    "method": "POST",
+    "path": "/users",
+    "function": "create_admin_managed_user"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 260,
+    "method": "PATCH",
+    "path": "/users/{user_id}",
+    "function": "update_admin_managed_user"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 327,
+    "method": "DELETE",
+    "path": "/users/{user_id}",
+    "function": "deactivate_admin_managed_user"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 352,
+    "method": "GET",
+    "path": "/companies",
+    "function": "get_admin_companies"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 376,
+    "method": "DELETE",
+    "path": "/companies/{company_id}",
+    "function": "archive_company"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 447,
+    "method": "PATCH",
+    "path": "/companies/{company_id}/subscription",
+    "function": "update_company_subscription"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 491,
+    "method": "GET",
+    "path": "/offers",
+    "function": "get_admin_offers"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 505,
+    "method": "GET",
+    "path": "/activity",
+    "function": "get_admin_activity"
+  },
+  {
+    "file": "apps/api/app/routers/admin.py",
+    "line": 526,
+    "method": "POST",
+    "path": "/impersonate/{user_id}",
+    "function": "impersonate_user"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 48,
+    "method": "GET",
+    "path": "",
+    "function": "list_applications"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 230,
+    "method": "GET",
+    "path": "/{application_id}",
+    "function": "get_application"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 281,
+    "method": "GET",
+    "path": "/{application_id}/cv",
+    "function": "download_application_cv"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 345,
+    "method": "POST",
+    "path": "",
+    "function": "create_application"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 429,
+    "method": "POST",
+    "path": "/{app_id}/screen",
+    "function": "retry_application_screening"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 496,
+    "method": "PATCH",
+    "path": "/{app_id}",
+    "function": "update_application_status"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 650,
+    "method": "GET",
+    "path": "/{app_id}/interview-feedback",
+    "function": "list_interview_feedback"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 672,
+    "method": "POST",
+    "path": "/{app_id}/interview-feedback",
+    "function": "create_interview_feedback"
+  },
+  {
+    "file": "apps/api/app/routers/applications.py",
+    "line": 718,
+    "method": "PATCH",
+    "path": "/{app_id}/interview-feedback/{feedback_id}",
+    "function": "update_interview_feedback"
+  },
+  {
+    "file": "apps/api/app/routers/audit.py",
+    "line": 15,
+    "method": "GET",
+    "path": "",
+    "function": "list_audit_logs"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 502,
+    "method": "GET",
+    "path": "/sso/providers",
+    "function": "sso_providers"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 510,
+    "method": "GET",
+    "path": "/sso/{provider}/start",
+    "function": "sso_start"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 539,
+    "method": "GET",
+    "path": "/sso/{provider}/callback",
+    "function": "sso_callback"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 676,
+    "method": "POST",
+    "path": "/oauth/handoff/exchange",
+    "function": "exchange_oauth_handoff"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 735,
+    "method": "POST",
+    "path": "/register",
+    "function": "register"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 868,
+    "method": "POST",
+    "path": "/verify-email",
+    "function": "verify_email"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 988,
+    "method": "POST",
+    "path": "/resend-verification",
+    "function": "resend_verification"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1086,
+    "method": "POST",
+    "path": "/login",
+    "function": "login"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1160,
+    "method": "PUT",
+    "path": "/account/name",
+    "function": "update_account_name"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1177,
+    "method": "POST",
+    "path": "/account/data-export",
+    "function": "export_account_data"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1204,
+    "method": "GET",
+    "path": "/account/deletion",
+    "function": "get_account_deletion"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1221,
+    "method": "POST",
+    "path": "/account/deletion",
+    "function": "schedule_account_deletion"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1283,
+    "method": "DELETE",
+    "path": "/account/deletion",
+    "function": "cancel_account_deletion"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1318,
+    "method": "POST",
+    "path": "/account/email/request",
+    "function": "request_email_change"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1373,
+    "method": "POST",
+    "path": "/account/email/confirm",
+    "function": "confirm_email_change"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1429,
+    "method": "POST",
+    "path": "/account/password",
+    "function": "change_account_password"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1450,
+    "method": "POST",
+    "path": "/logout",
+    "function": "logout"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1474,
+    "method": "POST",
+    "path": "/me/avatar",
+    "function": "upload_account_avatar"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1553,
+    "method": "DELETE",
+    "path": "/me/avatar",
+    "function": "delete_account_avatar"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1574,
+    "method": "GET",
+    "path": "/users/{user_id}/avatar",
+    "function": "stream_account_avatar"
+  },
+  {
+    "file": "apps/api/app/routers/auth.py",
+    "line": 1598,
+    "method": "GET",
+    "path": "/me",
+    "function": "me"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 171,
+    "method": "GET",
+    "path": "/onboarding",
+    "function": "get_onboarding"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 179,
+    "method": "PUT",
+    "path": "/onboarding/step",
+    "function": "update_onboarding_step"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 212,
+    "method": "POST",
+    "path": "/onboarding/complete",
+    "function": "complete_onboarding"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 247,
+    "method": "GET",
+    "path": "/profile",
+    "function": "get_profile"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 256,
+    "method": "PUT",
+    "path": "/profile",
+    "function": "update_profile"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 282,
+    "method": "POST",
+    "path": "/ai/headline",
+    "function": "generate_candidate_headline"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 301,
+    "method": "POST",
+    "path": "/ai/bio",
+    "function": "generate_candidate_bio"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 320,
+    "method": "POST",
+    "path": "/cv",
+    "function": "upload_candidate_cv"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 414,
+    "method": "GET",
+    "path": "/cv/meta",
+    "function": "get_cv_meta"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 434,
+    "method": "GET",
+    "path": "/cv",
+    "function": "download_candidate_cv"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 457,
+    "method": "DELETE",
+    "path": "/cv",
+    "function": "delete_candidate_cv"
+  },
+  {
+    "file": "apps/api/app/routers/candidates.py",
+    "line": 490,
+    "method": "POST",
+    "path": "/cv/parse",
+    "function": "parse_candidate_cv"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 84,
+    "method": "POST",
+    "path": "/send",
+    "function": "send_message"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 143,
+    "method": "GET",
+    "path": "/with/{user_id}",
+    "function": "get_conversation"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 229,
+    "method": "GET",
+    "path": "/conversations",
+    "function": "list_conversations"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 451,
+    "method": "GET",
+    "path": "/recruitment",
+    "function": "list_recruitment_chats"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 578,
+    "method": "GET",
+    "path": "/inbox",
+    "function": "combined_inbox"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 649,
+    "method": "GET",
+    "path": "/recruitment/{application_id}",
+    "function": "get_recruitment_chat"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 659,
+    "method": "GET",
+    "path": "/recruitment/{application_id}/messages",
+    "function": "get_recruitment_messages"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 687,
+    "method": "POST",
+    "path": "/recruitment/{application_id}",
+    "function": "send_recruitment_message"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 978,
+    "method": "POST",
+    "path": "/recruitment/{application_id}/read",
+    "function": "mark_recruitment_messages_read"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 997,
+    "method": "POST",
+    "path": "/recruitment/{application_id}/socket-ticket",
+    "function": "create_recruitment_socket_ticket"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 1031,
+    "method": "WEBSOCKET",
+    "path": "/recruitment/{application_id}/ws",
+    "function": "recruitment_chat_ws"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 1424,
+    "method": "POST",
+    "path": "/friends/{peer_id}/read",
+    "function": "mark_friend_messages_read"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 1435,
+    "method": "POST",
+    "path": "/friends/{peer_id}/socket-ticket",
+    "function": "create_friend_socket_ticket"
+  },
+  {
+    "file": "apps/api/app/routers/chat.py",
+    "line": 1471,
+    "method": "WEBSOCKET",
+    "path": "/friends/{peer_id}/ws",
+    "function": "friend_chat_ws"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 54,
+    "method": "GET",
+    "path": "",
+    "function": "list_companies"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 67,
+    "method": "GET",
+    "path": "/{company_id}",
+    "function": "get_company"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 83,
+    "method": "POST",
+    "path": "",
+    "function": "create_company"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 112,
+    "method": "POST",
+    "path": "/{company_id}/join",
+    "function": "join_company"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 125,
+    "method": "GET",
+    "path": "/{company_id}/recruiters",
+    "function": "list_recruiters"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 147,
+    "method": "GET",
+    "path": "/{company_id}/members",
+    "function": "list_members"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 160,
+    "method": "PATCH",
+    "path": "/{company_id}",
+    "function": "update_company"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 192,
+    "method": "GET",
+    "path": "/{company_id}/logo",
+    "function": "get_company_logo"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 218,
+    "method": "POST",
+    "path": "/{company_id}/logo",
+    "function": "upload_company_logo"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 301,
+    "method": "DELETE",
+    "path": "/{company_id}/logo",
+    "function": "delete_company_logo"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 346,
+    "method": "PATCH",
+    "path": "/{company_id}/members/{user_id}",
+    "function": "change_member_role"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 370,
+    "method": "DELETE",
+    "path": "/{company_id}/members/{user_id}",
+    "function": "remove_member"
+  },
+  {
+    "file": "apps/api/app/routers/companies.py",
+    "line": 394,
+    "method": "GET",
+    "path": "/{company_id}/subscription",
+    "function": "get_subscription"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 142,
+    "method": "GET",
+    "path": "",
+    "function": "list_friends"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 186,
+    "method": "GET",
+    "path": "/search",
+    "function": "search_people"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 238,
+    "method": "GET",
+    "path": "/requests/incoming",
+    "function": "incoming_requests"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 261,
+    "method": "GET",
+    "path": "/requests/sent",
+    "function": "sent_requests"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 284,
+    "method": "GET",
+    "path": "/blocked",
+    "function": "blocked_candidates"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 311,
+    "method": "POST",
+    "path": "/presence/heartbeat",
+    "function": "presence_heartbeat"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 322,
+    "method": "GET",
+    "path": "/presence/{candidate_id}",
+    "function": "candidate_presence"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 341,
+    "method": "POST",
+    "path": "/requests/{candidate_id}",
+    "function": "send_friend_request"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 425,
+    "method": "POST",
+    "path": "/requests/{request_id}/accept",
+    "function": "accept_friend_request"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 453,
+    "method": "DELETE",
+    "path": "/requests/{request_id}/decline",
+    "function": "decline_friend_request"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 466,
+    "method": "DELETE",
+    "path": "/requests/{request_id}/cancel",
+    "function": "cancel_friend_request"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 479,
+    "method": "DELETE",
+    "path": "/{candidate_id}",
+    "function": "remove_friend"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 493,
+    "method": "POST",
+    "path": "/{candidate_id}/block",
+    "function": "block_candidate"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 528,
+    "method": "DELETE",
+    "path": "/{candidate_id}/block",
+    "function": "unblock_candidate"
+  },
+  {
+    "file": "apps/api/app/routers/friends.py",
+    "line": 545,
+    "method": "GET",
+    "path": "/{candidate_id}/profile",
+    "function": "public_candidate_profile"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 91,
+    "method": "GET",
+    "path": "",
+    "function": "list_institutions"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 104,
+    "method": "POST",
+    "path": "",
+    "function": "create_institution"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 129,
+    "method": "GET",
+    "path": "/me",
+    "function": "list_my_institutions"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 152,
+    "method": "PATCH",
+    "path": "/{institution_id}/license",
+    "function": "update_institution_license"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 179,
+    "method": "GET",
+    "path": "/{institution_id}/members",
+    "function": "list_institution_members"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 202,
+    "method": "POST",
+    "path": "/{institution_id}/members",
+    "function": "add_institution_member"
+  },
+  {
+    "file": "apps/api/app/routers/institutions.py",
+    "line": 254,
+    "method": "DELETE",
+    "path": "/{institution_id}/members/{membership_id}",
+    "function": "remove_institution_member"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 311,
+    "method": "POST",
+    "path": "/company/invite",
+    "function": "invite_company"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 371,
+    "method": "GET",
+    "path": "/company/invitations",
+    "function": "list_company_invitations"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 380,
+    "method": "GET",
+    "path": "/company/invitations/{invitation_id}",
+    "function": "get_company_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 392,
+    "method": "POST",
+    "path": "/company/invitations/{invitation_id}/revoke",
+    "function": "revoke_company_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 409,
+    "method": "POST",
+    "path": "/company/invitations/{invitation_id}/resend",
+    "function": "resend_company_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 456,
+    "method": "GET",
+    "path": "/company-invitations/validate",
+    "function": "validate_company_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 479,
+    "method": "POST",
+    "path": "/company/accept",
+    "function": "accept_company_invite"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 515,
+    "method": "POST",
+    "path": "/employee/invite",
+    "function": "invite_employee"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 589,
+    "method": "GET",
+    "path": "/employee/invitations",
+    "function": "list_employee_invitations"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 598,
+    "method": "GET",
+    "path": "/employee/validate",
+    "function": "validate_employee_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 622,
+    "method": "POST",
+    "path": "/employee/invitations/{invitation_id}/revoke",
+    "function": "revoke_employee_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 641,
+    "method": "POST",
+    "path": "/employee/resend",
+    "function": "resend_employee_invitation"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 700,
+    "method": "POST",
+    "path": "/employee/accept",
+    "function": "accept_employee_invite"
+  },
+  {
+    "file": "apps/api/app/routers/invitations.py",
+    "line": 727,
+    "method": "POST",
+    "path": "/employee/accept-existing",
+    "function": "accept_employee_existing"
+  },
+  {
+    "file": "apps/api/app/routers/missions.py",
+    "line": 76,
+    "method": "GET",
+    "path": "",
+    "function": "list_missions"
+  },
+  {
+    "file": "apps/api/app/routers/missions.py",
+    "line": 113,
+    "method": "POST",
+    "path": "",
+    "function": "create_mission"
+  },
+  {
+    "file": "apps/api/app/routers/missions.py",
+    "line": 134,
+    "method": "GET",
+    "path": "/attempts/pending",
+    "function": "list_pending_attempts"
+  },
+  {
+    "file": "apps/api/app/routers/missions.py",
+    "line": 165,
+    "method": "POST",
+    "path": "/{mission_id}/attempts",
+    "function": "create_attempt"
+  },
+  {
+    "file": "apps/api/app/routers/missions.py",
+    "line": 246,
+    "method": "PATCH",
+    "path": "/attempts/{attempt_id}/review",
+    "function": "review_attempt"
+  },
+  {
+    "file": "apps/api/app/routers/missions.py",
+    "line": 288,
+    "method": "GET",
+    "path": "/progress/me",
+    "function": "get_my_progress"
+  },
+  {
+    "file": "apps/api/app/routers/notifications.py",
+    "line": 32,
+    "method": "GET",
+    "path": "",
+    "function": "list_notifications"
+  },
+  {
+    "file": "apps/api/app/routers/notifications.py",
+    "line": 76,
+    "method": "GET",
+    "path": "/unread",
+    "function": "unread_count"
+  },
+  {
+    "file": "apps/api/app/routers/notifications.py",
+    "line": 94,
+    "method": "PATCH",
+    "path": "/{notification_id}/read",
+    "function": "mark_notification_read"
+  },
+  {
+    "file": "apps/api/app/routers/notifications.py",
+    "line": 117,
+    "method": "POST",
+    "path": "/read-all",
+    "function": "mark_all_notifications_read"
+  },
+  {
+    "file": "apps/api/app/routers/notifications.py",
+    "line": 130,
+    "method": "GET",
+    "path": "/preferences/me",
+    "function": "get_notification_preferences"
+  },
+  {
+    "file": "apps/api/app/routers/notifications.py",
+    "line": 145,
+    "method": "PUT",
+    "path": "/preferences/me",
+    "function": "update_notification_preferences"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 46,
+    "method": "GET",
+    "path": "",
+    "function": "list_offers"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 81,
+    "method": "POST",
+    "path": "",
+    "function": "create_offer"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 137,
+    "method": "GET",
+    "path": "/mine",
+    "function": "list_my_offers"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 153,
+    "method": "PATCH",
+    "path": "/{offer_id}/responsible-hr",
+    "function": "set_responsible_hr"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 195,
+    "method": "PATCH",
+    "path": "/{offer_id}/toggle",
+    "function": "toggle_offer"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 233,
+    "method": "GET",
+    "path": "/{offer_id}",
+    "function": "get_offer"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 261,
+    "method": "PATCH",
+    "path": "/{offer_id}",
+    "function": "update_offer"
+  },
+  {
+    "file": "apps/api/app/routers/offers.py",
+    "line": 309,
+    "method": "DELETE",
+    "path": "/{offer_id}",
+    "function": "delete_offer"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 33,
+    "method": "POST",
+    "path": "/generate",
+    "function": "generate_recommendations"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 66,
+    "method": "POST",
+    "path": "/score/{offer_id}",
+    "function": "score_recommendation"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 139,
+    "method": "GET",
+    "path": "/by-offer/{offer_id}",
+    "function": "get_recommendation_by_offer"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 161,
+    "method": "GET",
+    "path": "/config-status",
+    "function": "match_config_status"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 182,
+    "method": "GET",
+    "path": "/jobs/{job_id}",
+    "function": "get_recommendation_job_status"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 208,
+    "method": "POST",
+    "path": "/initialize",
+    "function": "initialize_recommendations"
+  },
+  {
+    "file": "apps/api/app/routers/recommendations.py",
+    "line": 218,
+    "method": "GET",
+    "path": "",
+    "function": "get_recommendations"
+  },
+  {
+    "file": "apps/api/app/routers/requests.py",
+    "line": 37,
+    "method": "POST",
+    "path": "",
+    "function": "create_request"
+  },
+  {
+    "file": "apps/api/app/routers/requests.py",
+    "line": 78,
+    "method": "GET",
+    "path": "",
+    "function": "list_requests"
+  },
+  {
+    "file": "apps/api/app/routers/requests.py",
+    "line": 124,
+    "method": "PATCH",
+    "path": "/{request_id}",
+    "function": "update_request_status"
+  },
+  {
+    "file": "apps/api/app/routers/support.py",
+    "line": 18,
+    "method": "POST",
+    "path": "/support",
+    "function": "create_report"
+  },
+  {
+    "file": "apps/api/app/routers/support.py",
+    "line": 52,
+    "method": "GET",
+    "path": "/support",
+    "function": "my_reports"
+  },
+  {
+    "file": "apps/api/app/routers/support.py",
+    "line": 65,
+    "method": "GET",
+    "path": "/admin/support",
+    "function": "all_reports"
+  },
+  {
+    "file": "apps/api/app/routers/support.py",
+    "line": 93,
+    "method": "PATCH",
+    "path": "/admin/support/{ticket_id}",
+    "function": "update_report"
+  },
+  {
+    "file": "apps/api/app/routers/two_factor.py",
+    "line": 56,
+    "method": "GET",
+    "path": "/status",
+    "function": "two_factor_status"
+  },
+  {
+    "file": "apps/api/app/routers/two_factor.py",
+    "line": 64,
+    "method": "POST",
+    "path": "/setup",
+    "function": "two_factor_setup"
+  },
+  {
+    "file": "apps/api/app/routers/two_factor.py",
+    "line": 103,
+    "method": "POST",
+    "path": "/enable",
+    "function": "two_factor_enable"
+  },
+  {
+    "file": "apps/api/app/routers/two_factor.py",
+    "line": 155,
+    "method": "POST",
+    "path": "/disable",
+    "function": "two_factor_disable"
+  },
+  {
+    "file": "apps/api/app/routers/two_factor.py",
+    "line": 205,
+    "method": "POST",
+    "path": "/verify",
+    "function": "two_factor_verify_challenge"
+  }
+]

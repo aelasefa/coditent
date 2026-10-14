@@ -164,6 +164,14 @@ def test_ownership():
         assert_owns_path("other/abc.pdf", "user-1")
 
 
+def test_candidate_cv_route_supports_secured_pdf_preview():
+    source = (Path(__file__).resolve().parents[1] / "app" / "routers" / "candidates.py").read_text()
+    route = source.split("async def download_candidate_cv", 1)[1].split("@router", 1)[0]
+    assert 'disposition = "inline" if preview and asset.content_type == "application/pdf"' in route
+    assert '"X-Content-Type-Options": "nosniff"' in route
+    assert "Depends(require_candidate)" in route
+
+
 # 8. Duplicate skills normalized, never invented
 def test_skill_dedup():
     out = normalize_skills(["Python, python, PYTHON", "React; react ", "SQL\nSQL"])

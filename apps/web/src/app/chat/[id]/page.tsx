@@ -52,6 +52,10 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
     onMessage: handleRealtimeMessage,
     onMessagesRead: handleMessagesRead,
     onRevoked: handleRevoked,
+    onReady: () => {
+      void qc.invalidateQueries({ queryKey: ["chat", id] });
+      void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
+    },
   });
 
   const msgQuery = useInfiniteQuery({
@@ -95,9 +99,12 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
   }, [context?.can_message, handleMessagesRead, id, markRealtimeMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
-    mutationFn: async (text: string) => context?.can_message && sendRealtimeMessage(text) ? null : sendMessage(id, text),
+    mutationFn: async (text: string) => {
+      const realtime = context?.can_message ? sendRealtimeMessage(text) : null;
+      return realtime ? realtime : sendMessage(id, text);
+    },
     onSuccess: (created) => {
-      if (created) handleRealtimeMessage(created);
+      handleRealtimeMessage(created);
       void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
     onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
@@ -115,7 +122,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
         <>
           {msgQuery.hasNextPage ? <div className="border-b border-border-subtle px-4 py-2 text-center"><button type="button" className="text-xs font-semibold text-primary underline disabled:opacity-60" disabled={msgQuery.isFetchingNextPage} onClick={() => void msgQuery.fetchNextPage()}>{msgQuery.isFetchingNextPage ? "Loading…" : "Load earlier messages"}</button></div> : null}
           <MessageList messages={messages} myId={meQuery.data?.id} />
-          {context?.can_message ? <Composer peerName={peer?.full_name ?? "friend"} pending={sendMut.isPending} onSend={(text) => sendMut.mutate(text)} /> : <div className={styles.threadNotice} role="status"><strong>Read-only conversation</strong><p>You can send new messages only while this candidate is your friend.</p></div>}
+          {context?.can_message ? <Composer peerName={peer?.full_name ?? "friend"} pending={sendMut.isPending} onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)} /> : <div className={styles.threadNotice} role="status"><strong>Read-only conversation</strong><p>You can send new messages only while this candidate is your friend.</p></div>}
         </>
       )}
     </ChatWorkspace>

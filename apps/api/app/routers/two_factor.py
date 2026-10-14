@@ -41,6 +41,7 @@ from app.services.authentication import (
     AuthenticationStoreUnavailable,
     consume_mfa_challenge,
     ensure_account_can_authenticate,
+    ensure_login_account_type,
     ensure_credential_matches_account,
     ensure_mfa_challenge_active,
     factor_fingerprint,
@@ -234,6 +235,7 @@ async def two_factor_verify_challenge(
     try:
         ensure_account_can_authenticate(user)
         ensure_credential_matches_account(payload, user)
+        ensure_login_account_type(user, payload.get("account_type"))
     except AuthenticationRejected as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

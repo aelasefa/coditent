@@ -865,6 +865,12 @@ async def _deliver_local_event(
     websocket: WebSocket,
     payload: dict,
 ) -> None:
+    if payload.get("type") == "conversation_state":
+        if not await _send_socket_json(websocket, payload):
+            await _close_socket(application_id, websocket, code=1011)
+        elif not payload.get("chat_enabled", False):
+            await _close_socket(application_id, websocket, code=4403)
+        return
     if not await _socket_is_authorized(websocket, application_id):
         await _close_socket(application_id, websocket, code=4403)
         return
@@ -897,6 +903,14 @@ async def _relay_remote_events(application_id: str, websocket: WebSocket) -> Non
     async for payload in chat_broker.remote_events(application_id):
         if websocket not in _recruitment_rooms.get(application_id, set()):
             return
+        if payload.get("type") == "conversation_state":
+            if not await _send_socket_json(websocket, payload):
+                await _close_socket(application_id, websocket, code=1011)
+                return
+            if not payload.get("chat_enabled", False):
+                await _close_socket(application_id, websocket, code=4403)
+                return
+            continue
         if not await _socket_is_authorized(websocket, application_id):
             await _close_socket(application_id, websocket, code=4403)
             return
@@ -937,6 +951,25 @@ async def _broadcast_recruitment_message(application_id: str, message: ChatMessa
     await _broadcast_recruitment_event(
         application_id,
         {"type": "message", "message": message.model_dump(mode="json")},
+    )
+
+
+async def broadcast_recruitment_state(
+    application_id: str,
+    *,
+    status: str,
+    stage_version: int,
+    chat_enabled: bool,
+) -> None:
+    """Push a committed stage change and immediately revoke disabled rooms."""
+    await _broadcast_recruitment_event(
+        application_id,
+        {
+            "type": "conversation_state",
+            "status": status,
+            "stage_version": stage_version,
+            "chat_enabled": chat_enabled,
+        },
     )
 
 
@@ -1164,7 +1197,11 @@ async def recruitment_chat_ws(
                     await event_db.execute(select(User).where(User.id == user_id))
                 ).scalar_one_or_none()
                 app_fresh = (
-                    await event_db.execute(select(Application).where(Application.id == application_id))
+                    await event_db.execute(
+                        select(Application)
+                        .where(Application.id == application_id)
+                        .with_for_update()
+                    )
                 ).scalar_one_or_none()
                 if live_user is None or app_fresh is None:
                     await _close_socket(room, websocket, code=4403)
@@ -1188,18 +1225,25 @@ async def recruitment_chat_ws(
                     )
                     continue
 
+                client_message_id = incoming.get("client_message_id")
+                if not isinstance(client_message_id, str) or not (1 <= len(client_message_id) <= 100):
+                    await _send_socket_json(
+                        websocket,
+                        {"type": "error", "detail": "Missing message acknowledgement id"},
+                    )
+                    continue
                 raw_content = incoming.get("content")
                 if not isinstance(raw_content, str):
                     await _send_socket_json(
                         websocket,
-                        {"type": "error", "detail": "Invalid message"},
+                        {"type": "error", "detail": "Invalid message", "client_message_id": client_message_id},
                     )
                     continue
                 content = raw_content.strip()
                 if not content or len(content) > 2000:
                     await _send_socket_json(
                         websocket,
-                        {"type": "error", "detail": "Message must be 1 to 2000 characters"},
+                        {"type": "error", "detail": "Message must be 1 to 2000 characters", "client_message_id": client_message_id},
                     )
                     continue
                 peer_user = (
@@ -1215,6 +1259,22 @@ async def recruitment_chat_ws(
                     content=content,
                 )
                 event_db.add(msg)
+                await event_db.flush()
+                await create_notification(
+                    event_db,
+                    user_id=peer_user.id,
+                    category="message",
+                    title="New recruitment message",
+                    body=f"{live_user.full_name} sent a message about {offer_fresh.title}.",
+                    action_url=(
+                        "/company/messages"
+                        if peer_user.role.value == "COMPANY_USER"
+                        else "/chat"
+                    ),
+                    resource_type="application",
+                    resource_id=app_fresh.id,
+                    dedupe_key=f"recruitment-message:{msg.id}",
+                )
                 await event_db.commit()
                 await event_db.refresh(msg)
                 out = _message_out(msg, live_user)
@@ -1222,7 +1282,14 @@ async def recruitment_chat_ws(
             event = {"type": "message", "message": out.model_dump(mode="json")}
             # Confirm once to the sender; fan out locally to the other
             # participant and through Redis to other API processes.
-            if not await _send_socket_json(websocket, event):
+            if not await _send_socket_json(
+                websocket,
+                {
+                    "type": "message_ack",
+                    "client_message_id": client_message_id,
+                    "message": out.model_dump(mode="json"),
+                },
+            ):
                 break
             await _broadcast_recruitment_event(room, event, exclude=websocket)
     finally:
@@ -1601,12 +1668,19 @@ async def friend_chat_ws(
                 if event_type == "messages_read":
                     await _mark_friend_messages_read(event_db, user_id, peer_id)
                     continue
+                client_message_id = incoming.get("client_message_id")
+                if not isinstance(client_message_id, str) or not (1 <= len(client_message_id) <= 100):
+                    await _send_socket_json(
+                        websocket,
+                        {"type": "error", "detail": "Missing message acknowledgement id"},
+                    )
+                    continue
                 raw_content = incoming.get("content")
                 content = raw_content.strip() if isinstance(raw_content, str) else ""
                 if not content or len(content) > 2000:
                     await _send_socket_json(
                         websocket,
-                        {"type": "error", "detail": "Message must be 1 to 2000 characters"},
+                        {"type": "error", "detail": "Message must be 1 to 2000 characters", "client_message_id": client_message_id},
                     )
                     continue
                 msg = ChatMessage(
@@ -1631,7 +1705,14 @@ async def friend_chat_ws(
                 await event_db.refresh(msg)
                 out = _message_out(msg, live_user)
             event = {"type": "message", "message": out.model_dump(mode="json")}
-            if not await _send_socket_json(websocket, event):
+            if not await _send_socket_json(
+                websocket,
+                {
+                    "type": "message_ack",
+                    "client_message_id": client_message_id,
+                    "message": out.model_dump(mode="json"),
+                },
+            ):
                 break
             await _broadcast_friend_event(
                 user_id, peer_id, event, exclude=websocket

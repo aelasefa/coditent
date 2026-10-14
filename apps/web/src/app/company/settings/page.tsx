@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
 import { CompanyLogoSection } from "@/components/company/CompanyLogoSection";
+import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { PageHeader } from "@/components/company/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import type { Company } from "@/lib/types";
-import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiRotateCcw, FiSave, FiSettings, FiShield } from "react-icons/fi";
+import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiShield } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 import { AccountDataControls } from "@/components/security/account-data-controls";
 
@@ -80,7 +81,7 @@ export default function SettingsPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   const companyId = me?.company_id;
-  const canEditCompany = can(me ?? null, "edit_company");
+  const canEditCompany = me?.role === "PLATFORM_ADMIN" || can(me ?? null, "edit_company");
 
   const { data: company, isLoading, isError, refetch } = useQuery({
     queryKey: ["company", companyId],
@@ -95,25 +96,62 @@ export default function SettingsPage() {
   });
 
   const [form, setForm] = useState<CompanyForm>(EMPTY_COMPANY_FORM);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const initialFormRef = useRef<CompanyForm>(EMPTY_COMPANY_FORM);
 
   useEffect(() => {
-    if (company) setForm(companyFormValues(company));
+    if (company) {
+      const initial = companyFormValues(company);
+      initialFormRef.current = initial;
+      setForm(initial);
+    }
   }, [company]);
 
-  const savedForm = companyFormValues(company);
-  const isDirty = company ? (Object.keys(form) as Array<keyof CompanyForm>).some((key) => form[key] !== savedForm[key]) : false;
+  const savedForm = company ? companyFormValues(company) : initialFormRef.current;
+  const isDirty = (Object.keys(form) as Array<keyof CompanyForm>).some(
+    (key) => (form[key] ?? "") !== (savedForm[key] ?? "")
+  );
   const websiteError = form.website && !/^https?:\/\//i.test(form.website) ? "Use a full URL starting with https://" : undefined;
 
   const updateMut = useMutation({
     mutationFn: async () => {
-      if (!companyId) return;
+      const activeCompanyId = companyId || company?.id;
+      if (!activeCompanyId) throw new Error("No company attached to your account");
       if (!form.name.trim()) throw new Error("Company name cannot be empty");
-      return updateCompany(companyId, form);
+
+      const cleanWebsite = form.website?.trim()
+        ? (form.website.trim().startsWith("http://") || form.website.trim().startsWith("https://")
+            ? form.website.trim()
+            : `https://${form.website.trim()}`)
+        : null;
+
+      const payload = {
+        name: form.name.trim(),
+        industry: form.industry?.trim() || null,
+        region: form.region?.trim() || null,
+        location: form.location?.trim() || null,
+        website: cleanWebsite,
+        company_size: form.company_size?.trim() || null,
+        contact_email: form.contact_email?.trim() || null,
+        contact_phone: form.contact_phone?.trim() || null,
+        description: form.description?.trim() || null,
+      };
+
+      return updateCompany(activeCompanyId, payload);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["company", companyId] });
-      qc.invalidateQueries({ queryKey: ["company-profile", companyId] });
-      toast("Company updated", { variant: "success" });
+    onSuccess: (updated) => {
+      const activeCompanyId = companyId || company?.id;
+      if (activeCompanyId) {
+        qc.invalidateQueries({ queryKey: ["company", activeCompanyId] });
+        qc.invalidateQueries({ queryKey: ["company-profile", activeCompanyId] });
+        if (updated) {
+          const fresh = companyFormValues(updated);
+          initialFormRef.current = fresh;
+          qc.setQueryData(["company", activeCompanyId], updated);
+          setForm(fresh);
+        }
+      }
+      toast("Company settings saved", { variant: "success" });
     },
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail || (e as Error)?.message || "Save failed";
@@ -121,16 +159,55 @@ export default function SettingsPage() {
     },
   });
 
+  const handleSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!canEditCompany) {
+      toast("Permission required", { description: "Only Owner and Admin can edit company details.", variant: "error" });
+      return;
+    }
+    if (!form.name.trim()) {
+      toast("Company name required", { description: "Please enter a valid company name.", variant: "error" });
+      return;
+    }
+    updateMut.mutate();
+  };
+
+  const handleResetClick = () => {
+    if (updateMut.isPending) return;
+    setResetConfirmOpen(true);
+  };
+
+  const handleConfirmReset = () => {
+    const base = company ? companyFormValues(company) : (initialFormRef.current.name ? initialFormRef.current : EMPTY_COMPANY_FORM);
+    setForm({
+      name: base.name || "",
+      industry: base.industry || "",
+      region: base.region || "",
+      location: base.location || "",
+      website: base.website || "",
+      company_size: base.company_size || "",
+      contact_email: base.contact_email || "",
+      contact_phone: base.contact_phone || "",
+      description: base.description || "",
+    });
+    setResetConfirmOpen(false);
+    toast("All changes discarded", { variant: "info" });
+  };
+
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl space-y-6">
         <PageHeader
           tone="green"
           center
-          icon={<FiSettings />}
           eyebrow="Workspace settings"
-          title="Shape your company workspace."
+          title={
+            <>
+              Shape your company <span className="block">workspace.</span>
+            </>
+          }
           subtitle="Keep your company profile, team access, plan and account security in one place."
+          className="company-settings-hero"
         />
 
         <Tabs
@@ -151,11 +228,8 @@ export default function SettingsPage() {
                     <div className="space-y-4">
                       <CompanyLogoSection company={company ?? null} canEdit={canEditCompany} />
                       <form
-                        className="company-settings-form overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-sm"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (canEditCompany && isDirty && !websiteError) updateMut.mutate();
-                        }}
+                        className="company-settings-form relative rounded-xl border border-border-subtle bg-surface shadow-sm"
+                        onSubmit={handleSave}
                       >
                         <section className="space-y-4 p-5 sm:p-6" aria-labelledby="company-profile-heading">
                           <div className="flex items-start gap-3">
@@ -166,9 +240,9 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Input label="Company name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
-                            <Input label="Industry" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
-                            <Select label="Company size" value={form.company_size} onChange={(e) => setForm({ ...form, company_size: e.target.value })} disabled={!canEditCompany}>
+                            <Input label="Company name" required value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
+                            <Input label="Industry" value={form.industry ?? ""} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
+                            <Select label="Company size" value={form.company_size ?? ""} onChange={(e) => setForm({ ...form, company_size: e.target.value })} disabled={!canEditCompany}>
                               <option value="">Select size</option>
                               <option value="1-10">1-10</option>
                               <option value="11-50">11-50</option>
@@ -176,9 +250,9 @@ export default function SettingsPage() {
                               <option value="201-1000">201-1,000</option>
                               <option value="1000+">1,000+</option>
                             </Select>
-                            <Input label="Website" type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://example.com" error={websiteError} />
+                            <Input label="Website" type="url" value={form.website ?? ""} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://example.com" error={websiteError} />
                           </div>
-                          <Textarea label="Company description" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} helper="Share what your company does and what makes it a strong place to work." />
+                          <Textarea label="Company description" rows={4} value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} helper="Share what your company does and what makes it a strong place to work." />
                         </section>
 
                         <section className="space-y-4 border-t border-border-subtle p-5 sm:p-6" aria-labelledby="company-location-heading">
@@ -190,8 +264,8 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Input label="Region" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
-                            <Input label="Office location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca Marina" />
+                            <Input label="Region" value={form.region ?? ""} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
+                            <Input label="Office location" value={form.location ?? ""} onChange={(e) => setForm({ ...form, location: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca Marina" />
                           </div>
                         </section>
 
@@ -204,27 +278,55 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Input label="Contact email" type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} disabled={!canEditCompany} autoComplete="email" placeholder="hiring@company.com" />
-                            <Input label="Contact phone" type="tel" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} disabled={!canEditCompany} autoComplete="tel" placeholder="+212 5 00 00 00 00" />
+                            <Input label="Contact email" type="email" value={form.contact_email ?? ""} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} disabled={!canEditCompany} autoComplete="email" placeholder="hiring@company.com" />
+                            <Input label="Contact phone" type="tel" value={form.contact_phone ?? ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} disabled={!canEditCompany} autoComplete="tel" placeholder="+212 5 00 00 00 00" />
                           </div>
                         </section>
 
                         {canEditCompany ? (
-                          <div className="company-settings-save flex flex-col gap-3 border-t border-border-subtle bg-surface-secondary/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                            <p className="text-xs font-medium text-muted-foreground" aria-live="polite">{isDirty ? "You have unsaved changes." : "All company details are up to date."}</p>
-                            <div className="flex gap-2">
-                              <Button type="button" variant="ghost" onClick={() => setForm(savedForm)} disabled={!isDirty || updateMut.isPending}>
-                                <FiRotateCcw aria-hidden className="h-4 w-4" />
-                                Reset
-                              </Button>
-                              <Button type="submit" loading={updateMut.isPending} disabled={!isDirty || Boolean(websiteError)}>
-                                <FiSave aria-hidden className="h-4 w-4" />
+                          <div className="company-settings-save sticky bottom-0 z-20 flex flex-col gap-3 rounded-b-xl border-t border-border-subtle bg-surface/95 p-4 backdrop-blur-md shadow-[0_-4px_16px_rgb(0_0_0/6%)] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div className="flex items-center gap-2">
+                              {isDirty ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-600/25 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Unsaved changes
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#194d38]/20 bg-[#edf4eb] px-2.5 py-1 text-xs font-medium text-[#194d38]">
+                                  <FiCheck className="h-3.5 w-3.5" />
+                                  All details up to date
+                                </span>
+                              )}
+                              <span className="hidden text-xs text-muted-foreground md:inline">
+                                {isDirty ? "Remember to save before leaving this tab." : "Changes save directly to your workspace."}
+                              </span>
+                            </div>
+
+                            <div className="company-settings-actions flex items-center gap-2.5">
+                              <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                loading={updateMut.isPending}
+                                className="h-10 min-w-[9.5rem] rounded-lg bg-[#194d38] px-5 text-xs font-bold text-[#fffefa] shadow-md hover:bg-[#123e2d] active:scale-[0.98] transition-all cursor-pointer"
+                              >
                                 Save changes
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                onClick={handleResetClick}
+                                disabled={updateMut.isPending}
+                                className="h-10 min-w-[7.5rem] rounded-lg bg-[#b34538] px-5 text-xs font-bold text-white shadow-md hover:bg-[#8e2e23] active:scale-[0.98] transition-all cursor-pointer"
+                              >
+                                Reset
                               </Button>
                             </div>
                           </div>
                         ) : (
-                          <p className="border-t border-border-subtle bg-surface-secondary/40 p-4 text-xs text-muted-foreground sm:px-6">Read-only for your role. Only Owner and Admin can edit company details.</p>
+                          <p className="border-t border-border-subtle bg-surface-secondary/40 p-4 text-xs text-muted-foreground sm:px-6">
+                            Read-only for your role. Only Owner and Admin can edit company details.
+                          </p>
                         )}
                       </form>
                     </div>
@@ -331,6 +433,24 @@ export default function SettingsPage() {
           ]}
         />
       </div>
+
+      <ConfirmDialog
+        isOpen={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={handleConfirmReset}
+        title="Discard unsaved changes?"
+        message={
+          <div className="space-y-2">
+            <p>Are you sure you want to reset the form? All unsaved edits to your company profile will be discarded.</p>
+            <div className="rounded-lg border border-border-subtle bg-surface-secondary/40 p-2.5 text-xs text-muted-foreground">
+              Form will revert back to: <strong className="text-foreground">{savedForm.name || "Original company details"}</strong>
+            </div>
+          </div>
+        }
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        isDestructive
+      />
     </AppShell>
   );
 }

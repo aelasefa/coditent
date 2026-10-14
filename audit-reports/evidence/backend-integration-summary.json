@@ -1,0 +1,83 @@
+[
+  {
+    "file": "tests/test_rbac.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_rbac.py",
+    "exit": 0,
+    "duration_seconds": 5.6,
+    "summary": [
+      "5 passed, 61 warnings in 4.42s"
+    ]
+  },
+  {
+    "file": "tests/test_support.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_support.py",
+    "exit": 0,
+    "duration_seconds": 2.91,
+    "summary": [
+      "17 passed, 84 warnings in 1.97s"
+    ]
+  },
+  {
+    "file": "tests/test_email_otp.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_email_otp.py",
+    "exit": 0,
+    "duration_seconds": 6.88,
+    "summary": [
+      "20 passed, 37 warnings in 5.79s"
+    ]
+  },
+  {
+    "file": "tests/test_recruitment_chat.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_recruitment_chat.py",
+    "exit": 0,
+    "duration_seconds": 10.53,
+    "summary": [
+      "23 passed, 354 warnings in 9.35s"
+    ]
+  },
+  {
+    "file": "tests/test_recruitment_no_duplicates.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_recruitment_no_duplicates.py",
+    "exit": 0,
+    "duration_seconds": 9.67,
+    "summary": [
+      "12 passed, 133 warnings in 7.26s"
+    ]
+  },
+  {
+    "file": "tests/test_company_invitations.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_company_invitations.py",
+    "exit": 1,
+    "duration_seconds": 3.07,
+    "summary": [
+      "3 failed, 5 passed, 3 warnings in 2.21s"
+    ]
+  },
+  {
+    "file": "tests/test_employee_invitations.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_employee_invitations.py",
+    "exit": 1,
+    "duration_seconds": 2.76,
+    "summary": [
+      "10 failed, 2 passed, 1 skipped, 2 warnings in 1.88s"
+    ]
+  },
+  {
+    "file": "tests/test_cv_auth.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_cv_auth.py",
+    "exit": 0,
+    "duration_seconds": 1.4,
+    "summary": [
+      "4 passed, 1 skipped in 0.59s"
+    ]
+  },
+  {
+    "file": "tests/test_security.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_security.py",
+    "exit": 0,
+    "duration_seconds": 1.46,
+    "summary": [
+      "2 passed, 3 skipped in 0.65s"
+    ]
+  }
+]
