@@ -103,7 +103,7 @@ export function Composer({
   pending: boolean;
   disabled?: boolean;
   disabledReason?: string;
-  onSend: (text: string) => void;
+  onSend: (text: string) => void | Promise<void>;
 }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -116,15 +116,15 @@ export function Composer({
     field.style.height = `${Math.min(field.scrollHeight, 112)}px`;
   }, [value]);
 
-  function submit() {
+  async function submit() {
     const text = value.trim();
     if (!text || pending || disabled) return;
     setError(null);
     try {
-      onSend(text);
+      await onSend(text);
       setValue("");
     } catch {
-      setError("Message failed to send. Retry.");
+      setError("Message was not confirmed. Your draft is preserved; retry when connected.");
     }
   }
 
@@ -135,7 +135,7 @@ export function Composer({
       style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        void submit();
       }}
     >
       <label htmlFor="chat-composer" className="sr-only">
@@ -146,11 +146,12 @@ export function Composer({
           ref={composerRef}
           id="chat-composer"
           value={value}
+          maxLength={2000}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              submit();
+              void submit();
             }
           }}
           placeholder={disabled ? disabledReason ?? "Messaging unavailable" : `Message ${peerName}`}

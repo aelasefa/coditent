@@ -12,8 +12,11 @@ import { Sheet } from "@/components/ui/sheet";
 import { FilterBar, type DiscoverFilters } from "@/components/candidate/filter-bar";
 import { JobCard, JobCardSkeleton } from "@/components/candidate/job-card";
 import { JobDetails, JobDetailsSkeleton } from "@/components/candidate/job-details";
+import { filterAndSortRecommendations, paginateRecommendations } from "@/lib/discover-search";
 import type { ApplicationItem } from "@/lib/types";
 import styles from "@/components/candidate/candidate-pages.module.css";
+
+const RESULTS_PER_PAGE = 9;
 
 export default function RecommendationsPage() {
   return (
@@ -38,6 +41,7 @@ function RecommendationsContent() {
   const [selectedId, setSelectedId] = useState<string | null>(deepOffer);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
@@ -107,7 +111,7 @@ function RecommendationsContent() {
     },
   });
 
-  const recs = recsQuery.data ?? [];
+  const recs = useMemo(() => recsQuery.data ?? [], [recsQuery.data]);
   // Newly published jobs arrive as pending rows from GET /recommendations.
   // Trigger per-offer scoring for rows with no completed analysis, then
   // refetch so the real score replaces "Match analysis pending".
@@ -137,26 +141,20 @@ function RecommendationsContent() {
   );
 
   const filtered = useMemo(() => {
-    const q = filters.query.trim().toLowerCase();
-    let list = recs.filter((r) => {
-      const o = r.offer;
-      if (filters.field && !o.field.toLowerCase().includes(filters.field.trim().toLowerCase())) return false;
-      if (filters.region && !o.region.toLowerCase().includes(filters.region.trim().toLowerCase())) return false;
-      if (filters.type !== "ALL" && o.type !== filters.type) return false;
-      if (q) {
-        const hay = `${o.title} ${o.company} ${o.required_skills ?? ""} ${o.field} ${o.region}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-    list = [...list].sort((a, b) => {
-      if (filters.sort === "newest") return String(b.offer.posted_at).localeCompare(String(a.offer.posted_at));
-      return (b.score ?? b.ai_score ?? 0) - (a.score ?? a.ai_score ?? 0);
-    });
-    return list;
+    return filterAndSortRecommendations(recs, filters);
   }, [recs, filters]);
 
-  const selected = filtered.find((r) => r.offer.id === selectedId) ?? filtered[0] ?? null;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / RESULTS_PER_PAGE));
+  const visibleResults = useMemo(
+    () => paginateRecommendations(filtered, page, RESULTS_PER_PAGE),
+    [filtered, page]
+  );
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const selected = filtered.find((r) => r.offer.id === selectedId) ?? visibleResults[0] ?? null;
   const selectedApplied = selected ? appliedOfferIds.has(selected.offer.id) : false;
 
   function handleGenerate() {
@@ -204,14 +202,14 @@ function RecommendationsContent() {
         <div className={styles.filterPanel}>
           <FilterBar
             filters={filters}
-            onChange={(next) => { setFilters(next); setSelectedId(null); }}
+            onChange={(next) => { setFilters(next); setSelectedId(null); setPage(1); }}
             onGenerate={handleGenerate}
             generating={generateMutation.isPending || pollingJob}
           />
         </div>
         <div className={styles.resultsHeading}>
           <h2>Open roles</h2>
-          <p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}</p>
+          <p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"} · page ${page} of ${totalPages}`}</p>
         </div>
         <div className={styles.resultsLayout}>
           <div className={styles.resultsList}>
@@ -235,7 +233,7 @@ function RecommendationsContent() {
               <div className={styles.jobList} role="list" aria-label="Opportunities">
                 {loading
                   ? [1, 2, 3].map((i) => <JobCardSkeleton key={i} />)
-                  : filtered.map((r) => (
+                  : visibleResults.map((r) => (
                       <div key={r.id} role="listitem">
                         <JobCard
                           rec={r}
@@ -260,6 +258,27 @@ function RecommendationsContent() {
                   />
                 ) : null}
               </div>
+            ) : null}
+            {!loading && !error && filtered.length > RESULTS_PER_PAGE ? (
+              <nav className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3" aria-label="Opportunity result pages">
+                <button
+                  type="button"
+                  className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={page === 1}
+                  onClick={() => { setPage((current) => Math.max(1, current - 1)); setSelectedId(null); }}
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+                <button
+                  type="button"
+                  className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={page === totalPages}
+                  onClick={() => { setPage((current) => Math.min(totalPages, current + 1)); setSelectedId(null); }}
+                >
+                  Next
+                </button>
+              </nav>
             ) : null}
           </div>
 

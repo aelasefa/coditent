@@ -4,15 +4,10 @@ import { useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import type { DiscoverFilters } from "@/lib/discover-search";
 import styles from "./candidate-pages.module.css";
 
-export interface DiscoverFilters {
-  query: string;
-  field: string;
-  region: string;
-  type: "ALL" | "JOB" | "INTERNSHIP";
-  sort: "match" | "newest";
-}
+export type { DiscoverFilters } from "@/lib/discover-search";
 
 interface FilterBarProps {
   filters: DiscoverFilters;

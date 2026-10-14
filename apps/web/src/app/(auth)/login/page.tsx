@@ -9,6 +9,7 @@ import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { login, verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
@@ -235,6 +236,7 @@ function LoginInner() {
                     <p className={styles.registerPrompt}>Company team accounts are created through an invitation.</p>
                   ) : null}
                 </form>}
+                <LegalLinks className="mt-6" />
               </div>
             </div>
           </section>

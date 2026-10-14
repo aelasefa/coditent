@@ -11,6 +11,7 @@ import {
   deleteCV,
   getCVMeta,
   getCVDownloadUrl,
+  getCVPreviewUrl,
   getMe,
   getProfile,
   generateProfileBio,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/api";
 import type { CVExtracted } from "@/lib/types";
 import { isQualityBio } from "@/lib/bio-utils";
+import { validateManagedFile } from "@/lib/file-validation";
 import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -95,7 +97,10 @@ export default function ProfileBuilderPage() {
   const [photoUploadProgress, setPhotoUploadProgress] = useState(0);
   const [skills, setSkills] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState<"headline" | "bio" | null>(null);
-  const [cvMeta, setCvMeta] = useState<{ filename?: string | null } | null>(null);
+  const [cvMeta, setCvMeta] = useState<{
+    filename?: string | null;
+    content_type?: string | null;
+  } | null>(null);
   const [cvProgress, setCvProgress] = useState(0);
   const [cvBusy, setCvBusy] = useState<"idle" | "uploading" | "parsing">("idle");
   const [cvError, setCvError] = useState<string | null>(null);
@@ -278,13 +283,10 @@ export default function ProfileBuilderPage() {
     if (!file) return;
     setCvError(null);
     setCvOk(null);
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "pdf" && ext !== "docx") {
-      setCvError("Invalid file type. Only PDF and DOCX are supported.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setCvError("File too large. Maximum size is 5MB.");
+    const validationError = await validateManagedFile(file, "cv");
+    if (validationError) {
+      setCvError(validationError);
+      e.target.value = "";
       return;
     }
     setCvBusy("uploading");
@@ -386,12 +388,13 @@ export default function ProfileBuilderPage() {
     window.setTimeout(() => form.setFocus(first), 0);
   });
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024) {
-      toast("Choose a PNG, JPG, or WebP image under 2 MB", { variant: "warning" });
+    const validationError = await validateManagedFile(file, "avatar");
+    if (validationError) {
+      toast(validationError, { variant: "warning" });
       input.value = "";
       return;
     }
@@ -612,7 +615,10 @@ export default function ProfileBuilderPage() {
                     <div className={styles.documentCurrent}>
                       <FiFileText aria-hidden />
                       <div><strong>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "No CV uploaded"}</strong><p>{hasCv ? "This CV is available when you apply." : "Upload a PDF or DOCX file to make applying easier."}</p></div>
-                      {hasCv && profileQuery.data?.cv_url ? <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a> : null}
+                      {hasCv && profileQuery.data?.cv_url ? <div className="flex items-center gap-3">
+                        {cvMeta?.content_type === "application/pdf" ? <a href={getCVPreviewUrl()} target="_blank" rel="noreferrer noopener">Preview</a> : null}
+                        <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a>
+                      </div> : null}
                     </div>
                     <input ref={cvFileRef} type="file" accept=".pdf,.docx" onChange={handleCVSelect} className="sr-only" aria-label="Choose CV file" />
                     <div className={styles.documentActions}>

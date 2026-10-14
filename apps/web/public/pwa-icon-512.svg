@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="CODITENT">
+  <rect width="512" height="512" rx="112" fill="#4f46e5"/>
+  <path d="M352 163a139 139 0 1 0 0 186l-53-53a64 64 0 1 1 0-80z" fill="#fff"/>
+  <circle cx="355" cy="256" r="35" fill="#a5b4fc"/>
+</svg>

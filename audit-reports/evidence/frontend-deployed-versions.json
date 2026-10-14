@@ -1,0 +1,5 @@
+{
+  "command": "docker exec coditent-web-1 node -e 'console.log(JSON.stringify({node:process.version,platform:process.platform,next:require(\"next/package.json\").version,react:require(\"react/package.json\").version,reactDom:require(\"react-dom/package.json\").version}))'",
+  "exit": 0,
+  "output": "{\"node\":\"v22.23.3\",\"platform\":\"linux\",\"next\":\"16.3.8\",\"react\":\"19.3.0\",\"reactDom\":\"19.3.0\"}\n"
+}

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /etc/coditent-backup.env
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' EXIT
+
+archive="$(DATABASE_URL="$DATABASE_URL" {{ app_dir }}/scripts/database-backup.sh "$work_dir")"
+object_prefix="${BACKUP_S3_URI%/}/database"
+aws s3 cp --only-show-errors --sse AES256 "$archive" "$object_prefix/$(basename "$archive")"
+aws s3 cp --only-show-errors --sse AES256 "$archive.sha256" "$object_prefix/$(basename "$archive.sha256")"
+echo "Backup archive and checksum uploaded at $(date -u +%FT%TZ)"

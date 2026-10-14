@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Dis
 import { FiChevronDown, FiMenu, FiMoreHorizontal, FiX } from "react-icons/fi";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { candidateNavItems, isNavActive, type NavItem } from "./nav-config";
 import styles from "./candidate-top-shell.module.css";
 
@@ -136,6 +137,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
                 <p className={styles.accountEmail}>{user.email ?? "Candidate account"}</p>
                 <Link href="/profile" onClick={() => setAccountOpen(false)}>View profile</Link>
                 <Link href="/dashboard/settings" onClick={() => setAccountOpen(false)}>Settings</Link>
+                <LegalLinks layout="column" onNavigate={() => setAccountOpen(false)} />
                 <button type="button" onClick={onLogout}>Log out</button>
               </div>
             ) : null}
@@ -159,6 +161,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
               <div className={styles.mobileAccount}>
                 <div><Avatar name={user.name} src={avatarPreview ?? user.avatarUrl} size="sm" /><span><strong>{user.name}</strong>{user.email ? <small>{user.email}</small> : null}</span></div>
                 <Link href="/dashboard/settings" onClick={() => setMobileOpen(false)}>Settings</Link>
+                <LegalLinks layout="column" onNavigate={() => setMobileOpen(false)} />
                 <button type="button" onClick={onLogout}>Log out</button>
               </div>
             </div>

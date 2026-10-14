@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/cn";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { Avatar } from "@/components/ui/avatar";
 import { Sheet } from "@/components/ui/sheet";
 import { PageContainer } from "@/components/shell/page-container";
@@ -83,6 +84,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
           {nav}
           <div className="border-t border-border-subtle p-3">
+            <LegalLinks layout="column" className="mb-3 px-1.5" />
             <div className="flex items-center gap-2.5 rounded-lg p-1.5">
               <Avatar name={me?.full_name || me?.email || "Admin"} size="sm" />
               <span className="min-w-0 flex-1">
@@ -118,6 +120,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <Logo size="md" />
           </Link>
           <div className="mt-2 flex-1 overflow-y-auto">{nav}</div>
+          <LegalLinks layout="column" className="mt-3" onNavigate={() => setMobileOpen(false)} />
           <button type="button" onClick={logout} className="mt-3 w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-danger hover:bg-danger-background">
             Sign out
           </button>

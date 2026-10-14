@@ -12,6 +12,7 @@ import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { register } from "@/lib/api";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRequirements } from "@/lib/password-policy";
 import authStyles from "../login/login-page.module.css";
@@ -188,6 +189,7 @@ function RegisterInner() {
                   Already registered? <Link href="/login">Sign in</Link>
                 </p>
               </form>
+              <LegalLinks className="mt-6" />
             </div>
           </div>
         </section>

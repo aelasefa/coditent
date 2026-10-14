@@ -1,0 +1,1102 @@
+[
+  {
+    "route": "/forgot-password",
+    "file": "apps/web/src/app/(auth)/forgot-password/page.tsx",
+    "lines": 50,
+    "client": true,
+    "api_functions": [
+      "requestPasswordRecovery"
+    ],
+    "redirects": [],
+    "headings": [
+      "Reset your "
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/login",
+    "file": "apps/web/src/app/(auth)/login/page.tsx",
+    "lines": 253,
+    "client": true,
+    "api_functions": [
+      "login",
+      "verifyTwoFactor"
+    ],
+    "redirects": [
+      "router.push(await getPostAuthDestination(queryClient, data.user, { next: nextPath }));"
+    ],
+    "headings": [
+      "Continue your "
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/register",
+    "file": "apps/web/src/app/(auth)/register/page.tsx",
+    "lines": 206,
+    "client": true,
+    "api_functions": [
+      "register"
+    ],
+    "redirects": [],
+    "headings": [
+      "Build your "
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/reset-password",
+    "file": "apps/web/src/app/(auth)/reset-password/page.tsx",
+    "lines": 62,
+    "client": true,
+    "api_functions": [
+      "confirmPasswordRecovery"
+    ],
+    "redirects": [],
+    "headings": [
+      "Choose a "
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/accept-invitation",
+    "file": "apps/web/src/app/accept-invitation/page.tsx",
+    "lines": 35,
+    "client": true,
+    "api_functions": [],
+    "redirects": [
+      "router.replace(\"/login\");",
+      "router.replace(`/invite/company?token=${encodeURIComponent(token)}`);",
+      "router.replace(`/invite/employee?token=${encodeURIComponent(token)}`);"
+    ],
+    "headings": [],
+    "has_loading": true,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/admin/activity",
+    "file": "apps/web/src/app/admin/activity/page.tsx",
+    "lines": 50,
+    "client": true,
+    "api_functions": [
+      "getAdminActivity"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/companies",
+    "file": "apps/web/src/app/admin/companies/page.tsx",
+    "lines": 231,
+    "client": true,
+    "api_functions": [
+      "archiveAdminCompany",
+      "getAdminCompanies",
+      "getAdminOffers",
+      "getCompanyRecruiters",
+      "updateAdminCompanySubscription"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/company-invitations",
+    "file": "apps/web/src/app/admin/company-invitations/page.tsx",
+    "lines": 268,
+    "client": true,
+    "api_functions": [
+      "inviteCompany",
+      "listCompanyInvitations",
+      "resendCompanyInvitation",
+      "revokeCompanyInvitation"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/institutions",
+    "file": "apps/web/src/app/admin/institutions/page.tsx",
+    "lines": 61,
+    "client": true,
+    "api_functions": [
+      "addInstitutionMember",
+      "createInstitution",
+      "listInstitutionMembers",
+      "listInstitutions",
+      "removeInstitutionMember",
+      "updateInstitutionLicense"
+    ],
+    "redirects": [],
+    "headings": [
+      "Institutions",
+      "{institution.name}"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/login",
+    "file": "apps/web/src/app/admin/login/page.tsx",
+    "lines": 142,
+    "client": true,
+    "api_functions": [
+      "adminLogin",
+      "verifyTwoFactor"
+    ],
+    "redirects": [
+      "router.push(nextPath ?? \"/admin\");"
+    ],
+    "headings": [
+      "Admin login"
+    ],
+    "has_loading": false,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/admin/missions",
+    "file": "apps/web/src/app/admin/missions/page.tsx",
+    "lines": 33,
+    "client": true,
+    "api_functions": [
+      "createMission",
+      "listMissions",
+      "listPendingMissionAttempts",
+      "reviewMissionAttempt"
+    ],
+    "redirects": [],
+    "headings": [
+      "Practice missions",
+      "Published missions ({missionsQ.data?.length ?? 0})",
+      "Awaiting review ({attemptsQ.data?.length ?? 0})"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/offers",
+    "file": "apps/web/src/app/admin/offers/page.tsx",
+    "lines": 48,
+    "client": true,
+    "api_functions": [
+      "getAdminOffers"
+    ],
+    "redirects": [],
+    "headings": [
+      "All offers"
+    ],
+    "has_loading": true,
+    "has_error": false,
+    "has_empty": true
+  },
+  {
+    "route": "/admin",
+    "file": "apps/web/src/app/admin/page.tsx",
+    "lines": 133,
+    "client": true,
+    "api_functions": [
+      "getAdminActivity",
+      "getAdminStats",
+      "getCompanies",
+      "listCompanyInvitations"
+    ],
+    "redirects": [],
+    "headings": [
+      "Recent companies",
+      "Recent invitations",
+      "Platform activity"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/recruiters",
+    "file": "apps/web/src/app/admin/recruiters/page.tsx",
+    "lines": 82,
+    "client": true,
+    "api_functions": [
+      "approveRecruiter",
+      "getPendingRecruiters",
+      "rejectRecruiter"
+    ],
+    "redirects": [],
+    "headings": [
+      "Pending recruiter approvals"
+    ],
+    "has_loading": true,
+    "has_error": false,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/settings",
+    "file": "apps/web/src/app/admin/settings/page.tsx",
+    "lines": 40,
+    "client": true,
+    "api_functions": [
+      "getMe"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/support",
+    "file": "apps/web/src/app/admin/support/page.tsx",
+    "lines": 87,
+    "client": true,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [
+      "{filter === \"all\" ? \"No reports yet\" : `No ${supportStatuses[filter].toLowerCase()} report",
+      "{ticket.subject}"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/admin/users",
+    "file": "apps/web/src/app/admin/users/page.tsx",
+    "lines": 171,
+    "client": true,
+    "api_functions": [
+      "createAdminUser",
+      "deactivateAdminUser",
+      "getAdminUsers",
+      "impersonateUser",
+      "updateAdminUser",
+      ""
+    ],
+    "redirects": [
+      "router.push(\"/company\");",
+      "router.push(\"/recruiter\");",
+      "router.push(\"/dashboard\");"
+    ],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/auth/login",
+    "file": "apps/web/src/app/auth/login/page.tsx",
+    "lines": 5,
+    "client": false,
+    "api_functions": [],
+    "redirects": [
+      "redirect(\"/login\");"
+    ],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/auth/register",
+    "file": "apps/web/src/app/auth/register/page.tsx",
+    "lines": 5,
+    "client": false,
+    "api_functions": [],
+    "redirects": [
+      "redirect(\"/register\");"
+    ],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/auth/sso/callback",
+    "file": "apps/web/src/app/auth/sso/callback/page.tsx",
+    "lines": 313,
+    "client": true,
+    "api_functions": [
+      "exchangeOAuthHandoff",
+      "getMe",
+      "verifyTwoFactor"
+    ],
+    "redirects": [
+      "router.replace(provider === \"linkedin\" ? \"/login\" : \"/login\");"
+    ],
+    "headings": [
+      "\n                {state === \"loading\" ? \"Signing you in\" : state === \"mfa\" ? \"Verify it\u2019s "
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/chat/[id]",
+    "file": "apps/web/src/app/chat/[id]/page.tsx",
+    "lines": 123,
+    "client": true,
+    "api_functions": [
+      "getConversationPage",
+      "getMe",
+      "markFriendMessagesRead",
+      "sendMessage",
+      "type ChatMessagePage"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/chat",
+    "file": "apps/web/src/app/chat/page.tsx",
+    "lines": 5,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/chat/recruitment/[applicationId]",
+    "file": "apps/web/src/app/chat/recruitment/[applicationId]/page.tsx",
+    "lines": 208,
+    "client": true,
+    "api_functions": [
+      "getApiBaseUrl",
+      "getMe",
+      "getRecruitmentChat",
+      "getRecruitmentMessagesPage",
+      "markRecruitmentMessagesRead",
+      "sendRecruitmentMessage",
+      ""
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/choose-role",
+    "file": "apps/web/src/app/choose-role/page.tsx",
+    "lines": 5,
+    "client": false,
+    "api_functions": [],
+    "redirects": [
+      "redirect(\"/register\");"
+    ],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/companies",
+    "file": "apps/web/src/app/companies/page.tsx",
+    "lines": 62,
+    "client": true,
+    "api_functions": [
+      "getCompanies",
+      "createCompany",
+      "joinCompany"
+    ],
+    "redirects": [],
+    "headings": [
+      "Companies",
+      "Create company (recruiters only)"
+    ],
+    "has_loading": false,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/analytics",
+    "file": "apps/web/src/app/company/analytics/page.tsx",
+    "lines": 171,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "getApplications",
+      "getApiBaseUrl"
+    ],
+    "redirects": [],
+    "headings": [
+      "Current snapshot",
+      "Current pipeline distribution",
+      "Job performance"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/candidates",
+    "file": "apps/web/src/app/company/candidates/page.tsx",
+    "lines": 284,
+    "client": true,
+    "api_functions": [
+      "getApplications",
+      "getMe",
+      "updateApplicationStatus",
+      "getApiBaseUrl",
+      "listRecruitmentChats"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/invitations",
+    "file": "apps/web/src/app/company/invitations/page.tsx",
+    "lines": 232,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "inviteEmployee",
+      "listEmployeeInvitations",
+      "revokeEmployeeInvitation",
+      "resendEmployeeInvite"
+    ],
+    "redirects": [],
+    "headings": [
+      "Invite team member",
+      "Sent invitations"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/invite/accept",
+    "file": "apps/web/src/app/company/invite/accept/page.tsx",
+    "lines": 158,
+    "client": true,
+    "api_functions": [
+      "acceptCompanyInvite",
+      "validateCompanyInvitation"
+    ],
+    "redirects": [
+      "router.push(\"/login?next=/company/onboarding\"), 1200);"
+    ],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/company/jobs",
+    "file": "apps/web/src/app/company/jobs/page.tsx",
+    "lines": 422,
+    "client": true,
+    "api_functions": [
+      "createOffer",
+      "getMe",
+      "toggleOffer",
+      "api",
+      "getApiBaseUrl",
+      "getCompanyMembers",
+      "getApplications",
+      "setResponsibleHr",
+      "offerLogoSrc"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/messages",
+    "file": "apps/web/src/app/company/messages/page.tsx",
+    "lines": 174,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "listRecruitmentChats"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/notifications",
+    "file": "apps/web/src/app/company/notifications/page.tsx",
+    "lines": 8,
+    "client": true,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/company/onboarding",
+    "file": "apps/web/src/app/company/onboarding/page.tsx",
+    "lines": 106,
+    "client": true,
+    "api_functions": [
+      "getCompany",
+      "getMe",
+      "updateCompany"
+    ],
+    "redirects": [
+      "router.push(\"/company\");",
+      "router.push(\"/company\")}>Skip for now</Button>"
+    ],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/company",
+    "file": "apps/web/src/app/company/page.tsx",
+    "lines": 259,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "getApplications",
+      "getAuditLogs",
+      "getCompany",
+      "getApiBaseUrl",
+      "offerLogoSrc"
+    ],
+    "redirects": [],
+    "headings": [
+      "\n              ",
+      "\n            Needs attention {attentionCount > 0 ? `(${attentionCount})` : \"\"}\n          ",
+      "Hiring summary",
+      "Pipeline",
+      "Recent activity",
+      "Open jobs"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/settings",
+    "file": "apps/web/src/app/company/settings/page.tsx",
+    "lines": 456,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "getCompany",
+      "updateCompany",
+      "getCompanySubscription"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/company/team",
+    "file": "apps/web/src/app/company/team/page.tsx",
+    "lines": 300,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "getCompanyMembers",
+      "api"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/dashboard/applications",
+    "file": "apps/web/src/app/dashboard/applications/page.tsx",
+    "lines": 36,
+    "client": true,
+    "api_functions": [
+      "api",
+      "listRecruitmentChats"
+    ],
+    "redirects": [],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/dashboard/companies/[id]",
+    "file": "apps/web/src/app/dashboard/companies/[id]/page.tsx",
+    "lines": 99,
+    "client": true,
+    "api_functions": [
+      "companyLogoSrc",
+      "getCompany"
+    ],
+    "redirects": [],
+    "headings": [
+      "Company profile unavailable",
+      "{company.name}",
+      "About {company.name}",
+      "At a glance"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/dashboard/friends",
+    "file": "apps/web/src/app/dashboard/friends/page.tsx",
+    "lines": 246,
+    "client": true,
+    "api_functions": [
+      "acceptFriendRequest",
+      "blockCandidate",
+      "cancelFriendRequest",
+      "declineFriendRequest",
+      "getPublicCandidateProfile",
+      "listFriends",
+      "listBlockedCandidates",
+      "listIncomingFriendRequests",
+      "listSentFriendRequests",
+      "removeFriend",
+      "searchPeople",
+      "sendFriendRequest",
+      "sendPresenceHeartbeat",
+      "unblockCandidate",
+      ""
+    ],
+    "redirects": [],
+    "headings": [
+      "Friends",
+      "Incoming requests",
+      "Sent requests",
+      "Find candidates",
+      "My friends",
+      "Blocked candidates",
+      "{profile.data?.full_name ?? \"Candidate profile\"}"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/dashboard/missions",
+    "file": "apps/web/src/app/dashboard/missions/page.tsx",
+    "lines": 124,
+    "client": true,
+    "api_functions": [
+      "getMissionProgress",
+      "listMissions",
+      "submitMissionAttempt"
+    ],
+    "redirects": [],
+    "headings": [
+      "Practice missions",
+      "Validated skills",
+      "{mission.title}"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/dashboard/notifications",
+    "file": "apps/web/src/app/dashboard/notifications/page.tsx",
+    "lines": 5,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/dashboard",
+    "file": "apps/web/src/app/dashboard/page.tsx",
+    "lines": 169,
+    "client": true,
+    "api_functions": [
+      "api",
+      "getMe",
+      "getProfile",
+      "getRecommendations",
+      "listRecruitmentChats"
+    ],
+    "redirects": [],
+    "headings": [
+      "\n            {firstName ? `${timeGreeting}, ${firstName}.` : \"Your next chapter starts her",
+      "What needs your attention",
+      "Opportunities to explore",
+      "Application activity"
+    ],
+    "has_loading": true,
+    "has_error": false,
+    "has_empty": true
+  },
+  {
+    "route": "/dashboard/profile",
+    "file": "apps/web/src/app/dashboard/profile/page.tsx",
+    "lines": 653,
+    "client": true,
+    "api_functions": [
+      "deleteCV",
+      "getCVMeta",
+      "getCVDownloadUrl",
+      "getMe",
+      "getProfile",
+      "generateProfileBio",
+      "generateProfileHeadline",
+      "parseCV",
+      "uploadAvatar",
+      "updateProfile",
+      "uploadCV",
+      ""
+    ],
+    "redirects": [
+      "router.push(pendingNavigation); }}>Leave without saving</Button></>}>"
+    ],
+    "headings": [
+      "{loading ? \"Your profile\" : fullName}",
+      "{active.label}"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/dashboard/recommendations",
+    "file": "apps/web/src/app/dashboard/recommendations/page.tsx",
+    "lines": 312,
+    "client": true,
+    "api_functions": [
+      "api",
+      "generateRecommendations",
+      "getProfile",
+      "getRecommendationJob",
+      "getRecommendations",
+      "scoreRecommendation"
+    ],
+    "redirects": [],
+    "headings": [
+      "\n              Discover ",
+      "Open roles"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/dashboard/security",
+    "file": "apps/web/src/app/dashboard/security/page.tsx",
+    "lines": 5,
+    "client": false,
+    "api_functions": [],
+    "redirects": [
+      "redirect(\"/dashboard/settings\");"
+    ],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/dashboard/settings",
+    "file": "apps/web/src/app/dashboard/settings/page.tsx",
+    "lines": 132,
+    "client": true,
+    "api_functions": [
+      "changeAccountPassword",
+      "confirmEmailChange",
+      "getMe",
+      "getTwoFactorStatus",
+      "requestEmailChange",
+      "updateAccountName",
+      ""
+    ],
+    "redirects": [],
+    "headings": [
+      "Personal information",
+      "Email address",
+      "Password"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/get-started",
+    "file": "apps/web/src/app/get-started/page.tsx",
+    "lines": 285,
+    "client": true,
+    "api_functions": [
+      "completeCandidateOnboarding",
+      "getCandidateOnboarding",
+      "getMe",
+      "logoutSession",
+      "saveCandidateOnboardingStep",
+      ""
+    ],
+    "redirects": [
+      "router.replace(user.role === \"COMPANY_USER\" ? \"/company/invitations\" : user.role.includes(\"ADMIN\") ? \"/admin\" : \"/recruiter\");",
+      "router.replace(\"/dashboard\");",
+      "router.push(\"/dashboard/recommendations\");",
+      "router.push(\"/login\");"
+    ],
+    "headings": [
+      "{heading}"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/invite/company",
+    "file": "apps/web/src/app/invite/company/page.tsx",
+    "lines": 10,
+    "client": false,
+    "api_functions": [],
+    "redirects": [
+      "redirect(token ? `/company/invite/accept?token=${encodeURIComponent(token)}` : \"/company/invite/accept\");"
+    ],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/invite/employee",
+    "file": "apps/web/src/app/invite/employee/page.tsx",
+    "lines": 230,
+    "client": true,
+    "api_functions": [
+      "validateEmployeeInvite",
+      "acceptEmployeeInvite",
+      "acceptEmployeeInviteExisting",
+      "getMe",
+      "logoutSession"
+    ],
+    "redirects": [
+      "router.push(\"/login\"), 1400);",
+      "router.push(\"/company\"), 1000);"
+    ],
+    "headings": [],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/offers/[category]",
+    "file": "apps/web/src/app/offers/[category]/page.tsx",
+    "lines": 236,
+    "client": true,
+    "api_functions": [
+      "getOffers",
+      "offerLogoSrc"
+    ],
+    "redirects": [],
+    "headings": [
+      "{category.label} opportunities",
+      "About the role",
+      "Requirements"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/",
+    "file": "apps/web/src/app/page.tsx",
+    "lines": 8,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/pending-approval",
+    "file": "apps/web/src/app/pending-approval/page.tsx",
+    "lines": 20,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/privacy",
+    "file": "apps/web/src/app/privacy/page.tsx",
+    "lines": 26,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [
+      "Privacy Policy",
+      "Data we collect",
+      "Use",
+      "Sharing",
+      "Retention & rights",
+      "Contact"
+    ],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": true
+  },
+  {
+    "route": "/profile",
+    "file": "apps/web/src/app/profile/page.tsx",
+    "lines": 1,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/recruiter/offers/new",
+    "file": "apps/web/src/app/recruiter/offers/new/page.tsx",
+    "lines": 162,
+    "client": true,
+    "api_functions": [
+      "createOffer"
+    ],
+    "redirects": [
+      "router.push(\"/recruiter\");",
+      "router.push(\"/pending-approval\");"
+    ],
+    "headings": [
+      "Create offer"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  },
+  {
+    "route": "/recruiter",
+    "file": "apps/web/src/app/recruiter/page.tsx",
+    "lines": 192,
+    "client": true,
+    "api_functions": [
+      "getMe",
+      "getOffers",
+      "toggleOffer"
+    ],
+    "redirects": [
+      "router.replace(\"/pending-approval\");"
+    ],
+    "headings": [
+      "Offer management"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/recruiter/security",
+    "file": "apps/web/src/app/recruiter/security/page.tsx",
+    "lines": 17,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [
+      "Security"
+    ],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": false
+  },
+  {
+    "route": "/requests",
+    "file": "apps/web/src/app/requests/page.tsx",
+    "lines": 98,
+    "client": true,
+    "api_functions": [
+      "createRequest",
+      "getCompanies",
+      "getCompanyRecruiters",
+      "getMe",
+      "getRequests",
+      "updateRequestStatus"
+    ],
+    "redirects": [],
+    "headings": [
+      "Requests",
+      "New request (candidates)"
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": true
+  },
+  {
+    "route": "/terms",
+    "file": "apps/web/src/app/terms/page.tsx",
+    "lines": 22,
+    "client": false,
+    "api_functions": [],
+    "redirects": [],
+    "headings": [
+      "Terms of Service",
+      "Acceptance",
+      "Accounts & roles",
+      "Content",
+      "AI recommendations",
+      "Acceptable use",
+      "Contact"
+    ],
+    "has_loading": false,
+    "has_error": false,
+    "has_empty": true
+  },
+  {
+    "route": "/verify-email",
+    "file": "apps/web/src/app/verify-email/page.tsx",
+    "lines": 209,
+    "client": true,
+    "api_functions": [
+      "resendVerification",
+      "verifyEmail"
+    ],
+    "redirects": [
+      "router.push(\"/get-started\");"
+    ],
+    "headings": [
+      "Verify your "
+    ],
+    "has_loading": true,
+    "has_error": true,
+    "has_empty": false
+  }
+]

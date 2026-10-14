@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import secrets
 from datetime import datetime, timedelta
+from html import escape
 from typing import Any
 from uuid import UUID
+from xml.etree import ElementTree
 
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,10 +33,60 @@ from app.models import (
 )
 from app.services.avatar_storage import delete_avatar
 from app.services.cv_storage import delete_cv
+from app.services.email_outbox import enqueue_email_delivery
 
 
 DELETION_GRACE_DAYS = 7
 DELETION_LEASE_MINUTES = 10
+
+
+def serialize_account_export(payload: dict[str, Any], export_format: str) -> tuple[str, str]:
+    """Serialize one export without evaluating user data as markup or formulas."""
+    if export_format == "json":
+        import json
+
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":")), "application/json"
+    if export_format == "csv":
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(("section", "record", "field", "value"))
+
+        def rows(section: str, value: Any) -> None:
+            records = value if isinstance(value, list) else [value]
+            for index, record in enumerate(records):
+                if isinstance(record, dict):
+                    for field, item in record.items():
+                        text = "" if item is None else str(item)
+                        if text.startswith(("=", "+", "-", "@")):
+                            text = "'" + text
+                        writer.writerow((section, index, field, text))
+                else:
+                    writer.writerow((section, index, "value", "" if record is None else str(record)))
+
+        for section, value in payload.items():
+            rows(section, value)
+        return output.getvalue(), "text/csv; charset=utf-8"
+    if export_format == "xml":
+        root = ElementTree.Element("coditent-account-export", version="1")
+
+        def append(parent: ElementTree.Element, key: str, value: Any) -> None:
+            safe_key = key if key.replace("_", "").isalnum() and not key[0].isdigit() else "item"
+            node = ElementTree.SubElement(parent, safe_key)
+            if safe_key == "item" and key != "item":
+                node.set("name", key)
+            if isinstance(value, dict):
+                for child_key, child_value in value.items():
+                    append(node, str(child_key), child_value)
+            elif isinstance(value, list):
+                for child_value in value:
+                    append(node, "item", child_value)
+            elif value is not None:
+                node.text = str(value)
+
+        for key, value in payload.items():
+            append(root, key, value)
+        return ElementTree.tostring(root, encoding="unicode", xml_declaration=True), "application/xml"
+    raise ValueError("Unsupported account export format")
 
 
 def _value(value: Any) -> Any:
@@ -265,6 +319,25 @@ async def execute_deletion(db: AsyncSession, request_id: UUID, worker_id: str) -
                 Friendship.addressee_id == user.id,
             )
         )
+    )
+
+    await enqueue_email_delivery(
+        db,
+        kind="account_data_confirmation",
+        dedupe_key=f"account-deletion-completed:{request.id}",
+        resource_type="account_deletion",
+        resource_id=request.id,
+        to_email=user.email,
+        subject="CODITENT account deletion completed",
+        html=(
+            f"<p>Hello {escape(user.full_name)},</p>"
+            "<p>Your CODITENT account deletion has completed. Private files and direct personal fields were removed, "
+            "and integrity records were anonymized.</p>"
+        ),
+        text=(
+            f"Hello {user.full_name},\n\nYour CODITENT account deletion has completed. "
+            "Private files and direct personal fields were removed, and integrity records were anonymized."
+        ),
     )
 
     user.email = f"deleted+{user.id}@example.invalid"

@@ -10,8 +10,8 @@ import {
   companyLogoSrc,
   deleteCompanyLogo,
   uploadCompanyLogo,
-  validateCompanyLogoFile,
 } from "@/lib/api";
+import { validateManagedFile } from "@/lib/file-validation";
 import type { Company } from "@/lib/types";
 
 interface CompanyLogoSectionProps {
@@ -40,11 +40,11 @@ export function CompanyLogoSection({ company, canEdit }: CompanyLogoSectionProps
     };
   }, [preview]);
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const validationError = validateCompanyLogoFile(file);
+    const validationError = await validateManagedFile(file, "logo");
     if (validationError) {
       setError(validationError);
       return;

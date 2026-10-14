@@ -1,0 +1,41 @@
+---
+- name: Install PostgreSQL and object-storage backup clients
+  become: true
+  ansible.builtin.apt:
+    name:
+      - postgresql-client
+      - awscli
+    state: present
+    update_cache: true
+  when: backup_s3_uri | default('') | length > 0
+
+- name: Create restricted backup configuration
+  become: true
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/coditent-backup.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  when: backup_s3_uri | default('') | length > 0
+
+- name: Install backup-to-object-storage runner
+  become: true
+  ansible.builtin.template:
+    src: backup-to-object-storage.sh.j2
+    dest: /usr/local/sbin/coditent-backup
+    owner: root
+    group: root
+    mode: '0700'
+  when: backup_s3_uri | default('') | length > 0
+
+- name: Schedule daily production database backup
+  become: true
+  ansible.builtin.cron:
+    name: coditent encrypted offsite database backup
+    user: root
+    minute: "{{ backup_cron_minute }}"
+    hour: "{{ backup_cron_hour }}"
+    job: /usr/local/sbin/coditent-backup >> /var/log/coditent-backup.log 2>&1
+  when: backup_s3_uri | default('') | length > 0
