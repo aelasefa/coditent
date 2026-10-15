@@ -3,7 +3,16 @@ server {
     listen 80;
     listen [::]:80;
     server_name {{ server_name }};
-    return 308 https://$host$request_uri;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root {{ letsencrypt_webroot }};
+        default_type "text/plain";
+        try_files $uri =404;
+    }
+
+    location / {
+        return 308 https://$host$request_uri;
+    }
 }
 
 server {
@@ -20,6 +29,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "no-referrer" always;
+    add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https: wss:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests" always;
 {% else %}
 server {
     listen 80;
@@ -28,6 +38,14 @@ server {
 {% endif %}
 
     client_max_body_size 10M;
+
+    # Keep the challenge path available in the temporary HTTP-only bootstrap
+    # configuration used before the first certificate is issued.
+    location ^~ /.well-known/acme-challenge/ {
+        root {{ letsencrypt_webroot }};
+        default_type "text/plain";
+        try_files $uri =404;
+    }
 
 {% if nginx_waf_enabled | default(false) %}
     modsecurity on;

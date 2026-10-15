@@ -39,6 +39,7 @@ async def test_socket_ticket_is_application_bound_and_single_use(monkeypatch) ->
         application_id=application_id,
         session_id=str(session_id),
         expires_at=int(time.time()) + 60,
+        auth_version=7,
     )
     parsed = await socket_tickets.consume_socket_ticket(
         ticket,
@@ -47,6 +48,7 @@ async def test_socket_ticket_is_application_bound_and_single_use(monkeypatch) ->
     assert parsed.user_id == user_id
     assert parsed.application_id == application_id
     assert parsed.session_id == session_id
+    assert parsed.auth_version == 7
     check_session.assert_awaited_once_with({"sid": str(session_id)})
 
     with pytest.raises(AuthenticationRejected, match="expired or already used"):
@@ -68,6 +70,7 @@ async def test_socket_ticket_rejects_wrong_application_and_expired_session(monke
         "application_id": application_id,
         "session_id": str(uuid.uuid4()),
         "expires_at": int(time.time()) + 60,
+        "auth_version": 0,
     }
 
     wrong_application_ticket = await socket_tickets.create_socket_ticket(**common)
@@ -96,6 +99,7 @@ async def test_friend_socket_ticket_is_scope_bound(monkeypatch) -> None:
         "application_id": peer_id,
         "session_id": str(uuid.uuid4()),
         "expires_at": int(time.time()) + 60,
+        "auth_version": 0,
         "scope": "friend",
     }
 

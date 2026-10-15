@@ -105,6 +105,7 @@ async def two_factor_setup(
 async def two_factor_enable(
     data: TwoFactorEnableRequest,
     request: Request,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TwoFactorEnableOut:
@@ -143,7 +144,12 @@ async def two_factor_enable(
     user.is_2fa_enabled = True
     user.totp_last_used_step = step
     user.backup_codes = hashed_json
+    user.auth_version += 1
     await db.commit()
+
+    # Replace only this browser's access credential. Every older credential,
+    # socket ticket, and open socket keeps the previous version and is denied.
+    set_access_cookie(response, issue_access_token(user))
 
     logger.info("2fa_enabled_success", user_id=str(current_user.id))
     return TwoFactorEnableOut(

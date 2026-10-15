@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from redis.exceptions import RedisError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import get_async_redis
-from app.models import User
+from app.models import RevokedSession, RevokedTrustedDevice, User
 from app.utils.jwt import (
     create_access_token,
     create_mfa_token,
@@ -69,6 +70,48 @@ def account_auth_version(user: User) -> int:
     return int(user.auth_version or 0)
 
 
+async def _durable_session_revoked(session_id: UUID) -> bool:
+    from sqlalchemy import select
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.database import AsyncSessionLocal
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    try:
+        async with AsyncSessionLocal() as db:
+            durable = await db.scalar(
+                select(RevokedSession.session_id).where(
+                    RevokedSession.session_id == session_id,
+                    RevokedSession.expires_at > now,
+                )
+            )
+    except SQLAlchemyError as exc:
+        raise AuthenticationStoreUnavailable("Session validation unavailable") from exc
+    return durable is not None
+
+
+async def _durable_trusted_device_revoked(token_id: UUID) -> bool:
+    from sqlalchemy import select
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.database import AsyncSessionLocal
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    try:
+        async with AsyncSessionLocal() as db:
+            durable = await db.scalar(
+                select(RevokedTrustedDevice.token_id).where(
+                    RevokedTrustedDevice.token_id == token_id,
+                    RevokedTrustedDevice.expires_at > now,
+                )
+            )
+    except SQLAlchemyError as exc:
+        raise AuthenticationStoreUnavailable(
+            "Trusted-device validation unavailable"
+        ) from exc
+    return durable is not None
+
+
 def ensure_credential_matches_account(payload: dict, user: User) -> None:
     if payload.get("sub") != str(user.id):
         raise AuthenticationRejected("Credential subject mismatch")
@@ -121,9 +164,12 @@ async def trusted_device_is_valid(user: User, token: str | None) -> bool:
         revoked = await get_async_redis().get(
             _revoked_trusted_device_key(str(payload["jti"]))
         )
-    except RedisError as exc:
-        raise AuthenticationStoreUnavailable("Trusted-device validation unavailable") from exc
-    return revoked is None
+    except RedisError:
+        revoked = None
+    if revoked is not None:
+        return False
+
+    return not await _durable_trusted_device_revoked(UUID(str(payload["jti"])))
 
 
 async def _issue_mfa_challenge(user: User, account_type: str | None = None) -> str:
@@ -184,46 +230,125 @@ async def consume_mfa_challenge(payload: dict) -> None:
 
 
 async def ensure_access_session_active(payload: dict) -> None:
-    """Reject a structurally valid access credential when its session was revoked."""
+    """Reject a revoked session using Redis as a cache and PostgreSQL as truth."""
     session_id = str(payload.get("sid") or "")
     try:
-        UUID(session_id)
-        revoked = await get_async_redis().get(_revoked_session_key(session_id))
+        normalized_session_id = UUID(session_id)
     except (TypeError, ValueError, AttributeError) as exc:
         raise AuthenticationRejected("Invalid access session") from exc
+
+    # Redis gives a fast rejection while it is available. A missing key is not
+    # authoritative because Redis may have restarted since logout.
+    try:
+        revoked = await get_async_redis().get(_revoked_session_key(session_id))
     except RedisError as exc:
-        # Authentication must fail closed when revocation state is unavailable.
-        raise AuthenticationStoreUnavailable("Session validation unavailable") from exc
+        revoked = None
     if revoked is not None:
         raise AuthenticationRejected("Access session revoked")
 
+    if await _durable_session_revoked(normalized_session_id):
+        raise AuthenticationRejected("Access session revoked")
 
-async def revoke_access_session(payload: dict) -> None:
-    session_id = str(payload.get("sid") or "")
-    expires_at = int(payload.get("exp") or 0)
+
+async def revoke_access_session(payload: dict, db: AsyncSession) -> None:
+    """Persist logout before best-effort Redis cache publication."""
+    from sqlalchemy import delete
+    from sqlalchemy.dialects.postgresql import insert
+    from sqlalchemy.exc import SQLAlchemyError
+
+    try:
+        session_id = UUID(str(payload.get("sid") or ""))
+        user_id = UUID(str(payload.get("sub") or ""))
+        expires_epoch = int(payload.get("exp") or 0)
+        expires_at = datetime.fromtimestamp(expires_epoch, tz=timezone.utc).replace(
+            tzinfo=None
+        )
+    except (TypeError, ValueError, OverflowError, AttributeError) as exc:
+        raise AuthenticationRejected("Invalid access session") from exc
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if expires_at <= now:
+        raise AuthenticationRejected("Access session expired")
+    try:
+        await db.execute(
+            delete(RevokedSession).where(RevokedSession.expires_at <= now)
+        )
+        await db.execute(
+            insert(RevokedSession)
+            .values(
+                session_id=session_id,
+                user_id=user_id,
+                expires_at=expires_at,
+                revoked_at=now,
+            )
+            .on_conflict_do_nothing(index_elements=[RevokedSession.session_id])
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise AuthenticationStoreUnavailable("Session revocation unavailable") from exc
+
     from time import time
 
-    ttl = max(1, expires_at - int(time()))
+    ttl = max(1, expires_epoch - int(time()))
     try:
-        await get_async_redis().set(_revoked_session_key(session_id), "1", ex=ttl)
-    except RedisError as exc:
-        raise AuthenticationStoreUnavailable("Session validation unavailable") from exc
+        await get_async_redis().set(
+            _revoked_session_key(str(session_id)), "1", ex=ttl
+        )
+    except RedisError:
+        # PostgreSQL is authoritative; logout remains complete even if the
+        # cache is restarting.
+        return
 
 
-async def revoke_trusted_device(token: str | None) -> None:
+async def revoke_trusted_device(token: str | None, db: AsyncSession) -> None:
     if not token:
         return
     try:
         payload = verify_trusted_device_token(token)
     except ValueError:
         return
-    expires_at = int(payload.get("exp") or 0)
+    from sqlalchemy import delete
+    from sqlalchemy.dialects.postgresql import insert
+    from sqlalchemy.exc import SQLAlchemyError
+
+    token_id = UUID(str(payload["jti"]))
+    user_id = UUID(str(payload["sub"]))
+    expires_epoch = int(payload.get("exp") or 0)
+    expires_at = datetime.fromtimestamp(expires_epoch, tz=timezone.utc).replace(
+        tzinfo=None
+    )
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    try:
+        await db.execute(
+            delete(RevokedTrustedDevice).where(
+                RevokedTrustedDevice.expires_at <= now
+            )
+        )
+        await db.execute(
+            insert(RevokedTrustedDevice)
+            .values(
+                token_id=token_id,
+                user_id=user_id,
+                expires_at=expires_at,
+                revoked_at=now,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[RevokedTrustedDevice.token_id]
+            )
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise AuthenticationStoreUnavailable(
+            "Trusted-device revocation unavailable"
+        ) from exc
+
     from time import time
 
-    ttl = max(1, expires_at - int(time()))
+    ttl = max(1, expires_epoch - int(time()))
     try:
         await get_async_redis().set(
-            _revoked_trusted_device_key(str(payload["jti"])), "1", ex=ttl
+            _revoked_trusted_device_key(str(token_id)), "1", ex=ttl
         )
-    except RedisError as exc:
-        raise AuthenticationStoreUnavailable("Trusted-device validation unavailable") from exc
+    except RedisError:
+        return

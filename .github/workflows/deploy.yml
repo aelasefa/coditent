@@ -67,7 +67,9 @@ jobs:
 
       - name: Test production build
         env:
-          NEXT_PUBLIC_API_URL: http://34.205.255.37
+          NEXT_PUBLIC_API_URL: /api-proxy
+          NEXT_PUBLIC_OAUTH_API_URL: /api-proxy
+          BACKEND_PROXY_URL: http://127.0.0.1:8001
         run: npm run build
 
   ci-api:
@@ -143,6 +145,8 @@ jobs:
         env:
           APP_ENV: test
           DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+          AI_JOB_TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
+          MULTI_USER_TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
           EMAIL_OUTBOX_ENCRYPTION_KEY: ${{ env.CI_EMAIL_OUTBOX_ENCRYPTION_KEY }}
@@ -151,11 +155,13 @@ jobs:
           FRONTEND_URL: http://localhost:3000
         run: |
           alembic upgrade head
+          alembic check
           for test_file in \
             tests/test_account_data_lifecycle.py \
             tests/test_account_recovery.py \
             tests/test_admin_lifecycle.py \
             tests/test_ai_jobs.py \
+            tests/test_auth_revocation.py \
             tests/test_avatar_storage.py \
             tests/test_chat_history.py \
             tests/test_chat_realtime.py \
@@ -163,10 +169,13 @@ jobs:
             tests/test_cv_asset_lifecycle.py \
             tests/test_cv_upload.py \
             tests/test_database_url.py \
+            tests/test_database_integrity.py \
+            tests/test_deployment_readiness.py \
             tests/test_email_otp.py \
             tests/test_email_outbox.py \
             tests/test_friend_presence.py \
             tests/test_friendships.py \
+            tests/test_multi_user_concurrency.py \
             tests/test_entitlements.py \
             tests/test_health_readiness.py \
             tests/test_institutions.py \
@@ -255,6 +264,24 @@ jobs:
           test -s ~/.ssh/known_hosts
           ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null
 
+      - name: Install deployment automation
+        run: |
+          python -m pip install ansible-core==2.17.14
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Provision trusted TLS ingress
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          ANSIBLE_HOST_KEY_CHECKING: "True"
+        working-directory: ansible
+        run: |
+          set -euo pipefail
+          ansible-playbook -i inventory/hosts.ini playbooks/setup.yml \
+            --limit production \
+            -e ansible_host="$SSH_HOST" \
+            -e ansible_user="$SSH_USER"
+
       - name: Execute Deployment Script on EC2
         env:
           SSH_HOST: ${{ secrets.EC2_HOST }}
@@ -277,6 +304,13 @@ jobs:
             https://*) ;;
             *) echo "PUBLIC_BASE_URL must use HTTPS" >&2; exit 1 ;;
           esac
+          HTTP_BASE_URL="http://${PUBLIC_BASE_URL#https://}"
+          HTTP_STATUS="$(curl --proto '=http' --silent --show-error \
+            --output /dev/null --write-out '%{http_code}' "${HTTP_BASE_URL%/}/ready")"
+          REDIRECT_TARGET="$(curl --proto '=http' --silent --show-error \
+            --output /dev/null --write-out '%{redirect_url}' "${HTTP_BASE_URL%/}/ready")"
+          test "$HTTP_STATUS" = "308"
+          test "$REDIRECT_TARGET" = "${PUBLIC_BASE_URL%/}/ready"
           echo "Verifying public readiness endpoint ..."
           curl --proto '=https' --tlsv1.2 --silent --show-error --fail \
             --retry 5 --retry-delay 3 "${PUBLIC_BASE_URL%/}/ready"

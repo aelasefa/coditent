@@ -2,6 +2,7 @@
 import asyncio
 import uuid
 from datetime import timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -171,6 +172,11 @@ def test_password_and_oauth_completion_share_mfa_gate_and_challenge_is_single_us
 def test_only_matching_trusted_device_purpose_can_finish_mfa_login(monkeypatch):
     redis = FakeRedis()
     monkeypatch.setattr(authentication, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(
+        authentication,
+        "_durable_trusted_device_revoked",
+        AsyncMock(return_value=False),
+    )
     user = _user(two_factor=True)
     trusted = create_trusted_device_token(
         str(user.id),
@@ -197,7 +203,6 @@ def test_revoked_access_session_is_rejected(monkeypatch):
     payload = verify_access_token(
         create_access_token({"sub": "00000000-0000-0000-0000-000000000005"})
     )
-    asyncio.run(ensure_access_session_active(payload))
     redis.values[f"auth:revoked-session:{payload['sid']}"] = "1"
     with pytest.raises(AuthenticationRejected, match="revoked"):
         asyncio.run(ensure_access_session_active(payload))

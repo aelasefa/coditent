@@ -52,6 +52,34 @@ Use disposable test accounts and non-production candidate data. Record the teste
 4. Reassign the responsible HR user. Confirm the former HR socket is closed or stops receiving messages immediately and the new HR user gains access.
 5. Move the application out of a chat-enabled stage, deactivate a participant, or revoke the session. Confirm passive delivery and active sending both stop.
 
+## Automated two-client and race proof
+
+Run `scripts/prove-multi-user.py` against an isolated deployment. The script
+reads `DATABASE_URL`, `JWT_SECRET`, and `REDIS_URL`; it uses
+`http://127.0.0.1:8001` and `ws://127.0.0.1:8001` unless
+`MULTI_USER_PROOF_HTTP_URL` and `MULTI_USER_PROOF_WS_URL` override them. It
+creates unique proof accounts and prints a token-free JSON report.
+
+The proof sends and accepts a friend request, creates an application, advances
+it through review and shortlist, exchanges simultaneous direct messages, and
+verifies stable `(created_at, id)` history order. It then disconnects one
+candidate, sends a message while that user is offline, reconnects with a new
+single-use ticket, recovers the missed history, and verifies that live delivery
+resumes. Finally, the candidate and recruiter receive the same interview-stage
+event and exchange simultaneous recruitment messages.
+
+The verified run on 2026-10-15 used run ID `c91f436f08e0`. Every boolean proof
+field was `true`; both direct and recruitment clients received one `message`
+and one `message_ack`; the application reached `interview` at stage version 4.
+
+Apply migration `ad1b2c3d4e5f`, set `MULTI_USER_TEST_DATABASE_URL` to a
+disposable PostgreSQL database, and run
+`python -m pytest -q tests/test_multi_user_concurrency.py` from `apps/api`.
+The four controlled races verify one pending invitation, one winning company
+membership, one pending candidate request plus one winning recruiter decision,
+and one application-stage transition/version increment. The verified result on
+2026-10-15 was `4 passed`.
+
 ## Notifications, missions, privacy, and recovery
 
 1. Confirm application, interview, and message events create owner-scoped notifications. Disable one category and verify the server stops creating it; test read-one and read-all.

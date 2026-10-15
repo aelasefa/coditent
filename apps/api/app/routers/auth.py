@@ -1503,6 +1503,17 @@ async def confirm_email_change(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
+    # Verification attempts and auth_version are shared counters. Reload the
+    # account under a row lock so parallel confirmations cannot lose an
+    # attempt or consume the same pending change twice.
+    current_user = (
+        await db.execute(
+            select(User)
+            .where(User.id == current_user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     if not current_user.pending_email or not current_user.pending_email_otp_hash or not current_user.pending_email_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email change is pending.")
     if is_expired(current_user.pending_email_expires_at):
@@ -1576,12 +1587,13 @@ async def logout(
     request: Request,
     response: Response,
     payload: Annotated[dict, Depends(get_current_access_payload)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     """Revoke the active access session and remembered-device credential."""
     try:
-        await revoke_access_session(payload)
+        await revoke_access_session(payload, db)
         await revoke_trusted_device(
-            request.cookies.get(settings.trusted_device_cookie_name)
+            request.cookies.get(settings.trusted_device_cookie_name), db
         )
     except AuthenticationStoreUnavailable as exc:
         # Do not claim logout while a still-valid bearer session could remain

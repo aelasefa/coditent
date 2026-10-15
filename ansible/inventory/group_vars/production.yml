@@ -9,6 +9,12 @@ nginx_tls_enabled: true
 nginx_waf_enabled: true
 compose_file_list: "docker-compose.yml:docker-compose.production.yml"
 
+# Canonical public origin. The shared variables derive FRONTEND_URL, CORS,
+# OAuth callbacks, and Let's Encrypt certificate paths from this name.
+server_name: "coditent.app"
+resend_from_email: "notifications@coditent.app"
+letsencrypt_email: "notifications@coditent.app"
+
 # In production, Supabase and AI keys can be provided via:
 # 1. ansible-vault (e.g. including vault.yml)
 # 2. Extra vars from CI/CD: --extra-vars "database_url=... supabase_url=..."

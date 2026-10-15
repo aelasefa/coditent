@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -333,10 +334,17 @@ async def invite_company(
     expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=COMPANY_INVITE_EXPIRY_DAYS)
     invitation_uuid = uuid4()
     inv_id = str(invitation_uuid)
-    await db.execute(
-        text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
-        {"id": inv_id, "email": email, "name": company_name, "cname": contact_name, "crole": contact_role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
-    )
+    try:
+        await db.execute(
+            text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
+            {"id": inv_id, "email": email, "name": company_name, "cname": contact_name, "crole": contact_role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
+        )
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active invitation already exists for this email",
+        ) from exc
     delivery: EmailDelivery | None = None
     delivery_configuration_error = False
     try:
@@ -564,10 +572,17 @@ async def invite_employee(
     company_name = company.name if company else "Your company"
     invitation_uuid = uuid4()
     invitation_id = str(invitation_uuid)
-    await db.execute(
-        text("INSERT INTO employee_invitations (id, company_id, email, role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :cid, :email, :role, :hash, 'pending', :by, :exp, :now)"),
-        {"id": invitation_id, "cid": str(current_user.company_id), "email": email, "role": role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
-    )
+    try:
+        await db.execute(
+            text("INSERT INTO employee_invitations (id, company_id, email, role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :cid, :email, :role, :hash, 'pending', :by, :exp, :now)"),
+            {"id": invitation_id, "cid": str(current_user.company_id), "email": email, "role": role, "hash": token_hash, "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
+        )
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active invitation already exists for this email",
+        ) from exc
     delivery: EmailDelivery | None = None
     try:
         delivery = await _queue_employee_invite_email(
@@ -759,6 +774,17 @@ async def accept_employee_existing(
         await db.execute(text("UPDATE employee_invitations SET status='expired' WHERE id=:id"), {"id": row["id"]})
         await db.commit()
         raise HTTPException(status_code=400, detail="Token expired")
+    # Distinct invitations can be accepted concurrently. Lock the membership
+    # owner as well as the invitation so only one transaction can attach this
+    # account to a company.
+    current_user = (
+        await db.execute(
+            select(User)
+            .where(User.id == current_user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     # Email must match current_user (prevent stealing another's invite)
     if row["email"].lower() != current_user.email.lower():
         raise HTTPException(status_code=403, detail="Invitation email does not match your account")

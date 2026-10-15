@@ -164,15 +164,24 @@ async def set_responsible_hr(
     loses recruitment-chat access automatically (authorization re-resolves
     the current responsible HR on every request).
     """
+    # Serialize organization relationship changes (assignment, role changes,
+    # and member removal) on the company row.
+    company = await db.scalar(
+        select(Company).where(Company.id == current_user.company_id).with_for_update()
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     result = await db.execute(
         select(Offer).where(
             Offer.id == offer_id, Offer.company_id == current_user.company_id
-        )
+        ).with_for_update()
     )
     offer = result.scalar_one_or_none()
     if offer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
-    target_res = await db.execute(select(User).where(User.id == data.responsible_hr_id))
+    target_res = await db.execute(
+        select(User).where(User.id == data.responsible_hr_id).with_for_update()
+    )
     target = target_res.scalar_one_or_none()
     if (
         target is None
@@ -267,14 +276,16 @@ async def update_offer(
 ) -> OfferOut:
     # RBAC: PLATFORM_ADMIN platform-wide; COMPANY_USER scoped; CANDIDATE 403 via can()
     if current_user.role.value == "PLATFORM_ADMIN":
-        result = await db.execute(select(Offer).where(Offer.id == offer_id))
+        result = await db.execute(
+            select(Offer).where(Offer.id == offer_id).with_for_update()
+        )
     elif current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "edit_offers"):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         result = await db.execute(
             select(Offer).where(
                 Offer.id == offer_id, Offer.company_id == current_user.company_id
-            )
+            ).with_for_update()
         )
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
@@ -313,14 +324,16 @@ async def delete_offer(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     if current_user.role.value == "PLATFORM_ADMIN":
-        result = await db.execute(select(Offer).where(Offer.id == offer_id))
+        result = await db.execute(
+            select(Offer).where(Offer.id == offer_id).with_for_update()
+        )
     elif current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "delete_offers"):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: owner/admin only")
         result = await db.execute(
             select(Offer).where(
                 Offer.id == offer_id, Offer.company_id == current_user.company_id
-            )
+            ).with_for_update()
         )
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")

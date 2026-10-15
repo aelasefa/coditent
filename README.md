@@ -97,7 +97,7 @@ cp apps/web/.env.example apps/web/.env.local  # frontend: public vars only
 | `SUPABASE_SERVICE_KEY` | API only (`apps/api/app/db.py`, `services/cv_storage.py`, `services/company_logo.py`) | `sb_secret_...` service-role key for private buckets. Never `NEXT_PUBLIC_*` | Yes (uploads) | Yes | `sb_secret_YOUR_SERVICE_ROLE_KEY` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Web | Public Supabase URL (SSR cookie refresh only, `apps/web/src/utils/supabase/`) | Yes | No | `https://YOUR_PROJECT_REF.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Web | Publishable key for SSR session refresh. App users are NOT Supabase Auth users | Yes | No | `sb_publishable_YOUR_PUBLISHABLE_KEY` |
-| `NEXT_PUBLIC_API_URL` | Web (`apps/web/src/lib/api.ts`, `next.config.mjs`, Docker build arg) | Backend base URL; `http://localhost:8001` locally | Yes | No | `http://localhost:8001` |
+| `NEXT_PUBLIC_API_URL` | Web (`apps/web/src/lib/api.ts`, `next.config.mjs`, Docker build arg) | Browser API base. Production uses the same-origin HTTPS proxy path; `BACKEND_PROXY_URL` is the container-only upstream. | Yes | No | `/api-proxy` |
 | `JWT_SECRET` | API (`apps/api/app/utils/jwt.py`, `app/config.py`) | HS256 signing secret, 60-min tokens | Yes | Yes | `change-me-to-a-random-32-char-secret` |
 | `TOTP_ENCRYPTION_KEY` | API MFA service and migrations | Fernet key for encrypted authenticator secrets; generate once and keep in the secret manager | Yes when MFA exists | Yes | *(generate with `Fernet.generate_key()`)* |
 | `EMAIL_OUTBOX_ENCRYPTION_KEY` | API and AI/email dispatcher | Independent Fernet key encrypting recipients, OTPs, and invitation URLs in the durable email outbox | Yes when email is enabled | Yes | *(generate independently with `Fernet.generate_key()`)* |
@@ -108,8 +108,8 @@ cp apps/web/.env.example apps/web/.env.local  # frontend: public vars only
 | `RESEND_API_KEY` | API (`apps/api/app/services/email.py`) | Resend key for OTP + invitation emails | For email | Yes | *(empty allowed; email logged as warning)* |
 | `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | API | Sender identity | For email | No | `coditent@yourdomain.com` / `CODITENT` |
 | `OTP_EXPIRE_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_RESEND_COOLDOWN_SECONDS` | API (auth OTP) | `5` / `5` / `60` defaults | No | No | `5` / `5` / `60` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | API (SSO) | Google OAuth; both-or-neither enforced in `app/config.py` | For SSO | Secret mixed | `http://localhost:8001/auth/sso/google/callback` |
-| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | API (SSO) | LinkedIn OAuth; both-or-neither enforced | For SSO | Secret mixed | `http://localhost:8001/auth/sso/linkedin/callback` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | API (SSO) | Google OAuth; both-or-neither enforced in `app/config.py` | For SSO | Secret mixed | `https://coditent.app/auth/sso/google/callback` |
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | API (SSO) | LinkedIn OAuth; both-or-neither enforced | For SSO | Secret mixed | `https://coditent.app/auth/sso/linkedin/callback` |
 
 ### Run with Docker (single command)
 
@@ -343,12 +343,12 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 
 ## How frontend and backend communicate
 
-1. **Base URL** (`lib/api.ts:18-29`): browser + HTTPS page + `http://` backend → `/api-proxy` (Next.js rewrite to `NEXT_PUBLIC_API_URL`, `next.config.mjs:17-32`); else direct `NEXT_PUBLIC_API_URL`; SSR fallback `http://34.205.255.37`.
+1. **Base URL** (`lib/api.ts` and `next.config.mjs`): production browsers use same-origin `/api-proxy`, so browser-to-frontend and browser-to-API traffic stays on `https://coditent.app`. Next.js forwards only inside the private container network through `BACKEND_PROXY_URL=http://api:8001`; there is no public HTTP IP fallback.
 2. **Credentials:** `withCredentials:true` + `Authorization: Bearer <localStorage coditent_token>` per request (`lib/api.ts:31-67`). Backend accepts Bearer first, `access_token` HttpOnly cookie fallback (cookie is only set on SSO flows — `routers/auth.py:153-161` — so email-login users rely on Bearer).
 3. **CORS** (`main.py:29-41`): explicit frontend origins (`settings.frontend_url`, `localhost:3000/3001` + `127.0.0.1` variants), `allow_credentials=True`, all methods/headers.
 4. **Protected endpoints:** `require_*` dependency → 401 (missing/bad/expired token, vanished user) or 403 (wrong role/scope/approval). Frontend 401 interceptor clears token and redirects protected paths to `/login?next=` or `/admin/login?next=` (`lib/api.ts:69-90`).
 5. **Errors:** `HTTPException` + global `Exception→500` (`main.py:95-98`), slowapi 429, Pydantic 422. Typed CV/AI errors: 400 file errors, 422 no-text, 502 upstream AI/mail/storage, 503 unconfigured SSO/storage-missing, 504 AI timeout, 413 oversized logo, 409 OTP race, 410 deprecated `POST /companies/{id}/join`.
-6. **Realtime:** WS URL builder (`lib/api.ts:620-627`) puts the JWT in `?token=` (proxy/CDN-log exposure tradeoff, documented); per-message re-auth server-side; 3 s polling fallback in UI.
+6. **Realtime:** socket-ticket endpoints issue short-lived, single-use tickets. On the production HTTPS origin, both URL builders produce `wss://coditent.app/api-proxy/...`; Nginx preserves the WebSocket upgrade and the UI retains a polling fallback.
 7. **Avatar/logo note:** `PUT /auth/me/avatar` stores a URL string; company logos upload bytes to `POST /companies/{id}/logo` and expose only the storage path + scoped stream.
 
 Real example — "User clicks Apply":
@@ -842,13 +842,13 @@ Only commands that work with this repo are shown; there is no `db` service and n
 | Service | Technology | Internal port | Exposed port | Depends on |
 | ------- | ---------- | ------------: | -----------: | ---------- |
 | `api` | FastAPI/Uvicorn (`alembic upgrade head && uvicorn ... --port 8001`) | 8001 | `8001:8001` | PostgreSQL + Redis + worker readiness (`GET /ready`) |
-| `worker` | Celery (`celery -A app.tasks worker`) | — | — | `api`, `redis` started |
-| `redis` | `redis:7-alpine` | 6379 | `6379:6379` | — |
-| `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | `3001:3000` | `api` started |
-| `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | `80:80, 443:443` | `web`, `api` started |
-| `vault` | `hashicorp/vault:1.15.0` dev | 8200 | `8200:8200` | — |
+| `worker` | Celery (`celery -A app.tasks worker`) | — | — | `api` started, `redis` healthy |
+| `ai-dispatcher` | Durable AI job dispatcher | — | — | `api` started, `redis` healthy |
+| `redis` | `redis:7-alpine` | 6379 | loopback `6380` | — |
+| `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | internal only | `api` healthy |
+| `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | loopback `3001/8443` | `web`, `api` healthy |
 
-Networks/volumes: default compose network; no `db_data` volume (Supabase is the store). Env: `api` uses `apps/api/.env` file + `environment:` overrides (`FRONTEND_URL=http://localhost:3001` locally — note it differs from `.env.example`'s `:3000`; TO-VERIFY which your deploy uses). Production: push to `main` → Actions (web lint+build, API import check, Ansible syntax check) → SSH deployment, `docker compose up -d --build`, readiness gate `http://127.0.0.1:8001/ready`. The generated deploy helper exits nonzero if readiness never succeeds.
+Networks/volumes: default Compose network; no `db_data` volume (Supabase is the persistent store). Compose reads the single documented root `.env`. Production Ansible fixes the public origin to `https://coditent.app`, configures same-origin API/OAuth routes, issues and renews a Let's Encrypt certificate, redirects HTTP with status 308, and keeps container upstreams loopback/private. CD rejects a non-HTTPS public URL and verifies both the redirect target and the certificate-backed `/ready` response.
 
 ---
 
@@ -1017,7 +1017,7 @@ User and organization deletion are implemented as retention-safe logical deactiv
 
 ## Testing
 
-- **Frameworks:** backend `pytest` + `httpx` (`apps/api/tests/`, 14 files, mixed live-DB + offline); frontend lint + prod build in CI (`npm run lint`, `npm run build` with `NEXT_PUBLIC_API_URL=http://34.205.255.37`); backend CI is import-check only (`python -c "import app.main"`-class step) — full suites run manually.
+- **Frameworks:** backend `pytest` + `httpx`; frontend lint, type checks, regression tests and a production build run in CI. The production-build contract uses `NEXT_PUBLIC_API_URL=/api-proxy` and an internal-only `BACKEND_PROXY_URL`.
 - **Suites:**
   - `test_company_logo.py` — 13 offline logo tests (validation, RBAC, isolation, fallback, storage properties).
   - `test_company_invitations.py` / `test_employee_invitations.py` — invite/accept/ownership/roles (live; employee suite uses fixed emails — non-idempotent, residue-sensitive).

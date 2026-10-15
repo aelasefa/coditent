@@ -100,6 +100,12 @@ def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
     assert "TESTED_COMMIT: ${{ github.sha }}" in workflow
     assert "PUBLIC_BASE_URL must use HTTPS" in workflow
     assert "--proto '=https'" in workflow
+    assert "HTTP_STATUS" in workflow
+    assert 'test "$HTTP_STATUS" = "308"' in workflow
+    assert "REDIRECT_TARGET" in workflow
+    assert "http://34.205.255.37" not in workflow
+    assert "Provision trusted TLS ingress" in workflow
+    assert "playbooks/setup.yml" in workflow
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
@@ -112,6 +118,9 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "dispatcher_heartbeat_is_fresh_sync" in compose
     assert "python -m app.ai_dispatcher" in compose
     assert compose.count("condition: service_healthy") >= 4
+    assert compose.count("- ./.env") == 3
+    assert "fetch('http://127.0.0.1:3000/')" in compose
+    assert "web:\n        condition: service_healthy" in compose
     assert "app.include_router(health_router" in main
 
 
@@ -135,6 +144,40 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     assert 'next_public_oauth_api_url: "{{ next_public_api_url }}"' in ansible_vars
 
 
+def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
+    next_config = (REPO_ROOT / "apps" / "web" / "next.config.mjs").read_text()
+    api_client = (REPO_ROOT / "apps" / "web" / "src" / "lib" / "api.ts").read_text()
+    production = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+
+    assert "34.205.255.37" not in next_config
+    assert "34.205.255.37" not in api_client
+    assert 'server_name: "coditent.app"' in production
+    assert 'next_public_api_url: "/api-proxy"' in (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
+    ).read_text()
+    assert 'window.location.protocol === "https:"' in api_client
+    assert '"wss:"' in api_client
+
+
+def test_production_automates_trusted_tls_and_redirects_http() -> None:
+    tasks = (REPO_ROOT / "ansible" / "roles" / "nginx" / "tasks" / "main.yml").read_text()
+    template = (
+        REPO_ROOT / "ansible" / "roles" / "nginx" / "templates" / "coditent.conf.j2"
+    ).read_text()
+
+    assert "certbot" in tasks
+    assert "--webroot" in tasks
+    assert "certbot.timer" in tasks
+    assert "renewal-hooks/deploy/reload-nginx" in tasks
+    assert "return 308 https://$host$request_uri" in template
+    assert "ssl_certificate {{ tls_certificate_path }}" in template
+    assert "Strict-Transport-Security" in template
+    assert "upgrade-insecure-requests" in template
+    assert "proxy_set_header Upgrade $http_upgrade" in template
+
+
 def test_ansible_declares_collection_and_syntax_check() -> None:
     requirements = (REPO_ROOT / "ansible" / "requirements.yml").read_text()
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
@@ -154,7 +197,7 @@ def test_application_images_run_as_unprivileged_users() -> None:
     assert "USER 10001:10001" in api_dockerfile
     assert "USER 10001:10001" in web_dockerfile
     assert "npm run build" in web_dockerfile
-    assert 'CMD ["npm", "run", "start"' in web_dockerfile
+    assert 'CMD ["node", "server.js"]' in web_dockerfile
     assert compose.count("no-new-privileges:true") >= 3
     assert compose.count("cap_drop:") >= 3
 
