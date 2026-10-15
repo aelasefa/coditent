@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     ai_dispatch_interval_seconds: float = Field(default=2.0, ge=0.25, le=30.0)
     # Managed PostgreSQL can need a few seconds for a cold TLS connection.
     # Keep this bounded while avoiding false-unhealthy restarts.
-    readiness_check_timeout_seconds: float = Field(default=5.0, ge=0.1, le=10.0)
+    readiness_check_timeout_seconds: float = Field(default=10.0, ge=0.1, le=10.0)
     worker_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
     log_level: str = "INFO"
 

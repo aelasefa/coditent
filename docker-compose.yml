@@ -33,7 +33,7 @@ services:
       DB_MAX_OVERFLOW: "0"
       DB_POOL_TIMEOUT_SECONDS: "15"
       DB_POOL_RECYCLE_SECONDS: "300"
-      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-5}"
+      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
       WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
     volumes:
       - ./apps/api:/app
@@ -49,10 +49,10 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=3)\"",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=12)\"",
         ]
       interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 10
       start_period: 30s
 
@@ -84,7 +84,7 @@ services:
       DB_MAX_OVERFLOW: "0"
       DB_POOL_TIMEOUT_SECONDS: "15"
       DB_POOL_RECYCLE_SECONDS: "300"
-      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-5}"
+      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
       WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
     command: celery -A app.tasks worker --loglevel=info --concurrency=2
     healthcheck:
@@ -126,7 +126,7 @@ services:
       DB_MAX_OVERFLOW: "0"
       DB_POOL_TIMEOUT_SECONDS: "15"
       DB_POOL_RECYCLE_SECONDS: "300"
-      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-5}"
+      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
       WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
     command: python -m app.ai_dispatcher
     healthcheck:
@@ -203,7 +203,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O /dev/null https://127.0.0.1/ready || exit 1"]
+      test: ["CMD-SHELL", "wget -T 12 -q -O /dev/null http://127.0.0.1/ready || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 10

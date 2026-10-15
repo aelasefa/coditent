@@ -1,7 +1,7 @@
 """add database guards for multi-user request and invitation races
 
-Revision ID: ad1b2c3d4e5f
-Revises: ac1b2c3d4e5f
+Revision ID: ag1b2c3d4e5f
+Revises: af1b2c3d4e5f
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = "ad1b2c3d4e5f"
-down_revision: Union[str, Sequence[str], None] = "ac1b2c3d4e5f"
+revision: str = "ag1b2c3d4e5f"
+down_revision: Union[str, Sequence[str], None] = "af1b2c3d4e5f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

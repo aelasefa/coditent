@@ -8,6 +8,7 @@ RUN apk add --no-cache openssl
 RUN rm -rf /etc/nginx/templates /etc/nginx/conf.d
 
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY includes/ /etc/nginx/includes/
 COPY modsecurity/ /etc/nginx/modsecurity/
 COPY entrypoint.sh /docker-entrypoint.d/00-ssl-init.sh
 

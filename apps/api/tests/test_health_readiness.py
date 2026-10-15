@@ -81,6 +81,7 @@ def test_ready_reports_all_components(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_ready_returns_safe_503_when_database_fails(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     secret_detail = "postgresql://private-user:private-password@example.invalid/db"
     monkeypatch.setattr(
@@ -105,6 +106,7 @@ def test_ready_returns_safe_503_when_database_fails(
         },
     }
     assert secret_detail not in response.text
+    assert secret_detail not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -174,3 +176,69 @@ def test_worker_heartbeat_uses_ttl_and_freshness_marker() -> None:
 
     assert redis.calls == [(health.WORKER_HEARTBEAT_KEY, "alive", 30)]
     assert health.worker_heartbeat_is_fresh_sync(redis) is True
+
+
+def test_concurrent_readiness_requests_share_database_check(monkeypatch):
+    async def run():
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def database():
+            started.set()
+            await release.wait()
+            return True
+
+        _mock_probes(monkeypatch)
+        probe = AsyncMock(side_effect=database)
+        monkeypatch.setattr(health, "_probe_database", probe)
+        requests = [asyncio.create_task(health.readiness_payload()) for _ in range(8)]
+        await started.wait()
+        release.set()
+        responses = await asyncio.gather(*requests)
+        assert all(code == 200 for code, _ in responses)
+        probe.assert_awaited_once()
+
+    asyncio.run(run())
+
+
+def test_disconnected_caller_does_not_cancel_shared_database_check(monkeypatch):
+    async def run():
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def database():
+            started.set()
+            await release.wait()
+            return True
+
+        probe = AsyncMock(side_effect=database)
+        monkeypatch.setattr(health, "_probe_database", probe)
+        disconnected = asyncio.create_task(health._database_status())
+        await started.wait()
+        other = asyncio.create_task(health._database_status())
+        disconnected.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await disconnected
+        release.set()
+        assert await other == "ok"
+        probe.assert_awaited_once()
+
+    asyncio.run(run())
+
+
+def test_database_timeout_can_recover_on_next_request(monkeypatch, caplog):
+    async def run():
+        async def hung_database():
+            await asyncio.Event().wait()
+
+        _mock_probes(monkeypatch)
+        monkeypatch.setattr(health, "_readiness_timeout_seconds", lambda: 0.01)
+        monkeypatch.setattr(health, "_probe_database", hung_database)
+        code, payload = await health.readiness_payload()
+        assert code == 503
+        assert payload["components"]["database"] == "unavailable"
+        monkeypatch.setattr(health, "_probe_database", AsyncMock(return_value=True))
+        code, payload = await health.readiness_payload()
+        assert code == 200
+        assert payload["components"]["database"] == "ok"
+
+    asyncio.run(run())
+    assert "exception_type=TimeoutError" in caplog.text

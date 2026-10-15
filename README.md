@@ -122,6 +122,12 @@ docker compose up --build
 # `alembic upgrade head` runs automatically on api start against Supabase
 ```
 
+The Docker development site uses **http://localhost:3001** (also
+http://127.0.0.1:3001) without redirecting to HTTPS. Port 8443 remains available
+for optional HTTPS testing with a self-signed certificate, which browsers do
+not trust automatically. Production uses the separate Ansible ingress with a
+trusted certificate and HTTP-to-HTTPS redirects.
+
 ### Local dev without Docker
 
 ```bash

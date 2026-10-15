@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
+
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -122,6 +125,24 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "fetch('http://127.0.0.1:3000/')" in compose
     assert "web:\n        condition: service_healthy" in compose
     assert "app.include_router(health_router" in main
+
+
+def test_readiness_clients_allow_dependency_probe_to_finish() -> None:
+    services = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())["services"]
+    api = services["api"]
+    setting = api["environment"]["READINESS_CHECK_TIMEOUT_SECONDS"]
+    probe_budget = float(re.search(r":-([\d.]+)", setting).group(1))
+    api_health = api["healthcheck"]
+    client_budget = float(re.search(r"timeout=([\d.]+)", api_health["test"][-1]).group(1))
+    assert probe_budget < client_budget < float(api_health["timeout"].removesuffix("s"))
+
+    proxy_health = services["proxy"]["healthcheck"]
+    proxy_client_budget = float(re.search(r"-T ([\d.]+)", proxy_health["test"][-1]).group(1))
+    nginx = (REPO_ROOT / "nginx/includes/proxy-routes.conf").read_text()
+    readiness_location = nginx.split("location ~ ^/(health|ready)$ {", 1)[1].split("}", 1)[0]
+    nginx_budget = float(re.search(r"proxy_read_timeout ([\d.]+)s", readiness_location).group(1))
+    assert probe_budget < nginx_budget <= proxy_client_budget
+    assert proxy_client_budget < float(proxy_health["timeout"].removesuffix("s"))
 
 
 def test_oauth_start_and_callback_share_a_public_origin() -> None:
