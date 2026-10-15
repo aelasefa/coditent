@@ -249,24 +249,46 @@ jobs:
           set -euo pipefail
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_rsa
+          # Populate known_hosts: prefer the stored secret, fall back to live scan
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          fi
           chmod 600 ~/.ssh/known_hosts
-          test -s ~/.ssh/known_hosts
-          ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null
+          # Guarantee the target host fingerprint is present
+          ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null \
+            || ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Execute Deployment Script on EC2
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible and Galaxy collections
+        working-directory: ansible
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ansible-core==2.17.14
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Run Ansible Deployment Playbook
         env:
-          SSH_HOST: ${{ secrets.EC2_HOST }}
-          SSH_USER: ${{ secrets.EC2_USER }}
-          TESTED_COMMIT: ${{ github.sha }}
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ github.workspace }}/.ssh_id_rsa
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        working-directory: ansible
         run: |
           set -euo pipefail
-          ssh -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-            -i "$HOME/.ssh/id_rsa" \
-            "$SSH_USER@$SSH_HOST" \
-            "/opt/coditent/deploy.sh '$TESTED_COMMIT'"
+          # Make the key available via a path ansible-playbook can reference
+          cp "$HOME/.ssh/id_rsa" "${{ github.workspace }}/.ssh_id_rsa"
+          chmod 600 "${{ github.workspace }}/.ssh_id_rsa"
+          ansible-playbook \
+            -i inventory/hosts.ini \
+            playbooks/deploy.yml \
+            --limit production \
+            --private-key "${{ github.workspace }}/.ssh_id_rsa" \
+            --extra-vars "deploy_commit=${{ github.sha }}"
 
       - name: Verify Live Public Readiness Endpoint
         env:
