@@ -16,11 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-<<<<<<< HEAD
-    true,
-=======
     text,
->>>>>>> 5ffe2f90 (same update)
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
