@@ -22,6 +22,18 @@ class FakeModels:
         return outcome
 
 
+class FakeAio:
+    def __init__(self, models: FakeModels) -> None:
+        self.models = models
+
+    async def aclose(self) -> None:
+        return None
+
+
+def fake_client(models: FakeModels) -> SimpleNamespace:
+    return SimpleNamespace(aio=FakeAio(models))
+
+
 def response(text: str) -> SimpleNamespace:
     return SimpleNamespace(
         text=text,
@@ -48,7 +60,7 @@ async def test_generate_text_retries_server_error(monkeypatch, no_retry_sleep) -
     monkeypatch.setattr(
         gemini,
         "get_gemini_client",
-        lambda: SimpleNamespace(aio=SimpleNamespace(models=models)),
+        lambda: fake_client(models),
     )
 
     text, finish_reason = await gemini.generate_text(
@@ -76,7 +88,7 @@ async def test_generate_text_retries_rate_limit_and_empty_response(
     monkeypatch.setattr(
         gemini,
         "get_gemini_client",
-        lambda: SimpleNamespace(aio=SimpleNamespace(models=models)),
+        lambda: fake_client(models),
     )
 
     text, _ = await gemini.generate_text(
@@ -102,7 +114,7 @@ async def test_generate_text_does_not_retry_non_rate_limit_client_error(
     monkeypatch.setattr(
         gemini,
         "get_gemini_client",
-        lambda: SimpleNamespace(aio=SimpleNamespace(models=models)),
+        lambda: fake_client(models),
     )
 
     with pytest.raises(errors.ClientError):
@@ -137,7 +149,7 @@ async def test_generate_text_skips_retries_and_falls_back_on_long_quota_exhausti
     monkeypatch.setattr(
         gemini,
         "get_gemini_client",
-        lambda: SimpleNamespace(aio=SimpleNamespace(models=models)),
+        lambda: fake_client(models),
     )
 
     text, _ = await gemini.generate_text(
@@ -165,7 +177,7 @@ async def test_generate_text_retries_transport_error(monkeypatch, no_retry_sleep
     monkeypatch.setattr(
         gemini,
         "get_gemini_client",
-        lambda: SimpleNamespace(aio=SimpleNamespace(models=models)),
+        lambda: fake_client(models),
     )
 
     text, _ = await gemini.generate_text(
@@ -193,7 +205,7 @@ async def test_generate_text_falls_back_after_primary_remains_unavailable(
     monkeypatch.setattr(
         gemini,
         "get_gemini_client",
-        lambda: SimpleNamespace(aio=SimpleNamespace(models=models)),
+        lambda: fake_client(models),
     )
 
     text, _ = await gemini.generate_text(

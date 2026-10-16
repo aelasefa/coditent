@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import axios from "axios";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FiArrowRight, FiCheck, FiFileText, FiTrash2, FiUpload, FiX } from "react-icons/fi";
@@ -193,8 +194,19 @@ export default function ProfileBuilderPage() {
       });
       if (data.headline) form.setValue("headline", String(data.headline).slice(0, 120), { shouldDirty: true });
       else toast("AI headline failed", { description: "No headline returned.", variant: "error" });
-    } catch {
-      toast("AI headline failed", { description: "Retry or write headline manually.", variant: "error" });
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        const code = error.response.data?.detail?.code;
+        const dailyLimit = typeof code === "string" && (code.includes("QUOTA") || code.includes("BUDGET"));
+        toast("AI usage limit reached", {
+          description: dailyLimit
+            ? "You’ve reached your daily AI limit. Please try again after it resets."
+            : "Too many AI requests are running. Please wait a moment and try again.",
+          variant: "warning",
+        });
+      } else {
+        toast("AI headline failed", { description: "Retry or write headline manually.", variant: "error" });
+      }
     } finally {
       setAiLoading(null);
     }

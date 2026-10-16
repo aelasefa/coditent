@@ -349,12 +349,12 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 
 ## How frontend and backend communicate
 
-1. **Base URL** (`lib/api.ts` and `next.config.mjs`): production browsers use same-origin `/api-proxy`, so browser-to-frontend and browser-to-API traffic stays on `https://coditent.app`. Next.js forwards only inside the private container network through `BACKEND_PROXY_URL=http://api:8001`; there is no public HTTP IP fallback.
+1. **Base URL** (`lib/api.ts` and `next.config.mjs`): production browsers use same-origin `/api-proxy`, so browser traffic stays on `https://coditent.app`. Vercel forwards those requests over HTTPS to the EC2 ingress through `BACKEND_PROXY_URL=https://api.coditent.app/api-proxy`; the EC2-hosted Compose frontend continues to use the private `http://api:8001` upstream.
 2. **Credentials:** `withCredentials:true` + `Authorization: Bearer <localStorage coditent_token>` per request (`lib/api.ts:31-67`). Backend accepts Bearer first, `access_token` HttpOnly cookie fallback (cookie is only set on SSO flows — `routers/auth.py:153-161` — so email-login users rely on Bearer).
 3. **CORS** (`main.py:29-41`): explicit frontend origins (`settings.frontend_url`, `localhost:3000/3001` + `127.0.0.1` variants), `allow_credentials=True`, all methods/headers.
 4. **Protected endpoints:** `require_*` dependency → 401 (missing/bad/expired token, vanished user) or 403 (wrong role/scope/approval). Frontend 401 interceptor clears token and redirects protected paths to `/login?next=` or `/admin/login?next=` (`lib/api.ts:69-90`).
 5. **Errors:** `HTTPException` + global `Exception→500` (`main.py:95-98`), slowapi 429, Pydantic 422. Typed CV/AI errors: 400 file errors, 422 no-text, 502 upstream AI/mail/storage, 503 unconfigured SSO/storage-missing, 504 AI timeout, 413 oversized logo, 409 OTP race, 410 deprecated `POST /companies/{id}/join`.
-6. **Realtime:** socket-ticket endpoints issue short-lived, single-use tickets. On the production HTTPS origin, both URL builders produce `wss://coditent.app/api-proxy/...`; Nginx preserves the WebSocket upgrade and the UI retains a polling fallback.
+6. **Realtime:** socket-ticket endpoints issue short-lived, single-use tickets. On the production HTTPS origin, both URL builders produce `wss://coditent.app/api-proxy/...`; the UI retains a polling fallback when an upstream proxy does not preserve the WebSocket upgrade.
 7. **Avatar/logo note:** `PUT /auth/me/avatar` stores a URL string; company logos upload bytes to `POST /companies/{id}/logo` and expose only the storage path + scoped stream.
 
 Real example — "User clicks Apply":
@@ -854,7 +854,7 @@ Only commands that work with this repo are shown; there is no `db` service and n
 | `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | internal only | `api` healthy |
 | `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | loopback `3001/8443` | `web`, `api` healthy |
 
-Networks/volumes: default Compose network; no `db_data` volume (Supabase is the persistent store). Compose reads the single documented root `.env`. Production Ansible fixes the public origin to `https://coditent.app`, configures same-origin API/OAuth routes, issues and renews a Let's Encrypt certificate, redirects HTTP with status 308, and keeps container upstreams loopback/private. CD rejects a non-HTTPS public URL and verifies both the redirect target and the certificate-backed `/ready` response.
+Networks/volumes: default Compose network; no `db_data` volume (Supabase is the persistent store). Compose reads the single documented root `.env`. Production Ansible configures the EC2 ingress as `https://api.coditent.app`, allows the Vercel frontend origins (`https://coditent.app` and `https://www.coditent.app`), issues and renews a Let's Encrypt certificate, redirects HTTP with status 308, and keeps container upstreams loopback/private. Vercel keeps browser API/OAuth routes same-origin and proxies them to the EC2 ingress. CD rejects a non-HTTPS public URL and verifies both the redirect target and the certificate-backed `/ready` response.
 
 ---
 

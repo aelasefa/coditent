@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-from functools import lru_cache
 
 import httpx
 from google import genai
@@ -29,8 +28,9 @@ class GeminiEmptyResponseError(GeminiResponseError):
     pass
 
 
-@lru_cache(maxsize=1)
 def get_gemini_client() -> genai.Client:
+    # Celery runs each job in a fresh event loop. Reusing an async SDK client
+    # across those loops leaves its HTTP transport bound to a closed loop.
     return genai.Client(api_key=settings.gemini_api_key)
 
 
@@ -82,6 +82,7 @@ def _retry_delay_seconds(attempt: int) -> float:
 
 async def _generate_with_retry(
     *,
+    client: genai.Client,
     model: str,
     prompt: str,
     config: types.GenerateContentConfig,
@@ -90,7 +91,7 @@ async def _generate_with_retry(
     for attempt in range(1, MAX_PROVIDER_ATTEMPTS + 1):
         try:
             response = await asyncio.wait_for(
-                get_gemini_client().aio.models.generate_content(
+                client.aio.models.generate_content(
                     model=model,
                     contents=prompt,
                     config=config,
@@ -137,29 +138,36 @@ async def generate_text(
         response_mime_type=response_mime_type,
     )
     timeout = timeout_seconds or settings.ai_provider_timeout_seconds
-    models = [settings.gemini_model]
-    fallback_model = settings.gemini_fallback_model.strip()
-    if fallback_model and fallback_model != settings.gemini_model:
-        models.append(fallback_model)
-    for model_index, model in enumerate(models):
-        try:
-            response, raw = await _generate_with_retry(
-                model=model,
-                prompt=prompt,
-                config=config,
-                timeout=timeout,
-            )
-            break
-        except Exception as exc:
-            if model_index == len(models) - 1 or not _is_failoverable(exc):
-                raise
-            logger.warning(
-                "gemini_model_fallback",
-                failed_model=model,
-                fallback_model=models[model_index + 1],
-                exception_type=type(exc).__name__,
-                provider_status=getattr(exc, "code", None),
-            )
+    client = get_gemini_client()
+    try:
+        models = [settings.gemini_model]
+        fallback_model = settings.gemini_fallback_model.strip()
+        if fallback_model and fallback_model != settings.gemini_model:
+            models.append(fallback_model)
+        for model_index, model in enumerate(models):
+            try:
+                response, raw = await _generate_with_retry(
+                    client=client,
+                    model=model,
+                    prompt=prompt,
+                    config=config,
+                    timeout=timeout,
+                )
+                break
+            except Exception as exc:
+                if model_index == len(models) - 1 or not _is_failoverable(exc):
+                    raise
+                logger.warning(
+                    "gemini_model_fallback",
+                    failed_model=model,
+                    fallback_model=models[model_index + 1],
+                    exception_type=type(exc).__name__,
+                    provider_status=getattr(exc, "code", None),
+                )
+    finally:
+        close = getattr(client.aio, "aclose", None)
+        if callable(close):
+            await close()
     if len(raw) > MAX_MODEL_RESPONSE_CHARS:
         raise GeminiResponseError("Gemini response exceeds the configured output bound")
     finish_reason: object | None = None

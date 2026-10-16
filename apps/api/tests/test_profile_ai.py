@@ -40,3 +40,47 @@ async def test_headline_falls_back_when_provider_output_is_too_short(monkeypatch
     )
 
     assert headline == "Python Candidate | Python"
+
+
+@pytest.mark.asyncio
+async def test_bio_falls_back_when_provider_output_fails_quality_check(monkeypatch) -> None:
+    monkeypatch.setattr(
+        profile_ai,
+        "generate_text",
+        AsyncMock(return_value=("Too short", None)),
+    )
+
+    bio = await profile_ai.generate_profile_bio(
+        {
+            "skills": ["Python", "FastAPI", "React"],
+            "field_of_study": "Software Engineering",
+        }
+    )
+
+    assert "Software Engineering" in bio
+    assert "Python, FastAPI, React" in bio
+    assert len(bio) >= 80
+    assert bio.count(".") >= 2
+
+
+@pytest.mark.asyncio
+async def test_bio_falls_back_when_provider_stops_mid_sentence(monkeypatch) -> None:
+    monkeypatch.setattr(
+        profile_ai,
+        "generate_text",
+        AsyncMock(
+            return_value=(
+                "I am a software engineering candidate with a strong foundation in development. My field",
+                None,
+            )
+        ),
+    )
+
+    bio = await profile_ai.generate_profile_bio(
+        {
+            "skills": ["Python", "FastAPI"],
+            "field_of_study": "Software Engineering",
+        }
+    )
+
+    assert bio.endswith("professionally.")

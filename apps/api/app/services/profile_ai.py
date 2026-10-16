@@ -37,6 +37,21 @@ def _fallback_headline(data: dict[str, Any]) -> str:
     return headline[:120].rstrip(" ,|")
 
 
+def _fallback_bio(data: dict[str, Any]) -> str:
+    skills = [
+        str(value).strip()
+        for value in data.get("skills", [])
+        if str(value).strip()
+    ]
+    field = str(data.get("field_of_study") or "").strip()
+    focus = f"a candidate in {field}" if field else "a motivated job candidate"
+    skill_text = ", ".join(skills[:3])
+    return (
+        f"I am {focus} with skills in {skill_text}. "
+        "I am looking for opportunities where I can apply these skills and continue growing professionally."
+    )[:500]
+
+
 async def generate_profile_headline(data: dict[str, Any]) -> str:
     prompt = f"""Write one professional headline for a Moroccan job seeker.
 Use only the supplied facts. Do not invent credentials or experience.
@@ -74,12 +89,29 @@ invent qualifications, achievements, employers, or experience. Return only
 the bio text with no quotes or markdown. Target 250-450 characters.
 
 {untrusted_prompt_data(data, max_chars=8_000)}"""
-    raw, _ = await generate_text(
-        prompt,
-        temperature=0.7,
-        max_output_tokens=256,
-    )
-    bio = _plain_text(raw, max_chars=500)
-    if len(bio) < 80 or bio.count(".") < 1:
-        raise ValueError("AI bio does not meet the quality bound")
-    return bio
+    try:
+        raw, _ = await generate_text(
+            prompt,
+            temperature=0.7,
+            max_output_tokens=512,
+        )
+        bio = _plain_text(raw, max_chars=500)
+        if (
+            len(bio) < 80
+            or len(bio.split()) < 8
+            or not re.search(r'''[.!?]["')\]]?$''', bio)
+        ):
+            raise GeminiResponseError("AI bio does not meet the quality bound")
+        return bio
+    except (
+        errors.APIError,
+        httpx.TransportError,
+        asyncio.TimeoutError,
+        GeminiResponseError,
+    ) as exc:
+        logger.warning(
+            "profile_bio_local_fallback",
+            exception_type=type(exc).__name__,
+            provider_status=getattr(exc, "code", None),
+        )
+        return _fallback_bio(data)
