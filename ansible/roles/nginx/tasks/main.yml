@@ -295,10 +295,78 @@
     fail_msg: "Let's Encrypt did not issue the configured certificate; verify DNS A/AAAA records and inbound ports 80/443"
   when: nginx_tls_enabled | default(false)
 
-- name: Initialize ModSecurity base configuration
+- name: Locate the installed ModSecurity base configuration
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/modsecurity.conf
+    - /etc/modsecurity/modsecurity.conf-recommended
+    - /usr/share/nginx/docs/modsecurity/modsecurity.conf
+  register: nginx_modsecurity_base_candidates
+  when: nginx_waf_enabled | default(false)
+
+- name: Select the installed ModSecurity base configuration
+  ansible.builtin.set_fact:
+    nginx_modsecurity_base_source: >-
+      {{
+        nginx_modsecurity_base_candidates.results
+        | selectattr('stat.exists')
+        | map(attribute='item')
+        | first
+        | default('')
+      }}
+  when: nginx_waf_enabled | default(false)
+
+- name: Require an installed ModSecurity base configuration
+  ansible.builtin.assert:
+    that:
+      - nginx_modsecurity_base_source | length > 0
+    fail_msg: "The ModSecurity package installed without a supported base configuration file"
+  when: nginx_waf_enabled | default(false)
+
+- name: Locate the installed ModSecurity Unicode mapping
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/unicode.mapping
+    - /usr/share/nginx/docs/modsecurity/unicode.mapping
+    - /usr/share/libmodsecurity3/unicode.mapping
+  register: nginx_modsecurity_unicode_candidates
+  when: nginx_waf_enabled | default(false)
+
+- name: Select the installed ModSecurity Unicode mapping
+  ansible.builtin.set_fact:
+    nginx_modsecurity_unicode_source: >-
+      {{
+        nginx_modsecurity_unicode_candidates.results
+        | selectattr('stat.exists')
+        | map(attribute='item')
+        | first
+        | default('')
+      }}
+  when: nginx_waf_enabled | default(false)
+
+- name: Require an installed ModSecurity Unicode mapping
+  ansible.builtin.assert:
+    that:
+      - nginx_modsecurity_unicode_source | length > 0
+    fail_msg: "The ModSecurity package installed without a supported Unicode mapping file"
+  when: nginx_waf_enabled | default(false)
+
+- name: Initialize the stable ModSecurity base configuration
   ansible.builtin.copy:
-    src: /etc/modsecurity/modsecurity.conf-recommended
+    src: "{{ nginx_modsecurity_base_source }}"
     dest: /etc/modsecurity/modsecurity.conf
+    remote_src: true
+    force: false
+    mode: '0644'
+  when: nginx_waf_enabled | default(false)
+  notify: Reload nginx
+
+- name: Install the stable ModSecurity Unicode mapping
+  ansible.builtin.copy:
+    src: "{{ nginx_modsecurity_unicode_source }}"
+    dest: /etc/modsecurity/unicode.mapping
     remote_src: true
     force: false
     mode: '0644'

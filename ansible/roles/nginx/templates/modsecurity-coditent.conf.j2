@@ -11,4 +11,8 @@ SecRequestBodyLimitAction Reject
 SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)" \
     "id:1000001,phase:1,pass,nolog,ctl:requestBodyProcessor=JSON"
 
-Include /usr/share/modsecurity-crs/owasp-crs.load
+# Debian's owasp-crs.load is an Apache-oriented loader and uses
+# an optional-include directive that ModSecurity-nginx does not support. Load
+# the same required CRS configuration and rules directly.
+Include /etc/modsecurity/crs/crs-setup.conf
+Include /usr/share/modsecurity-crs/rules/*.conf
