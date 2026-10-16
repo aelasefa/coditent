@@ -117,10 +117,15 @@ def test_ci_waits_for_a_usable_ec2_ssh_session() -> None:
     assert "UserKnownHostsFile=" in readiness_step
     assert "ConnectTimeout=20" in readiness_step
     assert "ConnectionAttempts=1" in readiness_step
-    assert "sudo -n true" in readiness_step
+    assert "sudo -n /usr/bin/python3" in readiness_step
+    assert "os.geteuid()" in readiness_step
+    assert "ControlPersist=10m" in readiness_step
+    assert "ControlPath=" in readiness_step
     assert "attempt in {1..10}" in readiness_step
-    assert workflow.count("--timeout 30") == 2
+    assert workflow.count("--timeout 120") == 2
     assert workflow.count("-o ConnectionAttempts=3") == 2
+    assert "group: coditent-deploy-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: false" in workflow
     assert "StrictHostKeyChecking=no" not in workflow
     assert "StrictHostKeyChecking=yes" in workflow
     assert "TESTED_COMMIT: ${{ github.sha }}" in workflow

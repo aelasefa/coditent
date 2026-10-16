@@ -7,6 +7,11 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# A small production instance cannot safely run two image builds at once.
+concurrency:
+  group: coditent-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ========================================================
   # STAGE 1: CI (Lint & Test Web + API)
@@ -288,11 +293,14 @@ jobs:
               -o BatchMode=yes \
               -o ConnectTimeout=20 \
               -o ConnectionAttempts=1 \
+              -o ControlMaster=auto \
+              -o ControlPersist=10m \
+              -o ControlPath="$RUNNER_TEMP/coditent-ssh-%C" \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
               "$SSH_USER@$SSH_HOST" \
-              'sudo -n true'; then
-              echo "EC2 SSH and passwordless sudo are ready"
+              "sudo -n /usr/bin/python3 -c 'import os; raise SystemExit(os.geteuid())'"; then
+              echo "EC2 SSH, privileged Python, and passwordless sudo are ready"
               exit 0
             fi
             echo "EC2 is not ready (attempt $attempt/10); retrying in 15 seconds ..."
@@ -313,8 +321,8 @@ jobs:
             playbooks/setup.yml \
             --limit production \
             --private-key "$HOME/.ssh/id_rsa" \
-            --timeout 30 \
-            --ssh-extra-args="-o ConnectionAttempts=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            --timeout 120 \
+            --ssh-extra-args="-o ConnectionAttempts=3 -o ControlMaster=auto -o ControlPersist=10m -o ControlPath=$RUNNER_TEMP/coditent-ssh-%C -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
             --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER"
 
       - name: Run Ansible Deployment Playbook
@@ -330,8 +338,8 @@ jobs:
             playbooks/deploy.yml \
             --limit production \
             --private-key "$HOME/.ssh/id_rsa" \
-            --timeout 30 \
-            --ssh-extra-args="-o ConnectionAttempts=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            --timeout 120 \
+            --ssh-extra-args="-o ConnectionAttempts=3 -o ControlMaster=auto -o ControlPersist=10m -o ControlPath=$RUNNER_TEMP/coditent-ssh-%C -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
             --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER deploy_commit=$TESTED_COMMIT"
 
       - name: Verify Live Public Readiness Endpoint
