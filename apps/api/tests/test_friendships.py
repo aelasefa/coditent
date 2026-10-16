@@ -67,6 +67,9 @@ async def test_search_is_candidate_only_safe_and_excludes_self_disabled_unverifi
     visible = candidate("Search Candidate")
     disabled = candidate("Search Disabled", active=False)
     unverified = candidate("Search Unverified", approved=False)
+    company = Company(name=f"Search Company {uuid.uuid4().hex[:6]}")
+    db.add(company)
+    await db.flush()
     company_user = User(
         email=f"search-company-{uuid.uuid4().hex[:6]}@test.local",
         password_hash="test-hash",
@@ -74,6 +77,7 @@ async def test_search_is_candidate_only_safe_and_excludes_self_disabled_unverifi
         is_approved=True,
         is_active=True,
         full_name="Search Company",
+        company_id=company.id,
         company_role="HR",
     )
     admin = User(
