@@ -22,6 +22,13 @@ def _render_deploy_script(app_dir: Path) -> str:
         .replace("{{ app_dir }}", str(app_dir))
         .replace("{{ repo_branch }}", "main")
         .replace("{{ api_port }}", "8001")
+        .replace(
+            "{{ compose_build_services | default([]) | join(' ') }}", "api"
+        )
+        .replace(
+            "{{ compose_run_services | default([]) | join(' ') }}",
+            "redis api worker ai-dispatcher",
+        )
     )
 
 
@@ -284,11 +291,45 @@ def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
 
     assert "docker compose build" in compose_tasks
     assert "COMPOSE_PARALLEL_LIMIT" in compose_tasks
-    assert "async: 1800" in compose_tasks
+    assert "compose_build_timeout" in compose_tasks
     assert "poll: 15" in compose_tasks
     assert "docker compose up -d --no-build" in compose_tasks
+    assert "compose_build_services" in compose_tasks
+    assert "compose_run_services" in compose_tasks
+    assert "default(1)" in compose_tasks
     assert "ServerAliveInterval=30" in ansible_config
     assert "ServerAliveCountMax=20" in ansible_config
+
+
+def test_production_builds_only_services_hosted_on_ec2() -> None:
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+
+    build_services = production_vars.split("compose_build_services:", 1)[1].split(
+        "compose_run_services:", 1
+    )[0]
+    run_services = production_vars.split("compose_run_services:", 1)[1].split(
+        "# The EC2 host", 1
+    )[0]
+
+    assert "- api" in build_services
+    assert "- web" not in build_services
+    assert "- proxy" not in build_services
+    for service in ("redis", "api", "worker", "ai-dispatcher"):
+        assert f"- {service}" in run_services
+    assert "- web" not in run_services
+    assert "- proxy" not in run_services
+
+    deploy_helper = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "templates" / "deploy.sh.j2"
+    ).read_text()
+    rollback = (REPO_ROOT / "ansible" / "playbooks" / "rollback.yml").read_text()
+    restart = (REPO_ROOT / "ansible" / "playbooks" / "restart.yml").read_text()
+    for deployment_path in (deploy_helper, rollback, restart):
+        assert "compose_run_services" in deployment_path
+    assert "compose_build_services" in deploy_helper
+    assert "compose_build_services" in rollback
 
 
 def test_application_images_run_as_unprivileged_users() -> None:

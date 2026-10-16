@@ -25,6 +25,10 @@ https_port: 443
 # Docker configuration
 docker_compose_file: "{{ app_dir }}/docker-compose.yml"
 docker_prune_images: true
+compose_build_services: []
+compose_run_services: []
+compose_build_timeout: 3600
+compose_start_timeout: 900
 
 # Nginx reverse proxy configuration
 nginx_enabled: true
