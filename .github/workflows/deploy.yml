@@ -276,6 +276,31 @@ jobs:
           python -m pip install ansible-core==2.17.14
           ansible-galaxy collection install -r requirements.yml
 
+      - name: Wait for EC2 SSH and passwordless sudo
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..10}; do
+            if ssh \
+              -i "$HOME/.ssh/id_rsa" \
+              -o BatchMode=yes \
+              -o ConnectTimeout=20 \
+              -o ConnectionAttempts=1 \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+              "$SSH_USER@$SSH_HOST" \
+              'sudo -n true'; then
+              echo "EC2 SSH and passwordless sudo are ready"
+              exit 0
+            fi
+            echo "EC2 is not ready (attempt $attempt/10); retrying in 15 seconds ..."
+            sleep 15
+          done
+          echo "EC2 did not provide a usable SSH session after 10 attempts" >&2
+          exit 1
+
       - name: Provision trusted TLS ingress
         env:
           SSH_HOST: ${{ secrets.EC2_HOST }}
@@ -288,7 +313,8 @@ jobs:
             playbooks/setup.yml \
             --limit production \
             --private-key "$HOME/.ssh/id_rsa" \
-            --ssh-extra-args="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            --timeout 30 \
+            --ssh-extra-args="-o ConnectionAttempts=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
             --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER"
 
       - name: Run Ansible Deployment Playbook
@@ -304,7 +330,8 @@ jobs:
             playbooks/deploy.yml \
             --limit production \
             --private-key "$HOME/.ssh/id_rsa" \
-            --ssh-extra-args="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            --timeout 30 \
+            --ssh-extra-args="-o ConnectionAttempts=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
             --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER deploy_commit=$TESTED_COMMIT"
 
       - name: Verify Live Public Readiness Endpoint
