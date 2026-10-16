@@ -259,12 +259,14 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          # Populate known_hosts: prefer the stored secret, fall back to live scan
           if [ -n "$SSH_KNOWN_HOSTS" ]; then
             printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           else
             ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
           fi
           chmod 600 ~/.ssh/known_hosts
+          # Guarantee the target host fingerprint is present
           ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null \
             || ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
