@@ -67,6 +67,37 @@
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
+- name: Find the existing Coditent Compose proxy before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - "label=com.docker.compose.project={{ app_name }}"
+      - --filter
+      - label=com.docker.compose.service=proxy
+  register: nginx_legacy_compose_proxies
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+# Older deployments exposed the Compose proxy directly on ports 80/443. Stop
+# only Coditent's labelled proxy before systemd Nginx claims those ingress
+# ports. The deploy playbook recreates it afterward on loopback ports 3001/8443.
+- name: Stop the existing Coditent Compose proxy before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stop
+      - "{{ item }}"
+  loop: "{{ nginx_legacy_compose_proxies.stdout_lines | default([]) }}"
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+    - item | length > 0
+
 - name: Start or reload Nginx for the first ACME challenge
   ansible.builtin.systemd:
     name: nginx
@@ -76,9 +107,44 @@
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
+- name: Verify the public ACME HTTP-01 route before requesting a certificate
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+  block:
+    - name: Publish a temporary ACME HTTP-01 probe
+      ansible.builtin.copy:
+        dest: "{{ letsencrypt_webroot }}/coditent-{{ ansible_date_time.epoch }}"
+        content: "coditent-acme-{{ ansible_date_time.epoch }}\n"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Fetch the ACME HTTP-01 probe through the public hostname
+      ansible.builtin.uri:
+        url: "http://{{ server_name }}/.well-known/acme-challenge/coditent-{{ ansible_date_time.epoch }}"
+        method: GET
+        return_content: true
+        status_code: 200
+        follow_redirects: none
+      delegate_to: localhost
+      become: false
+      register: nginx_acme_http_probe
+
+    - name: Require the public ACME HTTP-01 probe content
+      ansible.builtin.assert:
+        that:
+          - nginx_acme_http_probe.content | trim == 'coditent-acme-' ~ ansible_date_time.epoch
+        fail_msg: "The public ACME path is not served by this host; verify DNS, port 80, and competing reverse proxies"
+  always:
+    - name: Remove the temporary ACME HTTP-01 probe
+      ansible.builtin.file:
+        path: "{{ letsencrypt_webroot }}/coditent-{{ ansible_date_time.epoch }}"
+        state: absent
+
 - name: Request a trusted Let's Encrypt certificate
   ansible.builtin.command:
-    argv: "{{ ['certbot', 'certonly', '--webroot', '--webroot-path', letsencrypt_webroot, '--non-interactive', '--agree-tos', '--keep-until-expiring', '--email', letsencrypt_email, '--domain', server_name] + (['--staging'] if letsencrypt_staging | default(false) else []) }}"
+    argv: "{{ ['certbot', 'certonly', '--webroot', '--webroot-path', letsencrypt_webroot, '--preferred-challenges', 'http', '--non-interactive', '--agree-tos', '--no-eff-email', '--keep-until-expiring', '--cert-name', server_name, '--email', letsencrypt_email, '--domain', server_name] + (['--staging'] if letsencrypt_staging | default(false) else []) }}"
     creates: "{{ tls_certificate_path }}"
   when: nginx_tls_enabled | default(false)
 
