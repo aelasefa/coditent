@@ -203,6 +203,8 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "Stop containers conflicting with host Nginx before TLS bootstrap" in tasks
     assert "Capture recent Nginx service journal after bootstrap failure" in tasks
     assert "Verify the public ACME HTTP-01 route before requesting a certificate" in tasks
+    assert 'path: "{{ letsencrypt_webroot }}/.well-known/acme-challenge"' in tasks
+    assert 'dest: "{{ letsencrypt_webroot }}/.well-known/acme-challenge/coditent-' in tasks
     assert 'url: "http://{{ server_name }}/.well-known/acme-challenge/' in tasks
     assert "--preferred-challenges" in tasks
     assert "--cert-name" in tasks

@@ -23,6 +23,15 @@
     mode: '0755'
   when: nginx_tls_enabled | default(false)
 
+- name: Create the ACME HTTP-01 challenge directory
+  ansible.builtin.file:
+    path: "{{ letsencrypt_webroot }}/.well-known/acme-challenge"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  when: nginx_tls_enabled | default(false)
+
 - name: Check whether the trusted certificate already exists
   ansible.builtin.stat:
     path: "{{ tls_certificate_path }}"
@@ -208,7 +217,7 @@
   block:
     - name: Publish a temporary ACME HTTP-01 probe
       ansible.builtin.copy:
-        dest: "{{ letsencrypt_webroot }}/coditent-{{ ansible_date_time.epoch }}"
+        dest: "{{ letsencrypt_webroot }}/.well-known/acme-challenge/coditent-{{ ansible_date_time.epoch }}"
         content: "coditent-acme-{{ ansible_date_time.epoch }}\n"
         owner: www-data
         group: www-data
@@ -233,7 +242,7 @@
   always:
     - name: Remove the temporary ACME HTTP-01 probe
       ansible.builtin.file:
-        path: "{{ letsencrypt_webroot }}/coditent-{{ ansible_date_time.epoch }}"
+        path: "{{ letsencrypt_webroot }}/.well-known/acme-challenge/coditent-{{ ansible_date_time.epoch }}"
         state: absent
 
 - name: Request a trusted Let's Encrypt certificate
