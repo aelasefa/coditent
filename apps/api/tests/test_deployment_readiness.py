@@ -121,6 +121,8 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "dispatcher_heartbeat_is_fresh_sync" in compose
     assert "python -m app.ai_dispatcher" in compose
     assert compose.count("condition: service_healthy") >= 4
+    assert compose.count("image: coditent-api:local") == 3
+    assert compose.count("context: ./apps/api") == 1
     assert compose.count("- ./.env") == 3
     assert "fetch('http://127.0.0.1:3000/')" in compose
     assert "web:\n        condition: service_healthy" in compose
@@ -266,6 +268,21 @@ def test_git_sync_repairs_deployment_tree_ownership() -> None:
     assert 'owner: "{{ app_user }}"' in ownership_task
     assert 'group: "{{ app_group }}"' in ownership_task
     assert "recurse: true" in ownership_task
+
+
+def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
+    compose_tasks = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "compose_up.yml"
+    ).read_text()
+    ansible_config = (REPO_ROOT / "ansible" / "ansible.cfg").read_text()
+
+    assert "docker compose build" in compose_tasks
+    assert "COMPOSE_PARALLEL_LIMIT" in compose_tasks
+    assert "async: 1800" in compose_tasks
+    assert "poll: 15" in compose_tasks
+    assert "docker compose up -d --no-build" in compose_tasks
+    assert "ServerAliveInterval=30" in ansible_config
+    assert "ServerAliveCountMax=20" in ansible_config
 
 
 def test_application_images_run_as_unprivileged_users() -> None:
