@@ -170,6 +170,7 @@ ansible/**/vault.yml
 *.md
 !/README.md
 !audit-reports/MODULE_POINTS.md
+!/CHANGES_LOG.md
 !docs/security-remediation-checklist.md
 !docs/security/
 !docs/security/**
