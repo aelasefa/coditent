@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     gemini_api_key: str
-    gemini_model: str = Field(default="gemini-3-flash-preview", min_length=3, max_length=100)
+    gemini_model: str = Field(default="gemini-3.5-flash", min_length=3, max_length=100)
+    gemini_fallback_model: str = Field(default="gemini-3.1-flash-lite", max_length=100)
     resend_api_key: str | None = None
     resend_from_email: str | None = None
     resend_from_name: str = "CODITENT"
