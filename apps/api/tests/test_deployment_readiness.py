@@ -203,6 +203,8 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "Stop containers conflicting with host Nginx before TLS bootstrap" in tasks
     assert "Capture recent Nginx service journal after bootstrap failure" in tasks
     assert "Verify the public ACME HTTP-01 route before requesting a certificate" in tasks
+    assert 'path: "{{ letsencrypt_webroot }}/.well-known/acme-challenge"' in tasks
+    assert 'dest: "{{ letsencrypt_webroot }}/.well-known/acme-challenge/coditent-' in tasks
     assert 'url: "http://{{ server_name }}/.well-known/acme-challenge/' in tasks
     assert "--preferred-challenges" in tasks
     assert "--cert-name" in tasks
@@ -211,6 +213,16 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "Strict-Transport-Security" in template
     assert "upgrade-insecure-requests" in template
     assert "proxy_set_header Upgrade $http_upgrade" in template
+    assert "Activate and verify the final Nginx configuration" in tasks
+
+    configure_env = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "configure_env.yml"
+    ).read_text()
+    assert "Reconcile non-secret production settings" in configure_env
+    assert "key: COMPOSE_FILE" in configure_env
+    assert "key: FRONTEND_URL" in configure_env
+    assert "key: CORS_ORIGINS" in configure_env
+    assert "key: ACCESS_TOKEN_COOKIE_SECURE" in configure_env
 
 
 def test_ansible_declares_collection_and_syntax_check() -> None:

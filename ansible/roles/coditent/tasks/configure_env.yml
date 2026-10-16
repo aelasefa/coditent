@@ -13,6 +13,39 @@
     mode: '0600'
   when: (database_url is defined and database_url != '') or not remote_root_env.stat.exists
 
+# Existing production .env files deliberately survive deployments so secrets
+# are not erased when CI does not pass them again. Reconcile the non-secret
+# deployment values separately so older hosts still receive new required
+# Compose variables and canonical public URLs.
+- name: Reconcile non-secret production settings in the preserved root environment
+  ansible.builtin.lineinfile:
+    path: "{{ app_dir }}/.env"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    create: true
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0600'
+  loop:
+    - key: APP_ENV
+      value: "{{ 'production' if env_name in ['production', 'staging'] else 'development' }}"
+    - key: COMPOSE_FILE
+      value: "{{ compose_file_list | default('docker-compose.yml') }}"
+    - key: NEXT_PUBLIC_API_URL
+      value: "{{ next_public_api_url }}"
+    - key: NEXT_PUBLIC_OAUTH_API_URL
+      value: "{{ next_public_oauth_api_url }}"
+    - key: FRONTEND_URL
+      value: "{{ frontend_url }}"
+    - key: CORS_ORIGINS
+      value: "{{ cors_origins }}"
+    - key: ACCESS_TOKEN_COOKIE_SECURE
+      value: "{{ 'true' if env_name in ['production', 'staging'] else 'false' }}"
+    - key: GOOGLE_REDIRECT_URI
+      value: "{{ google_redirect_uri }}"
+    - key: LINKEDIN_REDIRECT_URI
+      value: "{{ linkedin_redirect_uri }}"
+
 - name: Check if remote apps/api/.env already exists
   ansible.builtin.stat:
     path: "{{ app_dir }}/apps/api/.env"
