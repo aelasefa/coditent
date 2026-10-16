@@ -5,8 +5,6 @@
 #   ansible-vault create ansible/inventory/group_vars/production/vault.yml
 # To encrypt an existing file:
 #   ansible-vault encrypt ansible/inventory/group_vars/production/vault.yml
-# GitHub Actions consumes the encrypted file text from ANSIBLE_VAULT_CONTENT
-# and its password from ANSIBLE_VAULT_PASSWORD. Never store plaintext here.
 # ============================================================
 
 vault_database_url: "postgresql+asyncpg://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres"
@@ -25,8 +23,3 @@ vault_google_client_id: ""
 vault_google_client_secret: ""
 vault_linkedin_client_id: ""
 vault_linkedin_client_secret: ""
-
-# Optional encrypted database-backup destination. Prefer an EC2 instance role
-# for AWS credentials; this vault stores only the S3 URI and region.
-vault_backup_s3_uri: ""
-vault_backup_aws_region: ""
