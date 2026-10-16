@@ -268,6 +268,12 @@ def test_git_sync_repairs_deployment_tree_ownership() -> None:
     assert 'owner: "{{ app_user }}"' in ownership_task
     assert 'group: "{{ app_group }}"' in ownership_task
     assert "recurse: true" in ownership_task
+    assert "Configure reliable GitHub HTTPS transport" in sync_tasks
+    assert "http.version" in sync_tasks
+    assert "HTTP/1.1" in sync_tasks
+    assert "until: git_result is succeeded" in sync_tasks
+    assert "retries: 4" in sync_tasks
+    assert "delay: 15" in sync_tasks
 
 
 def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
