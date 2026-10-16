@@ -189,6 +189,14 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     template = (
         REPO_ROOT / "ansible" / "roles" / "nginx" / "templates" / "coditent.conf.j2"
     ).read_text()
+    modsecurity_template = (
+        REPO_ROOT
+        / "ansible"
+        / "roles"
+        / "nginx"
+        / "templates"
+        / "modsecurity-coditent.conf.j2"
+    ).read_text()
 
     assert "certbot" in tasks
     assert "--webroot" in tasks
@@ -213,7 +221,17 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "Strict-Transport-Security" in template
     assert "upgrade-insecure-requests" in template
     assert "proxy_set_header Upgrade $http_upgrade" in template
+    assert "Include /etc/modsecurity/crs/crs-setup.conf" in modsecurity_template
+    assert "Include /usr/share/modsecurity-crs/rules/*.conf" in modsecurity_template
+    assert "IncludeOptional" not in modsecurity_template
     assert "Activate and verify the final Nginx configuration" in tasks
+    assert "Locate the installed ModSecurity base configuration" in tasks
+    assert "/etc/nginx/modsecurity.conf" in tasks
+    assert "/etc/modsecurity/modsecurity.conf-recommended" in tasks
+    assert "nginx_modsecurity_base_source" in tasks
+    assert "Locate the installed ModSecurity Unicode mapping" in tasks
+    assert "/etc/nginx/unicode.mapping" in tasks
+    assert "/etc/modsecurity/unicode.mapping" in tasks
 
     configure_env = (
         REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "configure_env.yml"
