@@ -14,7 +14,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     )
     to_encode["exp"] = expire
     if "iat" not in to_encode:
-        to_encode["iat"] = int(now_utc.timestamp())
+        # Preserve sub-second precision so a fresh token can be distinguished
+        # from tokens revoked moments earlier.
+        to_encode["iat"] = now_utc.timestamp()
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
