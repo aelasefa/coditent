@@ -174,7 +174,9 @@ def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
 
     assert "34.205.255.37" not in next_config
     assert "34.205.255.37" not in api_client
-    assert 'server_name: "coditent.app"' in production
+    assert 'server_name: "api.coditent.app"' in production
+    assert 'frontend_url: "https://coditent.app"' in production
+    assert 'cors_origins: "https://coditent.app,https://www.coditent.app"' in production
     assert 'next_public_api_url: "/api-proxy"' in (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()
