@@ -35,8 +35,10 @@
     dest: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
     mode: '0644'
   vars:
-    nginx_tls_enabled: false
-    nginx_waf_enabled: false
+    # Use render-only variables so the task's `when` conditions still see the
+    # production TLS settings instead of being shadowed by task-local values.
+    nginx_render_tls_enabled: false
+    nginx_render_waf_enabled: false
   when:
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists

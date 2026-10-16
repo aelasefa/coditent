@@ -1,4 +1,6 @@
-{% if nginx_tls_enabled | default(false) %}
+{% set render_tls_enabled = nginx_render_tls_enabled | default(nginx_tls_enabled | default(false)) %}
+{% set render_waf_enabled = nginx_render_waf_enabled | default(nginx_waf_enabled | default(false)) %}
+{% if render_tls_enabled %}
 server {
     listen 80;
     listen [::]:80;
@@ -47,7 +49,7 @@ server {
         try_files $uri =404;
     }
 
-{% if nginx_waf_enabled | default(false) %}
+{% if render_waf_enabled %}
     modsecurity on;
     modsecurity_rules_file /etc/nginx/modsecurity-coditent.conf;
 {% endif %}
