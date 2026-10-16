@@ -172,3 +172,4 @@ ansible/**/vault.yml
 !docs/security-remediation-checklist.md
 !docs/security/
 !docs/security/**
+!docs/operations/ecr-ssm-deployment.md

@@ -1,7 +1,15 @@
 # Production-only overrides. The host Nginx ingress is the sole public
 # listener; API, Redis, and the container proxy remain loopback/internal.
 services:
+  redis:
+    restart: unless-stopped
+
   api:
+    image: "${CODITENT_API_IMAGE:?Set the immutable ECR API image URI}"
+    restart: unless-stopped
+    # Production executes the application packaged by CI. Never shadow it
+    # with the repository bind mount used for local development.
+    volumes: !reset []
     environment:
       APP_ENV: production
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
@@ -11,6 +19,8 @@ services:
       LINKEDIN_REDIRECT_URI: "${LINKEDIN_REDIRECT_URI:-}"
 
   worker:
+    image: "${CODITENT_API_IMAGE:?Set the immutable ECR API image URI}"
+    restart: unless-stopped
     environment:
       APP_ENV: production
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
@@ -18,3 +28,12 @@ services:
       ACCESS_TOKEN_COOKIE_SECURE: "true"
       GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
       LINKEDIN_REDIRECT_URI: "${LINKEDIN_REDIRECT_URI:-}"
+
+  ai-dispatcher:
+    image: "${CODITENT_API_IMAGE:?Set the immutable ECR API image URI}"
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
+      CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
+      ACCESS_TOKEN_COOKIE_SECURE: "true"

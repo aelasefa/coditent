@@ -253,7 +253,7 @@ CODITENT/
 ├── docker-compose.yml          # api/worker/redis/web/proxy/vault
 ├── nginx/                      # reverse-proxy build
 ├── ansible/                    # EC2 provisioning/deploy/rollback, nginx role
-├── .github/workflows/deploy.yml# CI (web lint+build, api imports) + CD (Ansible on push to main)
+├── .github/workflows/deploy.yml# CI + immutable ECR build + SSM deployment
 ├── .env.example                # Supabase-only env template
 ├── SUPABASE.md / DESIGN.md / UX-CONTRACT.md / CODITENT_BACKEND_ARCHITECTURE.md
 └── vercel.json
@@ -269,7 +269,10 @@ CODITENT/
 | `apps/web/src/app/` | Route groups + pages | User-facing screens per role | Calls `lib/api.ts` helpers |
 | `apps/web/src/components/` | Reusable UI (incl. `ui/avatar.tsx`, `company/CompanyLogoSection.tsx`) | Consistent design system | Pages |
 | `apps/web/src/lib/` | API client, auth, types, permissions mirror | Single frontend↔backend contract | All pages/components |
-| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `docker compose up --build`; push-to-main deploys |
+| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `docker compose up --build`; production uses ECR + SSM |
+
+Production setup and required IAM/GitHub configuration are documented in
+[`docs/operations/ecr-ssm-deployment.md`](docs/operations/ecr-ssm-deployment.md).
 
 ---
 
@@ -1016,7 +1019,7 @@ User and organization deletion are implemented as retention-safe logical deactiv
 - **File validation:** CV (pdf/docx + magic + 5 MB) and logo (png/jpg/webp + magic + 2 MB) both sides; randomized unique paths; path-only DB storage; scoped streams.
 - **Invitation security:** token hashing + UNIQUE + single-use + expiry (7 d / 72 h) + email-match + resend rotation + lazy-expiry.
 - **WS authorization:** JWT from query + full viewer re-check + per-message re-auth; close codes 4401/4403/4404.
-- **Known issues (pre-existing, documented honestly):** B1 offer `toggle` skips `can()` (`offers.py:164`); B2 `GET /chat/with/{uid}` no peer check (`chat.py:74`); B3 `POST /companies` open to any recruiter (`companies.py:70`); B4 `updateRequestStatus` 403s PLATFORM_ADMIN (legacy `ADMIN` check); B5 company PATCH needs full `name` (422 on partial) + audit substring filter (`core/audit.py:31`); B6 `GET /admin/activity` returns `[]` on DB error. Risks: RLS bypassed by design, WS token in URL, no non-auth rate limits verified, CVs stored un-scanned, deploy downtime (compose rebuild).
+- **Known issues (pre-existing, documented honestly):** B1 offer `toggle` skips `can()` (`offers.py:164`); B2 `GET /chat/with/{uid}` no peer check (`chat.py:74`); B3 `POST /companies` open to any recruiter (`companies.py:70`); B4 `updateRequestStatus` 403s PLATFORM_ADMIN (legacy `ADMIN` check); B5 company PATCH needs full `name` (422 on partial) + audit substring filter (`core/audit.py:31`); B6 `GET /admin/activity` returns `[]` on DB error. Risks: RLS bypassed by design, WS token in URL, no non-auth rate limits verified, CVs stored un-scanned, deploy downtime (Compose recreates the API container).
 - **NOT IMPLEMENTED:** password reset, token refresh/revocation, RLS, E2E encryption, attachment scanning, audit tamper protection.
 
 ---
@@ -1141,7 +1144,7 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 - `SUPABASE_SERVICE_KEY` must be `sb_secret_...` (service_role) for storage; publishable fails (previous README note; consistent with `app/db.py` admin usage).
 - Gemini model name drift risk (`gemini-3-flash-preview` pinned in 3 backend files + frontend bio REST; a 404 requires a coordinated bump).
 - Legacy `RECRUITER`/`ADMIN` roles readable but deprecated; several compat paths drift (M4/M7/M8 mismatches + B3/B4).
-- No zero-downtime deploys (compose rebuild restarts API; in-flight requests dropped).
+- No zero-downtime deploys (updating the immutable image recreates the API container; in-flight requests can be dropped).
 - Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns require application-level validation; deleting a User can cascade applications and messages.
 - `apps/apps/web/` nested copy appears unused — TO-VERIFY, do not rely on it.
 

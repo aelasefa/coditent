@@ -245,18 +245,6 @@ export default function SsoCallbackPage() {
 
   return (
     <main className={authStyles.page}>
-      <video
-        className={authStyles.backgroundVideo}
-        autoPlay
-        muted
-        playsInline
-        preload="metadata"
-        poster="/images/auth/sign-in-background.png"
-        aria-hidden="true"
-        tabIndex={-1}
-      >
-        <source src="/images/auth/login-background-full-hd.mp4" type="video/mp4" />
-      </video>
       <div className={authStyles.loginContent}>
         <header className={authStyles.header}>
           <Link href="/" aria-label="Coditent home"><Logo size="md" /></Link>
