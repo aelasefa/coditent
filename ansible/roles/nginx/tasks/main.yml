@@ -337,6 +337,9 @@
   ansible.builtin.command: nginx -t
   changed_when: false
 
+- name: Activate and verify the final Nginx configuration
+  ansible.builtin.meta: flush_handlers
+
 - name: Ensure Nginx is enabled and started
   ansible.builtin.systemd:
     name: nginx
