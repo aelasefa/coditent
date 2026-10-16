@@ -89,22 +89,32 @@ async def get_current_user(
             detail="Account is not active",
         ) from exc
 
-    # Check if user revoked all active sessions
-    token_iat = payload.get("iat")
-    if token_iat is not None:
+    # Fail closed: accepting requests during a Redis outage would bypass
+    # logout-all revocation checks.
+    try:
+        from app.cache import get_async_redis
+
+        redis_client = get_async_redis()
+        revoked_before = await redis_client.get(f"user:{user_id}:revoked_before")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session verification is temporarily unavailable.",
+        ) from exc
+
+    if revoked_before is not None:
+        token_iat = payload.get("iat")
         try:
-            from app.cache import get_async_redis
-            redis_client = get_async_redis()
-            revoked_before = await redis_client.get(f"user:{user_id}:revoked_before")
-            if revoked_before and int(token_iat) < int(revoked_before):
+            if token_iat is None or float(token_iat) <= float(revoked_before):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Session revoked. Please log in again.",
                 )
-        except HTTPException:
-            raise
-        except Exception:
-            pass
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session revoked. Please log in again.",
+            ) from exc
 
     return user
 

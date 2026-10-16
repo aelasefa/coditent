@@ -1223,9 +1223,15 @@ async def logout_all_devices(
 ) -> dict:
     """Revoke all active JWT access tokens across all devices for the current user."""
     from app.cache import get_async_redis
-    redis_client = get_async_redis()
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-    await redis_client.set(f"user:{current_user.id}:revoked_before", now_ts, ex=30 * 86400)
+    try:
+        redis_client = get_async_redis()
+        now_ts = datetime.now(timezone.utc).timestamp()
+        await redis_client.set(f"user:{current_user.id}:revoked_before", now_ts, ex=30 * 86400)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not revoke sessions because session storage is unavailable.",
+        ) from exc
     logger.info("logout_all_devices_success", user_id=str(current_user.id))
     return {"detail": "Logged out of all devices successfully."}
 
