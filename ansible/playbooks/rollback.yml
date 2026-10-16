@@ -32,18 +32,22 @@
 
     - name: Rebuild Docker Compose images serially
       ansible.builtin.command:
-        cmd: docker compose build
+        cmd: >-
+          docker compose build
+          {{ compose_build_services | default([]) | join(' ') }}
         chdir: "{{ app_dir }}"
       environment:
         COMPOSE_PARALLEL_LIMIT: "1"
-      async: 1800
+      async: "{{ compose_build_timeout | default(3600) }}"
       poll: 15
 
     - name: Start rollback containers without rebuilding
       ansible.builtin.command:
-        cmd: docker compose up -d --no-build --remove-orphans
+        cmd: >-
+          docker compose up -d --no-build --remove-orphans
+          {{ compose_run_services | default([]) | join(' ') }}
         chdir: "{{ app_dir }}"
-      async: 900
+      async: "{{ compose_start_timeout | default(900) }}"
       poll: 10
 
     - name: Wait for application readiness

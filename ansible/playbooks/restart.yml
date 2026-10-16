@@ -13,7 +13,9 @@
   tasks:
     - name: Restart Docker Compose services
       ansible.builtin.command:
-        cmd: docker compose restart
+        cmd: >-
+          docker compose restart
+          {{ compose_run_services | default([]) | join(' ') }}
         chdir: "{{ app_dir }}"
 
     - name: Wait for application readiness after restart
