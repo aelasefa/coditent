@@ -105,6 +105,22 @@ def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
 
     assert "EC2_SSH_KNOWN_HOSTS" in workflow
     assert "ssh-keyscan" not in workflow
+
+
+def test_ci_waits_for_a_usable_ec2_ssh_session() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+    readiness_step = workflow.split(
+        "- name: Wait for EC2 SSH and passwordless sudo", 1
+    )[1].split("- name: Provision trusted TLS ingress", 1)[0]
+    assert "StrictHostKeyChecking=yes" in readiness_step
+    assert "UserKnownHostsFile=" in readiness_step
+    assert "ConnectTimeout=20" in readiness_step
+    assert "ConnectionAttempts=1" in readiness_step
+    assert "sudo -n true" in readiness_step
+    assert "attempt in {1..10}" in readiness_step
+    assert workflow.count("--timeout 30") == 2
+    assert workflow.count("-o ConnectionAttempts=3") == 2
     assert "StrictHostKeyChecking=no" not in workflow
     assert "StrictHostKeyChecking=yes" in workflow
     assert "TESTED_COMMIT: ${{ github.sha }}" in workflow
