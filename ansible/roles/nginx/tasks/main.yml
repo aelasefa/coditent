@@ -67,6 +67,37 @@
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
+- name: Find the existing Coditent Compose proxy before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - "label=com.docker.compose.project={{ app_name }}"
+      - --filter
+      - label=com.docker.compose.service=proxy
+  register: nginx_legacy_compose_proxies
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+# Older deployments exposed the Compose proxy directly on ports 80/443. Stop
+# only Coditent's labelled proxy before systemd Nginx claims those ingress
+# ports. The deploy playbook recreates it afterward on loopback ports 3001/8443.
+- name: Stop the existing Coditent Compose proxy before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stop
+      - "{{ item }}"
+  loop: "{{ nginx_legacy_compose_proxies.stdout_lines | default([]) }}"
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+    - item | length > 0
+
 - name: Start or reload Nginx for the first ACME challenge
   ansible.builtin.systemd:
     name: nginx

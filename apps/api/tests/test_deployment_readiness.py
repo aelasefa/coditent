@@ -196,6 +196,9 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "renewal-hooks/deploy/reload-nginx" in tasks
     assert "nginx_render_tls_enabled: false" in tasks
     assert "nginx_tls_enabled: false" not in tasks
+    assert "label=com.docker.compose.project={{ app_name }}" in tasks
+    assert "label=com.docker.compose.service=proxy" in tasks
+    assert "Stop the existing Coditent Compose proxy before TLS bootstrap" in tasks
     assert "return 308 https://$host$request_uri" in template
     assert "ssl_certificate {{ tls_certificate_path }}" in template
     assert "Strict-Transport-Security" in template
