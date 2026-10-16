@@ -30,10 +30,21 @@
         version: "{{ rollback_commit }}"
         force: yes
 
-    - name: Rebuild and start Docker Compose containers
+    - name: Rebuild Docker Compose images serially
       ansible.builtin.command:
-        cmd: docker compose up -d --build --remove-orphans
+        cmd: docker compose build
         chdir: "{{ app_dir }}"
+      environment:
+        COMPOSE_PARALLEL_LIMIT: "1"
+      async: 1800
+      poll: 15
+
+    - name: Start rollback containers without rebuilding
+      ansible.builtin.command:
+        cmd: docker compose up -d --no-build --remove-orphans
+        chdir: "{{ app_dir }}"
+      async: 900
+      poll: 10
 
     - name: Wait for application readiness
       ansible.builtin.uri:
