@@ -67,45 +67,139 @@
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
-- name: Find the existing Coditent Compose proxy before TLS bootstrap
+- name: Find Compose proxy containers before TLS bootstrap
   ansible.builtin.command:
     argv:
       - docker
       - ps
       - --quiet
       - --filter
-      - "label=com.docker.compose.project={{ app_name }}"
-      - --filter
       - label=com.docker.compose.service=proxy
-  register: nginx_legacy_compose_proxies
+  register: nginx_compose_proxy_containers
   changed_when: false
   when:
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
-# Older deployments exposed the Compose proxy directly on ports 80/443. Stop
-# only Coditent's labelled proxy before systemd Nginx claims those ingress
-# ports. The deploy playbook recreates it afterward on loopback ports 3001/8443.
-- name: Stop the existing Coditent Compose proxy before TLS bootstrap
+- name: Find the explicitly named legacy Coditent proxy before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - name=^/coditent-proxy$
+  register: nginx_named_legacy_proxy_containers
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Find Docker containers publishing the public HTTP port
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - publish=80
+  register: nginx_public_http_containers
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Find Docker containers publishing the public HTTPS port
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - publish=443
+  register: nginx_public_https_containers
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Collect containers that can conflict with host Nginx
+  ansible.builtin.set_fact:
+    nginx_ingress_container_ids: >-
+      {{
+        (
+          (nginx_compose_proxy_containers.stdout_lines | default([]))
+          + (nginx_named_legacy_proxy_containers.stdout_lines | default([]))
+          + (nginx_public_http_containers.stdout_lines | default([]))
+          + (nginx_public_https_containers.stdout_lines | default([]))
+        ) | reject('equalto', '') | unique | list
+      }}
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+# Older deployments exposed the Compose proxy directly on ports 80/443 and
+# did not always carry today's Compose project label. Stop the union of the
+# proxy service, its historical explicit name, and containers publishing port
+# 80 or 443. The deploy playbook recreates Coditent's proxy afterward on
+# loopback.
+- name: Stop containers conflicting with host Nginx before TLS bootstrap
   ansible.builtin.command:
     argv:
       - docker
       - stop
       - "{{ item }}"
-  loop: "{{ nginx_legacy_compose_proxies.stdout_lines | default([]) }}"
+  loop: "{{ nginx_ingress_container_ids | default([]) }}"
   when:
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
     - item | length > 0
 
-- name: Start or reload Nginx for the first ACME challenge
-  ansible.builtin.systemd:
-    name: nginx
-    state: restarted
-    enabled: yes
+- name: Start Nginx for the first ACME challenge
   when:
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
+  block:
+    - name: Restart host Nginx with the temporary HTTP virtual host
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+        enabled: yes
+  rescue:
+    - name: Capture Nginx service status after bootstrap failure
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - status
+          - nginx.service
+          - --no-pager
+          - --full
+      register: nginx_bootstrap_systemctl_status
+      changed_when: false
+      failed_when: false
+
+    - name: Capture recent Nginx service journal after bootstrap failure
+      ansible.builtin.command:
+        argv:
+          - journalctl
+          - --unit
+          - nginx.service
+          - --no-pager
+          - --lines
+          - '80'
+      register: nginx_bootstrap_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Report Nginx bootstrap diagnostics
+      ansible.builtin.debug:
+        msg:
+          - "{{ nginx_bootstrap_systemctl_status.stdout | default('systemctl status unavailable') }}"
+          - "{{ nginx_bootstrap_journal.stdout | default('nginx journal unavailable') }}"
+
+    - name: Fail after reporting Nginx bootstrap diagnostics
+      ansible.builtin.fail:
+        msg: "Host Nginx could not claim the public ingress ports; review the service diagnostics above"
 
 - name: Verify the public ACME HTTP-01 route before requesting a certificate
   when:

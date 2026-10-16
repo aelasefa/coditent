@@ -196,9 +196,12 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "renewal-hooks/deploy/reload-nginx" in tasks
     assert "nginx_render_tls_enabled: false" in tasks
     assert "nginx_tls_enabled: false" not in tasks
-    assert "label=com.docker.compose.project={{ app_name }}" in tasks
     assert "label=com.docker.compose.service=proxy" in tasks
-    assert "Stop the existing Coditent Compose proxy before TLS bootstrap" in tasks
+    assert "name=^/coditent-proxy$" in tasks
+    assert "publish=80" in tasks
+    assert "publish=443" in tasks
+    assert "Stop containers conflicting with host Nginx before TLS bootstrap" in tasks
+    assert "Capture recent Nginx service journal after bootstrap failure" in tasks
     assert "Verify the public ACME HTTP-01 route before requesting a certificate" in tasks
     assert 'url: "http://{{ server_name }}/.well-known/acme-challenge/' in tasks
     assert "--preferred-challenges" in tasks
