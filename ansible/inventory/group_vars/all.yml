@@ -33,6 +33,9 @@ nginx_waf_enabled: false
 server_name: "{{ ansible_host | default('_') }}"
 tls_certificate_path: "/etc/letsencrypt/live/{{ server_name }}/fullchain.pem"
 tls_certificate_key_path: "/etc/letsencrypt/live/{{ server_name }}/privkey.pem"
+letsencrypt_email: ""
+letsencrypt_staging: false
+letsencrypt_webroot: "/var/www/certbot"
 
 # Application URLs
 public_scheme: "{{ 'https' if nginx_tls_enabled else 'http' }}"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol
 
@@ -9,11 +10,13 @@ from fastapi.responses import JSONResponse
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 WORKER_HEARTBEAT_KEY = "coditent:health:worker"
 DISPATCHER_HEARTBEAT_KEY = "coditent:health:ai-dispatcher"
 
 ComponentStatus = Literal["ok", "unavailable"]
+_database_probe_task: asyncio.Task[ComponentStatus] | None = None
 
 
 class _SyncRedisClient(Protocol):
@@ -65,16 +68,31 @@ async def _bounded_status(probe: Callable[[], Awaitable[bool]]) -> ComponentStat
         available = await asyncio.wait_for(
             probe(), timeout=_readiness_timeout_seconds()
         )
-    except Exception:
+    except Exception as exc:
         # Readiness is intentionally diagnostic but not a source of connection
         # strings, credentials, provider responses, or exception details.
+        logger.warning(
+            "readiness_probe_failed component=%s exception_type=%s",
+            getattr(probe, "__name__", "unknown"),
+            type(exc).__name__,
+        )
         return "unavailable"
     return "ok" if available else "unavailable"
 
 
+async def _database_status() -> ComponentStatus:
+    # Docker and the proxy probe concurrently. Share the in-flight check so
+    # monitoring cannot occupy every slot in the application's small pool.
+    # A disconnected HTTP caller must not cancel the check for other callers.
+    global _database_probe_task
+    if _database_probe_task is None or _database_probe_task.done():
+        _database_probe_task = asyncio.create_task(_bounded_status(_probe_database))
+    return await asyncio.shield(_database_probe_task)
+
+
 async def readiness_payload() -> tuple[int, dict[str, object]]:
     database, redis, worker, dispatcher = await asyncio.gather(
-        _bounded_status(_probe_database),
+        _database_status(),
         _bounded_status(_probe_redis),
         _bounded_status(_probe_worker),
         _bounded_status(_probe_dispatcher),

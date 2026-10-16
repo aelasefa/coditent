@@ -56,6 +56,7 @@ from app.services.authentication import (
     AuthenticationStoreUnavailable,
     ensure_access_session_active,
     ensure_account_can_authenticate,
+    ensure_credential_matches_account,
 )
 from app.services.socket_tickets import (
     SOCKET_TICKET_TTL_SECONDS,
@@ -771,6 +772,7 @@ WS_MAX_CONNECTIONS_PER_USER_ROOM = 3
 _recruitment_rooms: dict[str, set[WebSocket]] = {}
 _socket_users: dict[WebSocket, UUID] = {}
 _socket_sessions: dict[WebSocket, UUID] = {}
+_socket_auth_versions: dict[WebSocket, int] = {}
 _socket_expirations: dict[WebSocket, float] = {}
 _socket_send_locks: dict[WebSocket, asyncio.Lock] = {}
 _socket_last_pong: dict[WebSocket, float] = {}
@@ -785,6 +787,7 @@ def _remove_socket(application_id: str, websocket: WebSocket) -> None:
             _recruitment_rooms.pop(application_id, None)
     _socket_users.pop(websocket, None)
     _socket_sessions.pop(websocket, None)
+    _socket_auth_versions.pop(websocket, None)
     _socket_expirations.pop(websocket, None)
     _socket_send_locks.pop(websocket, None)
     _socket_last_pong.pop(websocket, None)
@@ -818,6 +821,23 @@ async def _send_socket_json(websocket: WebSocket, payload: dict) -> bool:
         return False
 
 
+def _socket_credential_is_current(
+    websocket: WebSocket, user: User, user_id: UUID
+) -> bool:
+    """Compare the security version captured by the ticket with the account."""
+    try:
+        ensure_credential_matches_account(
+            {
+                "sub": str(user_id),
+                "auth_version": _socket_auth_versions.get(websocket),
+            },
+            user,
+        )
+    except AuthenticationRejected:
+        return False
+    return True
+
+
 async def _socket_is_authorized(websocket: WebSocket, application_id: str) -> bool:
     """Re-authorize a recipient before each delivery using a fresh DB session."""
     user_id = _socket_users.get(websocket)
@@ -848,6 +868,8 @@ async def _socket_is_authorized(websocket: WebSocket, application_id: str) -> bo
             if user is None or app is None:
                 return False
             ensure_account_can_authenticate(user)
+            if not _socket_credential_is_current(websocket, user, user_id):
+                return False
             offer = (
                 await db.execute(select(Offer).where(Offer.id == app.opportunity_id))
             ).scalar_one_or_none()
@@ -1047,6 +1069,7 @@ async def create_recruitment_socket_ticket(
             application_id=app.id,
             session_id=str(access_payload["sid"]),
             expires_at=int(access_payload["exp"]),
+            auth_version=int(access_payload["auth_version"]),
         )
     except AuthenticationStoreUnavailable as exc:
         raise HTTPException(
@@ -1095,6 +1118,13 @@ async def recruitment_chat_ws(
             return
         try:
             ensure_account_can_authenticate(user)
+            ensure_credential_matches_account(
+                {
+                    "sub": str(user_id),
+                    "auth_version": socket_ticket.auth_version,
+                },
+                user,
+            )
         except AuthenticationRejected:
             await websocket.close(code=4401)
             return
@@ -1128,6 +1158,7 @@ async def recruitment_chat_ws(
     _recruitment_rooms.setdefault(room, set()).add(websocket)
     _socket_users[websocket] = user_id
     _socket_sessions[websocket] = session_id
+    _socket_auth_versions[websocket] = socket_ticket.auth_version
     _socket_expirations[websocket] = token_expiry
     _socket_last_pong[websocket] = time.monotonic()
     _socket_rate_windows[websocket] = deque()
@@ -1326,6 +1357,7 @@ def _remove_friend_socket(room: str, websocket: WebSocket) -> None:
     _friend_socket_connections.pop(websocket, None)
     _socket_users.pop(websocket, None)
     _socket_sessions.pop(websocket, None)
+    _socket_auth_versions.pop(websocket, None)
     _socket_expirations.pop(websocket, None)
     _socket_send_locks.pop(websocket, None)
     _socket_last_pong.pop(websocket, None)
@@ -1368,6 +1400,8 @@ async def _friend_socket_is_authorized(websocket: WebSocket) -> bool:
                 return False
             ensure_account_can_authenticate(user)
             ensure_account_can_authenticate(peer)
+            if not _socket_credential_is_current(websocket, user, user_id):
+                return False
             if user.role != UserRole.CANDIDATE or peer.role != UserRole.CANDIDATE:
                 return False
             return await are_accepted_friends(db, user_id, peer_id)
@@ -1526,6 +1560,7 @@ async def create_friend_socket_ticket(
             application_id=peer.id,
             session_id=str(access_payload["sid"]),
             expires_at=int(access_payload["exp"]),
+            auth_version=int(access_payload["auth_version"]),
             scope="friend",
         )
     except AuthenticationStoreUnavailable as exc:
@@ -1575,6 +1610,13 @@ async def friend_chat_ws(
                 raise AuthenticationRejected("Missing account")
             ensure_account_can_authenticate(user)
             ensure_account_can_authenticate(peer)
+            ensure_credential_matches_account(
+                {
+                    "sub": str(user_id),
+                    "auth_version": socket_ticket.auth_version,
+                },
+                user,
+            )
         except AuthenticationRejected:
             await websocket.close(code=4401)
             return
@@ -1597,6 +1639,7 @@ async def friend_chat_ws(
     _socket_users[websocket] = user_id
     _friend_socket_peers[websocket] = peer_id
     _socket_sessions[websocket] = socket_ticket.session_id
+    _socket_auth_versions[websocket] = socket_ticket.auth_version
     _socket_expirations[websocket] = float(socket_ticket.expires_at)
     _socket_last_pong[websocket] = time.monotonic()
     _socket_rate_windows[websocket] = deque()

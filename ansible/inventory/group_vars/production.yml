@@ -9,6 +9,16 @@ nginx_tls_enabled: true
 nginx_waf_enabled: true
 compose_file_list: "docker-compose.yml:docker-compose.production.yml"
 
+# The EC2 host serves only the API. The public application is hosted by
+# Vercel, so keep the TLS hostname and browser-facing origin separate.
+server_name: "api.coditent.app"
+frontend_url: "https://coditent.app"
+cors_origins: "https://coditent.app,https://www.coditent.app"
+google_redirect_uri: "https://coditent.app/auth/sso/google/callback"
+linkedin_redirect_uri: "https://coditent.app/auth/sso/linkedin/callback"
+resend_from_email: "notifications@coditent.app"
+letsencrypt_email: "notifications@coditent.app"
+
 # In production, Supabase and AI keys can be provided via:
 # 1. ansible-vault (e.g. including vault.yml)
 # 2. Extra vars from CI/CD: --extra-vars "database_url=... supabase_url=..."

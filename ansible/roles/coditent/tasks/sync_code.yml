@@ -1,10 +1,44 @@
 ---
+- name: Check whether the application directory is already a Git repository
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/.git"
+  register: app_git_directory
+
+# setup_dirs.yml intentionally creates the application directory before this
+# task runs so that environment files can survive deployments. On the first
+# deployment that leaves a non-empty directory, which `git clone` refuses to
+# use. Initializing that directory first lets the git module fetch and check
+# out the requested revision without deleting untracked production files.
+- name: Initialize Git metadata for a pre-created application directory
+  ansible.builtin.command:
+    argv:
+      - git
+      - init
+      - --initial-branch=ansible-bootstrap
+      - "{{ app_dir }}"
+  become_user: "{{ app_user }}"
+  when: not app_git_directory.stat.exists
+
+- name: Configure origin for the initialized application directory
+  ansible.builtin.command:
+    argv:
+      - git
+      - -C
+      - "{{ app_dir }}"
+      - remote
+      - add
+      - origin
+      - "{{ repo_url }}"
+  become_user: "{{ app_user }}"
+  when: not app_git_directory.stat.exists
+
 - name: Sync repository from Git
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ app_dir }}"
     version: "{{ deploy_commit }}"
     force: "{{ repo_force | default(yes) }}"
+  become_user: "{{ app_user }}"
   register: git_result
 
 - name: Retrieve current Git commit hash

@@ -25,14 +25,14 @@ import type {
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const envUrl = process.env.NEXT_PUBLIC_API_URL || "/api-proxy";
-    // When the browser is loaded over HTTPS (e.g. Vercel) and backend is insecure HTTP,
-    // proxy through /api-proxy to prevent browser Mixed Content blocking.
-    if (window.location.protocol === "https:" && envUrl && envUrl.startsWith("http://")) {
+    // Production browser traffic stays on the page's HTTPS origin. Never let a
+    // stale public HTTP setting create mixed-content API or WebSocket requests.
+    if (window.location.protocol === "https:" && !envUrl.startsWith("/")) {
       return "/api-proxy";
     }
     return envUrl;
   }
-  return process.env.BACKEND_PROXY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://34.205.255.37";
+  return process.env.BACKEND_PROXY_URL ?? "http://127.0.0.1:8001";
 }
 
 /**
@@ -635,7 +635,7 @@ export function getFriendWsUrl(peerId: string, ticket: string): string {
   const base = getApiBaseUrl();
   const wsBase = base.startsWith("/")
     ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
-    : base.replace(/^http/, "ws");
+    : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
   return `${wsBase}/chat/friends/${peerId}/ws?ticket=${encodeURIComponent(ticket)}`;
 }
 

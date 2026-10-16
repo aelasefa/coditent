@@ -51,7 +51,16 @@ function RecommendationsContent() {
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const recsQuery = useQuery({ queryKey: ["recommendations"], queryFn: getRecommendations });
+  const recsQuery = useQuery({
+    queryKey: ["recommendations"],
+    queryFn: getRecommendations,
+    refetchInterval: (query) => {
+      const recommendations = query.state.data;
+      return recommendations?.some((recommendation) =>
+        recommendation.status === "pending" || recommendation.status === "processing"
+      ) ? 3000 : false;
+    },
+  });
   const { toast } = useToast();
   const [jobFailed, setJobFailed] = useState(false);
   const [pollingJob, setPollingJob] = useState(false);
@@ -112,20 +121,28 @@ function RecommendationsContent() {
   });
 
   const recs = useMemo(() => recsQuery.data ?? [], [recsQuery.data]);
+  const scoreableOfferIds = useMemo(
+    () => recs
+      .filter((recommendation) => {
+        const status = recommendation.status;
+        const score = recommendation.ai_score ?? recommendation.score;
+        return status === "pending" || status === "failed" || (!status && !(typeof score === "number" && score > 0));
+      })
+      .slice(0, 10)
+      .map((recommendation) => recommendation.offer.id)
+      .join(","),
+    [recs]
+  );
   // Newly published jobs arrive as pending rows from GET /recommendations.
   // Trigger per-offer scoring for rows with no completed analysis, then
   // refetch so the real score replaces "Match analysis pending".
   useEffect(() => {
     if (recsQuery.isLoading || recsQuery.isError) return;
-    const pending = (recsQuery.data ?? []).filter((r) => {
-      const st = (r as { status?: string }).status;
-      const sc = (r as { ai_score?: number; score?: number }).ai_score ?? (r as { score?: number }).score;
-      return st === "pending" || st === "failed" || (!st && !(typeof sc === "number" && sc > 0));
-    }).slice(0, 10);
-    if (pending.length === 0) return;
+    if (!scoreableOfferIds) return;
+    const offerIds = scoreableOfferIds.split(",");
     let cancelled = false;
     (async () => {
-      await Promise.allSettled(pending.map((r) => scoreRecommendation(r.offer.id)));
+      await Promise.allSettled(offerIds.map((offerId) => scoreRecommendation(offerId)));
       if (cancelled) return;
       // Give the worker a moment, then reload real statuses/scores.
       await new Promise((res) => setTimeout(res, 4000));
@@ -133,8 +150,7 @@ function RecommendationsContent() {
       await queryClient.invalidateQueries({ queryKey: ["recommendations"] });
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recsQuery.data?.length, recsQuery.isLoading, recsQuery.isError]);
+  }, [queryClient, recsQuery.isError, recsQuery.isLoading, scoreableOfferIds]);
   const appliedOfferIds = useMemo(
     () => new Set([...(appsQuery.data ?? []).map((a) => a.opportunity_id), ...applied]),
     [appsQuery.data, applied]

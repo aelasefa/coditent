@@ -1,29 +1,127 @@
 ---
-- name: Install Nginx and optional ModSecurity WAF packages
+- name: Install Nginx, certificate automation, and optional ModSecurity packages
   ansible.builtin.apt:
-    name: "{{ ['nginx'] + (['libnginx-mod-http-modsecurity', 'modsecurity-crs'] if nginx_waf_enabled | default(false) else []) }}"
+    name: "{{ ['nginx'] + (['certbot'] if nginx_tls_enabled | default(false) else []) + (['libnginx-mod-http-modsecurity', 'modsecurity-crs'] if nginx_waf_enabled | default(false) else []) }}"
     state: present
     update_cache: yes
 
-- name: Check configured TLS certificate
+- name: Validate public certificate inputs
+  ansible.builtin.assert:
+    that:
+      - server_name not in ['', '_']
+      - "'.' in server_name"
+      - letsencrypt_email | length > 3
+    fail_msg: "Set a public DNS hostname and letsencrypt_email before enabling production TLS"
+  when: nginx_tls_enabled | default(false)
+
+- name: Create the ACME HTTP-01 webroot
+  ansible.builtin.file:
+    path: "{{ letsencrypt_webroot }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  when: nginx_tls_enabled | default(false)
+
+- name: Check whether the trusted certificate already exists
+  ansible.builtin.stat:
+    path: "{{ tls_certificate_path }}"
+  register: nginx_tls_certificate_before
+  when: nginx_tls_enabled | default(false)
+
+- name: Deploy temporary HTTP virtual host for the first ACME challenge
+  ansible.builtin.template:
+    src: coditent.conf.j2
+    dest: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
+    mode: '0644'
+  vars:
+    nginx_tls_enabled: false
+    nginx_waf_enabled: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Enable Coditent site for the first ACME challenge
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
+    dest: /etc/nginx/sites-enabled/{{ nginx_site_name }}.conf
+    state: link
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Remove default Nginx site before the first ACME challenge
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Validate temporary HTTP virtual host
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Start or reload Nginx for the first ACME challenge
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted
+    enabled: yes
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Request a trusted Let's Encrypt certificate
+  ansible.builtin.command:
+    argv: "{{ ['certbot', 'certonly', '--webroot', '--webroot-path', letsencrypt_webroot, '--non-interactive', '--agree-tos', '--keep-until-expiring', '--email', letsencrypt_email, '--domain', server_name] + (['--staging'] if letsencrypt_staging | default(false) else []) }}"
+    creates: "{{ tls_certificate_path }}"
+  when: nginx_tls_enabled | default(false)
+
+- name: Create the certificate renewal deploy-hook directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: '0755'
+  when: nginx_tls_enabled | default(false)
+
+- name: Reload Nginx after each successful certificate renewal
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx
+    mode: '0755'
+    content: |
+      #!/usr/bin/env sh
+      set -eu
+      systemctl reload nginx
+  when: nginx_tls_enabled | default(false)
+
+- name: Enable automatic certificate renewal
+  ansible.builtin.systemd:
+    name: certbot.timer
+    state: started
+    enabled: yes
+  when: nginx_tls_enabled | default(false)
+
+- name: Check issued TLS certificate
   ansible.builtin.stat:
     path: "{{ tls_certificate_path }}"
   register: nginx_tls_certificate
   when: nginx_tls_enabled | default(false)
 
-- name: Check configured TLS private key
+- name: Check issued TLS private key
   ansible.builtin.stat:
     path: "{{ tls_certificate_key_path }}"
   register: nginx_tls_key
   when: nginx_tls_enabled | default(false)
 
-- name: Require provisioned TLS material and a real hostname
+- name: Require issued TLS material
   ansible.builtin.assert:
     that:
-      - server_name not in ['', '_']
       - nginx_tls_certificate.stat.exists
       - nginx_tls_key.stat.exists
-    fail_msg: "Provision a trusted certificate/key and set server_name before enabling production TLS"
+    fail_msg: "Let's Encrypt did not issue the configured certificate; verify DNS A/AAAA records and inbound ports 80/443"
   when: nginx_tls_enabled | default(false)
 
 - name: Initialize ModSecurity base configuration

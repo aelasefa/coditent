@@ -136,10 +136,13 @@ async def _clear_recommendation_cache(user_id) -> None:
         logger.warning("recommendation_cache_invalidation_failed", candidate_id=str(user_id))
 
 
-async def _get_profile(db: AsyncSession, user_id) -> CandidateProfile:
-    result = await db.execute(
-        select(CandidateProfile).where(CandidateProfile.user_id == user_id)
-    )
+async def _get_profile(
+    db: AsyncSession, user_id, *, for_update: bool = False
+) -> CandidateProfile:
+    statement = select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+    if for_update:
+        statement = statement.with_for_update()
+    result = await db.execute(statement)
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
@@ -182,7 +185,7 @@ async def update_onboarding_step(
     current_user: Annotated[User, Depends(require_candidate_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OnboardingStateOut:
-    profile = await _get_profile(db, current_user.id)
+    profile = await _get_profile(db, current_user.id, for_update=True)
     if profile.onboarding_completed:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Onboarding is already complete")
     if data.step > profile.onboarding_step:
@@ -214,7 +217,7 @@ async def complete_onboarding(
     current_user: Annotated[User, Depends(require_candidate_account)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OnboardingStateOut:
-    profile = await _get_profile(db, current_user.id)
+    profile = await _get_profile(db, current_user.id, for_update=True)
     required = (
         profile.search_timeline,
         profile.desired_opportunity_type,

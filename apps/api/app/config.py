@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     gemini_api_key: str
-    gemini_model: str = Field(default="gemini-3-flash-preview", min_length=3, max_length=100)
+    gemini_model: str = Field(default="gemini-3.5-flash", min_length=3, max_length=100)
+    gemini_fallback_model: str = Field(default="gemini-3.1-flash-lite", max_length=100)
     resend_api_key: str | None = None
     resend_from_email: str | None = None
     resend_from_name: str = "CODITENT"
@@ -77,7 +78,7 @@ class Settings(BaseSettings):
     ai_dispatch_interval_seconds: float = Field(default=2.0, ge=0.25, le=30.0)
     # Managed PostgreSQL can need a few seconds for a cold TLS connection.
     # Keep this bounded while avoiding false-unhealthy restarts.
-    readiness_check_timeout_seconds: float = Field(default=5.0, ge=0.1, le=10.0)
+    readiness_check_timeout_seconds: float = Field(default=10.0, ge=0.1, le=10.0)
     worker_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
     log_level: str = "INFO"
 

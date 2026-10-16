@@ -445,6 +445,21 @@ class OfferUpdate(APIModel):
     def validate_update(self) -> "OfferUpdate":
         if not self.model_fields_set:
             raise ValueError("At least one offer field must be provided")
+        non_nullable = {
+            "title",
+            "region",
+            "field",
+            "type",
+            "description",
+            "requirements",
+        }
+        invalid_nulls = sorted(
+            field
+            for field in self.model_fields_set & non_nullable
+            if getattr(self, field) is None
+        )
+        if invalid_nulls:
+            raise ValueError(f"Fields cannot be null: {', '.join(invalid_nulls)}")
         if self.salary_min is not None and self.salary_max is not None and self.salary_min > self.salary_max:
             raise ValueError("salary_min must be less than or equal to salary_max")
         return self
@@ -735,6 +750,8 @@ class CompanyUpdate(APIModel):
     def require_update_field(self) -> "CompanyUpdate":
         if not self.model_fields_set:
             raise ValueError("At least one company field must be provided")
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("Company name cannot be null")
         return self
 
 

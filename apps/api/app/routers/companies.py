@@ -4,14 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user, require_company_admin, require_company_member, require_recruiter
-from app.models import Company, CompanyStatus, User, UserRole
+from app.models import Company, CompanyStatus, Offer, User, UserRole
 from app.observability import get_logger
 from app.schemas import (
     CompanyCreate,
@@ -355,8 +355,19 @@ async def change_member_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     if not can(current_user.company_role, "change_employee_roles"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    company = await db.scalar(
+        select(Company).where(Company.id == company_id).with_for_update()
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     new_role = data.company_role
-    target = (await db.execute(select(User).where(User.id == user_id, User.company_id == company_id))).scalar_one_or_none()
+    target = (
+        await db.execute(
+            select(User)
+            .where(User.id == user_id, User.company_id == company_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
     if target.company_role == "OWNER":
@@ -380,11 +391,32 @@ async def remove_member(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if str(current_user.id) == str(user_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove yourself")
-    target = (await db.execute(select(User).where(User.id == user_id, User.company_id == company_id))).scalar_one_or_none()
+    company = await db.scalar(
+        select(Company).where(Company.id == company_id).with_for_update()
+    )
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+    target = (
+        await db.execute(
+            select(User)
+            .where(User.id == user_id, User.company_id == company_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
     if target.company_role == "OWNER":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove OWNER")
+    # Keep every offer assigned to a live company member. This update and the
+    # membership removal commit atomically under the company lock.
+    await db.execute(
+        update(Offer)
+        .where(
+            Offer.company_id == company_id,
+            Offer.responsible_hr_id == target.id,
+        )
+        .values(responsible_hr_id=current_user.id)
+    )
     target.company_id = None
     target.company_role = None
     await db.commit()

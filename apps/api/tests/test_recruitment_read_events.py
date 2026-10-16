@@ -6,11 +6,14 @@ from unittest.mock import AsyncMock, patch
 from app.routers.chat import (
     _broadcast_recruitment_event,
     _recruitment_rooms,
+    _socket_auth_versions,
+    _socket_credential_is_current,
     _socket_expirations,
     _socket_sessions,
     _socket_users,
 )
 from app.services.authentication import AuthenticationRejected
+from app.models import User, UserRole
 
 
 class _Socket:
@@ -29,6 +32,26 @@ class _Socket:
 
 
 class RecruitmentReadEventTests(unittest.IsolatedAsyncioTestCase):
+    def test_security_version_change_invalidates_registered_socket(self) -> None:
+        socket = _Socket()
+        user = User(
+            id=uuid.uuid4(),
+            email="socket-version@example.test",
+            password_hash="unused",
+            role=UserRole.CANDIDATE,
+            is_approved=True,
+            is_active=True,
+            full_name="Socket Version",
+            auth_version=3,
+        )
+        _socket_auth_versions[socket] = 3  # type: ignore[index]
+        try:
+            self.assertTrue(_socket_credential_is_current(socket, user, user.id))
+            user.auth_version = 4
+            self.assertFalse(_socket_credential_is_current(socket, user, user.id))
+        finally:
+            _socket_auth_versions.pop(socket, None)
+
     async def test_read_receipt_reaches_live_participants(self) -> None:
         room = "read-test-room"
         reader = _Socket()

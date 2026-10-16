@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user, require_candidate
@@ -70,7 +71,14 @@ async def create_request(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have a pending request to this company")
     req = CandidateRequest(candidate_id=current_user.id, company_id=company.id, recruiter_id=data.recruiter_id, message=data.message, status=RequestStatus.pending)
     db.add(req)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already have a pending request to this company",
+        ) from exc
     await db.refresh(req)
     return _to_out(req, current_user, company, recruiter)
 
@@ -129,7 +137,13 @@ async def update_request_status(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CandidateRequestOut:
     new_status = status_data.status
-    res = await db.execute(select(CandidateRequest).where(CandidateRequest.id == request_id))
+    # Serialize competing recruiter decisions. The second transaction observes
+    # the committed status and returns 409 instead of overwriting the winner.
+    res = await db.execute(
+        select(CandidateRequest)
+        .where(CandidateRequest.id == request_id)
+        .with_for_update()
+    )
     req = res.scalar_one_or_none()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")

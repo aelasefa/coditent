@@ -329,6 +329,13 @@ async def complete_ai_job(
     worker_id: str,
     result: Any,
 ) -> None:
+    """Commit domain output only while this worker still owns the job lease.
+
+    AI handlers write their domain result and finalize the job in the same
+    session.  The conditional job update is therefore the transaction's
+    ownership fence: if it updates no row, every pending domain write must be
+    rolled back before the lease-lost error is returned.
+    """
     encoded = canonical_json(result)
     if len(encoded) > MAX_JOB_RESULT_CHARS:
         raise ValueError("AI job result is too large")
@@ -353,9 +360,10 @@ async def complete_ai_job(
             .returning(AIJob.id)
         )
     ).scalar_one_or_none()
-    await db.commit()
     if completed is None:
+        await db.rollback()
         raise AIJobLeaseLostError("AI job lease was lost before completion")
+    await db.commit()
 
 
 async def mark_ai_job_stale(
@@ -385,9 +393,10 @@ async def mark_ai_job_stale(
             .returning(AIJob.id)
         )
     ).scalar_one_or_none()
-    await db.commit()
     if updated is None:
+        await db.rollback()
         raise AIJobLeaseLostError("AI job lease was lost before stale transition")
+    await db.commit()
 
 
 async def fail_ai_job(

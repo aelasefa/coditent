@@ -25,6 +25,7 @@ class SocketTicket:
     application_id: UUID
     session_id: UUID
     expires_at: int
+    auth_version: int
     scope: str = "recruitment"
 
 
@@ -39,6 +40,7 @@ async def create_socket_ticket(
     application_id: UUID,
     session_id: str,
     expires_at: int,
+    auth_version: int,
     scope: str = "recruitment",
 ) -> str:
     try:
@@ -47,6 +49,8 @@ async def create_socket_ticket(
         raise AuthenticationRejected("Invalid access session") from exc
     if isinstance(expires_at, bool) or not isinstance(expires_at, int) or expires_at <= 0:
         raise AuthenticationRejected("Invalid access session")
+    if isinstance(auth_version, bool) or not isinstance(auth_version, int) or auth_version < 0:
+        raise AuthenticationRejected("Invalid account version")
     if scope not in {"recruitment", "friend"}:
         raise AuthenticationRejected("Invalid socket scope")
 
@@ -57,6 +61,7 @@ async def create_socket_ticket(
             "application_id": str(application_id),
             "session_id": normalized_session_id,
             "expires_at": expires_at,
+            "auth_version": auth_version,
             "scope": scope,
         }
     )
@@ -95,6 +100,7 @@ async def consume_socket_ticket(
             application_id=UUID(str(payload["application_id"])),
             session_id=UUID(str(payload["session_id"])),
             expires_at=int(payload["expires_at"]),
+            auth_version=int(payload["auth_version"]),
             scope=str(payload.get("scope") or "recruitment"),
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -105,5 +111,7 @@ async def consume_socket_ticket(
 
     if parsed.expires_at <= int(time()):
         raise AuthenticationRejected("Access session expired")
+    if parsed.auth_version < 0:
+        raise AuthenticationRejected("Invalid account version")
     await ensure_access_session_active({"sid": str(parsed.session_id)})
     return parsed

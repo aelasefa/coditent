@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.models import AIJob
+from app.models import AIJob, Offer, OfferType, SavedRecommendation, User, UserRole
 from app.services.ai_contracts import (
     deterministic_reasoning,
     parse_ranked_offers,
@@ -18,6 +19,7 @@ from app.services.ai_contracts import (
     untrusted_prompt_data,
 )
 from app.services.ai_jobs import (
+    AIJobLeaseLostError,
     claim_ai_job,
     complete_ai_job,
     content_fingerprint,
@@ -34,6 +36,23 @@ async def sessions():
     )
     async with engine.begin() as connection:
         await connection.run_sync(AIJob.__table__.create)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def postgres_sessions():
+    """Opt-in PostgreSQL factory for real transaction/concurrency semantics."""
+    database_url = os.getenv("AI_JOB_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("AI_JOB_TEST_DATABASE_URL is required for PostgreSQL lease-race tests")
+    engine = create_async_engine(database_url)
+    if engine.dialect.name != "postgresql":
+        await engine.dispose()
+        pytest.skip("AI_JOB_TEST_DATABASE_URL must use PostgreSQL")
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         yield factory
@@ -112,6 +131,186 @@ async def test_expired_processing_lease_is_recovered(sessions):
         refreshed = (await db.execute(select(AIJob).where(AIJob.id == job.id))).scalar_one()
         assert refreshed.status == "queued"
         assert refreshed.lease_owner == "dispatcher-two"
+
+
+@pytest.mark.asyncio
+async def test_lost_worker_cannot_commit_domain_output(postgres_sessions):
+    """A reassigned lease fences and rolls back the losing worker's output."""
+    suffix = uuid.uuid4().hex
+    candidate_id = uuid.uuid4()
+    recruiter_id = uuid.uuid4()
+    offer_id = uuid.uuid4()
+    recommendation_id = uuid.uuid4()
+    job_id = uuid.uuid4()
+
+    async with postgres_sessions() as seed_db:
+        seed_db.add_all(
+            [
+                User(
+                    id=candidate_id,
+                    email=f"lease-candidate-{suffix}@test.local",
+                    password_hash="test-hash",
+                    role=UserRole.CANDIDATE,
+                    is_approved=True,
+                    full_name="Lease Candidate",
+                ),
+                User(
+                    id=recruiter_id,
+                    email=f"lease-recruiter-{suffix}@test.local",
+                    password_hash="test-hash",
+                    role=UserRole.COMPANY_USER,
+                    is_approved=True,
+                    full_name="Lease Recruiter",
+                ),
+            ]
+        )
+        await seed_db.flush()
+        seed_db.add(
+            Offer(
+                id=offer_id,
+                recruiter_id=recruiter_id,
+                title="Lease-safe role",
+                company="Concurrency Test",
+                region="Casablanca",
+                field="Engineering",
+                type=OfferType.JOB,
+                description="Disposable PostgreSQL lease-race fixture.",
+                requirements="Atomic transaction ownership.",
+            )
+        )
+        await seed_db.flush()
+        seed_db.add_all(
+            [
+                SavedRecommendation(
+                    id=recommendation_id,
+                    candidate_id=candidate_id,
+                    offer_id=offer_id,
+                    ai_score=0,
+                    ai_reasoning="Pending",
+                    status="pending",
+                ),
+                AIJob(
+                    id=job_id,
+                    kind="match_score",
+                    dedupe_key=f"lease-race:{suffix}",
+                    status="processing",
+                    actor_id=candidate_id,
+                    resource_id=offer_id,
+                    payload=json.dumps({"offer_id": str(offer_id)}),
+                    source_fingerprint=content_fingerprint({"version": 1}),
+                    attempts=1,
+                    max_attempts=3,
+                    available_at=datetime.utcnow(),
+                    lease_until=datetime.utcnow() + timedelta(minutes=5),
+                    lease_owner="worker-one",
+                ),
+            ]
+        )
+        await seed_db.commit()
+
+    try:
+        async with postgres_sessions() as losing_worker:
+            recommendation = (
+                await losing_worker.execute(
+                    select(SavedRecommendation).where(
+                        SavedRecommendation.id == recommendation_id
+                    )
+                )
+            ).scalar_one()
+            recommendation.ai_score = 99
+            recommendation.ai_reasoning = "This stale result must never commit."
+            recommendation.status = "completed"
+            await losing_worker.flush()
+
+            # A second connection simulates lease expiry and reassignment while
+            # worker-one still holds uncommitted domain output.
+            async with postgres_sessions() as new_owner:
+                await new_owner.execute(
+                    update(AIJob)
+                    .where(AIJob.id == job_id)
+                    .values(
+                        lease_owner="worker-two",
+                        lease_until=datetime.utcnow() + timedelta(minutes=5),
+                    )
+                )
+                await new_owner.commit()
+
+            with pytest.raises(AIJobLeaseLostError):
+                await complete_ai_job(
+                    losing_worker,
+                    job_id,
+                    worker_id="worker-one",
+                    result={"score": 99},
+                )
+
+        async with postgres_sessions() as verify_db:
+            stored_recommendation = (
+                await verify_db.execute(
+                    select(SavedRecommendation).where(
+                        SavedRecommendation.id == recommendation_id
+                    )
+                )
+            ).scalar_one()
+            stored_job = (
+                await verify_db.execute(select(AIJob).where(AIJob.id == job_id))
+            ).scalar_one()
+            assert stored_recommendation.ai_score == 0
+            assert stored_recommendation.ai_reasoning == "Pending"
+            assert stored_recommendation.status == "pending"
+            assert stored_job.status == "processing"
+            assert stored_job.lease_owner == "worker-two"
+            assert stored_job.result is None
+
+        # The current lease owner can still atomically commit both the domain
+        # output and the durable job result after the stale writer is fenced.
+        async with postgres_sessions() as winning_worker:
+            recommendation = (
+                await winning_worker.execute(
+                    select(SavedRecommendation).where(
+                        SavedRecommendation.id == recommendation_id
+                    )
+                )
+            ).scalar_one()
+            recommendation.ai_score = 84
+            recommendation.ai_reasoning = "Current owner result."
+            recommendation.status = "completed"
+            await complete_ai_job(
+                winning_worker,
+                job_id,
+                worker_id="worker-two",
+                result={"score": 84},
+            )
+
+        async with postgres_sessions() as verify_db:
+            stored_recommendation = (
+                await verify_db.execute(
+                    select(SavedRecommendation).where(
+                        SavedRecommendation.id == recommendation_id
+                    )
+                )
+            ).scalar_one()
+            stored_job = (
+                await verify_db.execute(select(AIJob).where(AIJob.id == job_id))
+            ).scalar_one()
+            assert stored_recommendation.ai_score == 84
+            assert stored_recommendation.ai_reasoning == "Current owner result."
+            assert stored_recommendation.status == "completed"
+            assert stored_job.status == "completed"
+            assert stored_job.lease_owner is None
+            assert json.loads(stored_job.result or "{}") == {"score": 84}
+    finally:
+        async with postgres_sessions() as cleanup_db:
+            await cleanup_db.execute(delete(AIJob).where(AIJob.id == job_id))
+            await cleanup_db.execute(
+                delete(SavedRecommendation).where(
+                    SavedRecommendation.id == recommendation_id
+                )
+            )
+            await cleanup_db.execute(delete(Offer).where(Offer.id == offer_id))
+            await cleanup_db.execute(
+                delete(User).where(User.id.in_([candidate_id, recruiter_id]))
+            )
+            await cleanup_db.commit()
 
 
 def test_ai_contracts_bound_scores_references_and_untrusted_data():
