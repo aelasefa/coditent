@@ -254,6 +254,20 @@ def test_ansible_declares_collection_and_syntax_check() -> None:
         assert f"playbooks/{playbook}" in deploy_helper
 
 
+def test_git_sync_repairs_deployment_tree_ownership() -> None:
+    sync_tasks = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "sync_code.yml"
+    ).read_text()
+
+    ownership_task = sync_tasks.split(
+        "- name: Restore deployment tree ownership before Git synchronization", 1
+    )[1].split("- name: Check whether", 1)[0]
+    assert 'path: "{{ app_dir }}"' in ownership_task
+    assert 'owner: "{{ app_user }}"' in ownership_task
+    assert 'group: "{{ app_group }}"' in ownership_task
+    assert "recurse: true" in ownership_task
+
+
 def test_application_images_run_as_unprivileged_users() -> None:
     api_dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text()
     web_dockerfile = (REPO_ROOT / "apps" / "web" / "Dockerfile").read_text()

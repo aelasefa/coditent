@@ -1,4 +1,12 @@
 ---
+- name: Restore deployment tree ownership before Git synchronization
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    recurse: true
+
 - name: Check whether the application directory is already a Git repository
   ansible.builtin.stat:
     path: "{{ app_dir }}/.git"
