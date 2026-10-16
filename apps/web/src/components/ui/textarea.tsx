@@ -39,6 +39,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       <textarea
         ref={ref}
         id={inputId}
+        value={value}
+        defaultValue={defaultValue}
         required={required}
         maxLength={maxLength}
         aria-invalid={Boolean(error) || undefined}

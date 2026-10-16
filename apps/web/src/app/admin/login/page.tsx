@@ -4,9 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import axios from "axios";
 
-import { MdButton } from "@/components/ui/md-button";
-import { MdCard } from "@/components/ui/md-card";
-import { MdField, MdInput } from "@/components/ui/md-field";
+import { AuthLayout } from "@/components/auth/auth-layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { adminLogin, verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
 
@@ -71,26 +71,17 @@ function AdminLoginPageInner() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-md-background px-4 py-8 sm:px-6 lg:px-10">
-      <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
-        <MdCard className="w-full rounded-md-2xl border-md-outline/20 bg-md-surface p-6 sm:p-8">
-          <div className="mb-6">
-            <p className="text-xs uppercase tracking-[0.12em] text-md-onSurfaceVariant">Admin Portal</p>
-            <h1 className="mt-2 text-3xl font-medium">Admin login</h1>
-            <p className="mt-1 text-sm text-md-onSurfaceVariant">Use super admin credentials to continue.</p>
-          </div>
-
+    <AuthLayout title="Admin login" subtitle="Use your platform administrator credentials to continue.">
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.18em] text-primary">Admin portal</p>
           {mfaToken ? <form className="space-y-5" onSubmit={handleMfaSubmit}>
-            <p className="text-sm text-md-onSurfaceVariant">Enter your authenticator code or an unused recovery code.</p>
-            <MdField htmlFor="admin-mfa-code" label="Authenticator or recovery code">
-              <MdInput autoFocus autoComplete="one-time-code" disabled={isSubmitting} id="admin-mfa-code" maxLength={20} value={mfaCode} onChange={(event) => { setMfaCode(event.target.value); setErrorMessage(null); }} />
-            </MdField>
-            <MdButton className="w-full" disabled={isSubmitting} type="submit" variant="filled">{isSubmitting ? "Verifying..." : "Verify and continue"}</MdButton>
-            <MdButton className="w-full" disabled={isSubmitting} type="button" variant="ghost" onClick={() => { setMfaToken(null); setMfaCode(""); setErrorMessage(null); }}>Back to sign in</MdButton>
-            {errorMessage ? <p className="text-sm text-[#EF4444]" role="alert">{errorMessage}</p> : null}
+            <p className="text-sm text-muted-foreground">Enter your authenticator code or an unused recovery code.</p>
+            <Input label="Authenticator or recovery code" autoFocus autoComplete="one-time-code" disabled={isSubmitting} id="admin-mfa-code" maxLength={20} value={mfaCode} onChange={(event) => { setMfaCode(event.target.value); setErrorMessage(null); }} />
+            <Button className="w-full" loading={isSubmitting} type="submit">Verify and continue</Button>
+            <Button className="w-full" disabled={isSubmitting} type="button" variant="ghost" onClick={() => { setMfaToken(null); setMfaCode(""); setErrorMessage(null); }}>Back to sign in</Button>
+            {errorMessage ? <p className="text-sm text-danger" role="alert">{errorMessage}</p> : null}
           </form> : <form className="space-y-5" onSubmit={handleSubmit}>
-            <MdField htmlFor="email" label="Admin email">
-              <MdInput
+              <Input
+                label="Admin email"
                 autoComplete="email"
                 disabled={isSubmitting}
                 id="email"
@@ -101,10 +92,8 @@ function AdminLoginPageInner() {
                   setErrorMessage(null);
                 }}
               />
-            </MdField>
-
-            <MdField htmlFor="password" label="Password">
-              <MdInput
+              <Input
+                label="Password"
                 autoComplete="current-password"
                 disabled={isSubmitting}
                 id="password"
@@ -115,21 +104,15 @@ function AdminLoginPageInner() {
                   setErrorMessage(null);
                 }}
               />
-            </MdField>
-
-            <MdButton className="w-full" disabled={isSubmitting} type="submit" variant="filled">
-              {isSubmitting ? "Signing in..." : "Sign in as Admin"}
-            </MdButton>
+            <Button className="w-full" loading={isSubmitting} type="submit">Sign in as admin</Button>
 
             {errorMessage ? (
-              <p className="text-sm text-[#EF4444]" role="alert">
+              <p className="text-sm text-danger" role="alert">
                 {errorMessage}
               </p>
             ) : null}
           </form>}
-        </MdCard>
-      </div>
-    </main>
+    </AuthLayout>
   );
 }
 

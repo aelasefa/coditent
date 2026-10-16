@@ -14,17 +14,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.config import settings
-from app.database import Base
+from app.database import Base, _normalize_database_url
 import app.models  # noqa: F401
-
-
-def _normalize_alembic_url(url: str) -> str:
-    # Alembic handles asyncpg via async_engine_from_config; normalize same as database.py
-    if url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    elif url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-    return url
 
 
 config = context.config
@@ -32,7 +23,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", _normalize_alembic_url(settings.database_url).replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", _normalize_database_url(settings.database_url).replace("%", "%%"))
 
 target_metadata = Base.metadata
 
@@ -62,6 +53,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"statement_cache_size": 0, "prepared_statement_cache_size": 0},
     )
 
     async with connectable.connect() as connection:

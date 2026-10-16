@@ -3,10 +3,9 @@
 Run: python -m pytest tests/test_recruiter_candidate_data.py -v
 (from apps/api, with pytest, pytest-asyncio, sqlalchemy, aiosqlite installed)
 
-Regression cover for: recruiter sees the candidate's EXISTING profile skills
-and CV through Application -> User -> CandidateProfile (single source of
-truth), CV snapshot-vs-profile fallback, no raw storage URLs exposed, and
-company/candidate isolation of the payload builders.
+Regression cover for: recruiter sees the candidate's existing profile skills,
+applications use immutable owner-bound CV snapshots, no raw storage URLs are
+exposed, and company/candidate isolation holds in payload builders.
 """
 import sys
 import types
@@ -80,9 +79,11 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.models import (  # noqa: E402
     Application,
+    CVAsset,
     CandidateProfile,
     Offer,
     OfferType,
@@ -98,7 +99,10 @@ from app.routers.applications import (  # noqa: E402
 
 @pytest_asyncio.fixture()
 async def db() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+    )
     async with engine.begin() as conn:
         await conn.run_sync(_Base.metadata.create_all)
     maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
@@ -114,7 +118,7 @@ APP_CV = "cand-1/bbb_snapshot.pdf"
 
 async def _setup(
     db: AsyncSession, *, app_cv: str | None = APP_CV, profile_cv: str | None = PROFILE_CV
-) -> tuple[User, Offer, Application, CandidateProfile]:
+) -> tuple[User, Offer, Application, CandidateProfile, CVAsset | None]:
     user = User(
         email="cand@test.local",
         password_hash="x",
@@ -124,7 +128,24 @@ async def _setup(
     )
     db.add(user)
     await db.flush()
-    profile = CandidateProfile(user_id=user.id, skills=SKILLS, cv_url=profile_cv)
+    profile_asset: CVAsset | None = None
+    if profile_cv:
+        profile_asset = CVAsset(
+            owner_id=user.id,
+            version=1,
+            storage_path=f"{user.id}/{profile_cv.rsplit('/', 1)[-1]}",
+            original_filename=profile_cv.rsplit("/", 1)[-1],
+            content_type="application/pdf",
+            size_bytes=100,
+        )
+        db.add(profile_asset)
+        await db.flush()
+    profile = CandidateProfile(
+        user_id=user.id,
+        skills=SKILLS,
+        current_cv_asset_id=profile_asset.id if profile_asset else None,
+        cv_url=profile_asset.storage_path if profile_asset else None,
+    )
     db.add(profile)
     offer = Offer(
         recruiter_id=user.id,
@@ -139,35 +160,67 @@ async def _setup(
     )
     db.add(offer)
     await db.flush()
+    app_asset = profile_asset
+    if app_cv and (profile_asset is None or app_cv.rsplit("/", 1)[-1] != profile_asset.original_filename):
+        app_asset = CVAsset(
+            owner_id=user.id,
+            version=2 if profile_asset else 1,
+            storage_path=f"{user.id}/{app_cv.rsplit('/', 1)[-1]}",
+            original_filename=app_cv.rsplit("/", 1)[-1],
+            content_type="application/pdf",
+            size_bytes=100,
+        )
+        db.add(app_asset)
+        await db.flush()
     app = Application(
-        candidate_id=user.id, opportunity_id=offer.id, status="applied", cv_url=app_cv
+        candidate_id=user.id,
+        opportunity_id=offer.id,
+        status="applied",
+        cv_asset_id=app_asset.id if app_asset else None,
+        cv_url=app_asset.storage_path if app_asset else None,
     )
     db.add(app)
     await db.commit()
-    return user, offer, app, profile
+    return user, offer, app, profile, app_asset
 
 
-def test_effective_cv_prefers_application_snapshot() -> None:
-    app = Application(cv_url=APP_CV)
-    profile = CandidateProfile(cv_url=PROFILE_CV)
-    assert _effective_cv_path(app, profile) == APP_CV
+def test_effective_cv_uses_owner_bound_application_snapshot() -> None:
+    owner_id = uuid.uuid4()
+    asset = CVAsset(
+        id=uuid.uuid4(),
+        owner_id=owner_id,
+        version=1,
+        storage_path=f"{owner_id}/snapshot.pdf",
+        original_filename="snapshot.pdf",
+        content_type="application/pdf",
+    )
+    app = Application(candidate_id=owner_id, cv_asset_id=asset.id, cv_url="foreign/key.pdf")
+    assert _effective_cv_path(app, asset) == asset.storage_path
 
 
-def test_effective_cv_falls_back_to_profile() -> None:
-    app = Application(cv_url=None)
-    profile = CandidateProfile(cv_url=PROFILE_CV)
-    assert _effective_cv_path(app, profile) == PROFILE_CV
+def test_effective_cv_rejects_foreign_or_unbound_asset() -> None:
+    owner_id = uuid.uuid4()
+    foreign_owner = uuid.uuid4()
+    asset = CVAsset(
+        id=uuid.uuid4(),
+        owner_id=foreign_owner,
+        version=1,
+        storage_path=f"{foreign_owner}/foreign.pdf",
+        original_filename="foreign.pdf",
+        content_type="application/pdf",
+    )
+    app = Application(candidate_id=owner_id, cv_asset_id=asset.id, cv_url=asset.storage_path)
+    assert _effective_cv_path(app, asset) is None
 
 
 def test_effective_cv_none_when_no_cv_anywhere() -> None:
-    assert _effective_cv_path(Application(cv_url=None), CandidateProfile(cv_url=None)) is None
-    assert _effective_cv_path(Application(cv_url=None), None) is None
+    assert _effective_cv_path(Application(cv_url="foreign/key.pdf"), None) is None
 
 
 @pytest.mark.asyncio
 async def test_recruiter_payload_carries_existing_skills(db: AsyncSession) -> None:
-    user, _offer, app, profile = await _setup(db)
-    payload = _serialize_application(app, user, profile)
+    user, _offer, app, profile, asset = await _setup(db)
+    payload = _serialize_application(app, user, profile, asset)
     # Same single source of truth the candidate sees on their own profile.
     assert payload["candidate"]["skills"] == SKILLS
     assert payload["profile"]["skills"] == SKILLS
@@ -177,8 +230,8 @@ async def test_recruiter_payload_carries_existing_skills(db: AsyncSession) -> No
 
 @pytest.mark.asyncio
 async def test_recruiter_payload_exposes_cv_without_raw_url(db: AsyncSession) -> None:
-    user, _offer, app, profile = await _setup(db)
-    payload = _serialize_application(app, user, profile)
+    user, _offer, app, profile, asset = await _setup(db)
+    payload = _serialize_application(app, user, profile, asset)
     assert payload["cv"] == {
         "filename": "bbb_snapshot.pdf",
         "download_url": f"/applications/{app.id}/cv",
@@ -189,34 +242,34 @@ async def test_recruiter_payload_exposes_cv_without_raw_url(db: AsyncSession) ->
 
 
 @pytest.mark.asyncio
-async def test_recruiter_payload_falls_back_to_profile_cv(db: AsyncSession) -> None:
-    user, _offer, app, profile = await _setup(db, app_cv=None)
-    payload = _serialize_application(app, user, profile)
+async def test_application_freezes_current_profile_asset(db: AsyncSession) -> None:
+    user, _offer, app, profile, asset = await _setup(db, app_cv=None)
+    payload = _serialize_application(app, user, profile, asset)
     assert payload["cv"] is not None
     assert payload["cv"]["filename"] == "aaa_cv.pdf"
 
 
 @pytest.mark.asyncio
 async def test_recruiter_payload_no_cv_is_genuinely_empty(db: AsyncSession) -> None:
-    user, _offer, app, _profile = await _setup(db, app_cv=None, profile_cv=None)
+    user, _offer, app, _profile, asset = await _setup(db, app_cv=None, profile_cv=None)
     profiles = await _profiles_by_user_id(db, {user.id})
-    payload = _serialize_application(app, user, profiles.get(user.id))
+    payload = _serialize_application(app, user, profiles.get(user.id), asset)
     assert payload["cv"] is None
 
 
 @pytest.mark.asyncio
 async def test_empty_skills_are_genuinely_empty(db: AsyncSession) -> None:
-    user, _offer, app, profile = await _setup(db)
+    user, _offer, app, profile, asset = await _setup(db)
     profile.skills = None
     await db.commit()
-    payload = _serialize_application(app, user, profile)
+    payload = _serialize_application(app, user, profile, asset)
     assert payload["candidate"]["skills"] is None
     assert payload["profile"]["skills"] is None
 
 
 @pytest.mark.asyncio
 async def test_profiles_map_scoped_per_candidate(db: AsyncSession) -> None:
-    user, _offer, app, _profile = await _setup(db)
+    user, _offer, app, _profile, asset = await _setup(db)
     other = User(
         email="other@test.local",
         password_hash="x",
@@ -228,17 +281,17 @@ async def test_profiles_map_scoped_per_candidate(db: AsyncSession) -> None:
     await db.commit()
     profiles = await _profiles_by_user_id(db, {user.id, other.id, uuid.uuid4()})
     assert set(profiles) == {user.id}
-    payload = _serialize_application(app, user, profiles.get(user.id))
+    payload = _serialize_application(app, user, profiles.get(user.id), asset)
     assert payload["candidate"]["skills"] == SKILLS
 
 
 @pytest.mark.asyncio
 async def test_payload_survives_stage_changes(db: AsyncSession) -> None:
-    user, _offer, app, profile = await _setup(db)
+    user, _offer, app, profile, asset = await _setup(db)
     for stage in ("under_review", "shortlisted", "interview", "accepted"):
         app.status = stage
         await db.commit()
-        payload = _serialize_application(app, user, profile)
+        payload = _serialize_application(app, user, profile, asset)
         assert payload["candidate"]["skills"] == SKILLS
         assert payload["cv"] is not None
         assert payload["status"] == stage
@@ -246,8 +299,8 @@ async def test_payload_survives_stage_changes(db: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_missing_candidate_does_not_crash(db: AsyncSession) -> None:
-    _user, _offer, app, profile = await _setup(db)
-    payload = _serialize_application(app, None, profile)
+    _user, _offer, app, profile, asset = await _setup(db)
+    payload = _serialize_application(app, None, profile, asset)
     assert payload["candidate"] is None
     assert payload["profile"]["skills"] == SKILLS
 
@@ -255,7 +308,7 @@ async def test_missing_candidate_does_not_crash(db: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_company_isolation_at_query_level(db: AsyncSession) -> None:
     """Company B's offer-scoped query must never return Company A's rows."""
-    user, offer_a, app_a, profile = await _setup(db)
+    user, offer_a, app_a, profile, asset = await _setup(db)
     result = await db.execute(
         select(Application).where(
             Application.opportunity_id.in_(
@@ -268,5 +321,5 @@ async def test_company_isolation_at_query_level(db: AsyncSession) -> None:
         select(Application).where(Application.opportunity_id == offer_a.id)
     )
     assert [a.id for a in own.scalars().all()] == [app_a.id]
-    payload = _serialize_application(app_a, user, profile)
+    payload = _serialize_application(app_a, user, profile, asset)
     assert payload["candidate_id"] == str(user.id)

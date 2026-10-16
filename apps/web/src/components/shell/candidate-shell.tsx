@@ -3,16 +3,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { getMe } from "@/lib/api";
+import { endPresence, getMe, getPresenceConnectionId, logoutSession } from "@/lib/api";
 import { candidateOnboardingQuery } from "@/lib/candidate-onboarding";
+import { CandidatePresence } from "@/components/candidate/candidate-presence";
 import { PageContainer } from "./page-container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CandidateTopShell } from "./candidate-top-shell";
 
-function logout() {
+async function logout() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("coditent_token");
-    document.cookie = "coditent_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    await endPresence(getPresenceConnectionId()).catch(() => undefined);
+    await logoutSession().catch(() => undefined);
     window.location.href = "/login";
   }
 }
@@ -72,6 +73,7 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
       }}
       onLogout={logout}
     >
+      <CandidatePresence />
       {children}
     </CandidateTopShell>
     </div>

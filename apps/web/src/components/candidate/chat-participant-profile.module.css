@@ -1,0 +1,132 @@
+.content {
+  min-width: 0;
+  padding: 1.5rem 1.35rem 1.8rem;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 1.5rem;
+  text-align: center;
+}
+
+.avatar {
+  border: 1px solid var(--border);
+}
+
+.name {
+  margin: 0.95rem 0 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.55rem;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.role {
+  margin: 0.55rem 0 0;
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.companyName {
+  margin: 0.18rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.section {
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.section + .section {
+  margin-top: 1.25rem;
+}
+
+.sectionTitle {
+  margin: 0 0 0.85rem;
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.details {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.details + .details,
+.description + .details {
+  margin-top: 0.85rem;
+}
+
+.details dt {
+  margin-bottom: 0.18rem;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.details dd {
+  margin: 0;
+  color: var(--foreground-secondary);
+  font-size: 0.8rem;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
+.description,
+.notice {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.description {
+  color: var(--foreground-secondary);
+  white-space: pre-line;
+}
+
+.details + .notice {
+  margin-top: 1rem;
+}
+
+.link {
+  border-radius: 2px;
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 0.18rem;
+}
+
+.link:hover,
+.link:active {
+  color: var(--primary-hover);
+  text-decoration-color: currentColor;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.error {
+  display: grid;
+  justify-items: start;
+  gap: 0.8rem;
+}
+
+@media (max-width: 599px) {
+  .content { padding: 1.3rem 1.15rem 1.5rem; }
+}

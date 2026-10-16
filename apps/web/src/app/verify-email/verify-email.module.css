@@ -1,0 +1,150 @@
+.shell {
+  padding-block: 1rem 2rem;
+}
+
+.formInner {
+  width: min(100%, 520px);
+}
+
+.email {
+  color: #194d38;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.formArea {
+  max-width: 500px;
+}
+
+.expiryNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #cfdbcf;
+  border-radius: 8px;
+  background: rgb(237 241 233 / 88%);
+  color: #3e5147;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.noticeDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: #a25c38;
+  box-shadow: 0 0 0 4px rgb(162 92 56 / 12%);
+}
+
+.form {
+  margin-top: 1rem;
+}
+
+.codeInput {
+  height: 58px;
+  color: #194d38;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.codeInput::placeholder {
+  color: #9bb3a0;
+  letter-spacing: 0.28em;
+}
+
+.info {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #bfd4c3;
+  border-radius: 7px;
+  background: #f0f7ef;
+  color: #285d40;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  color: #617369;
+  font-size: 0.82rem;
+}
+
+.actions a,
+.textButton,
+.primaryLink {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #194d38;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.actions a:hover,
+.textButton:hover,
+.primaryLink:hover {
+  text-decoration-color: currentColor;
+}
+
+.textButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.deliveryHelp {
+  margin: 0.85rem auto 0;
+  max-width: 46ch;
+  color: #617369;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.missingEmail {
+  padding: 1rem;
+  border: 1px solid #cfdbcf;
+  border-radius: 9px;
+  background: rgb(255 254 250 / 88%);
+  color: #53665a;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.missingEmail p {
+  margin: 0 0 0.75rem;
+}
+
+@media (max-height: 780px) and (min-width: 761px) {
+  .codeInput { height: 48px; }
+  .expiryNotice { padding-block: 0.6rem; }
+  .actions { margin-top: 0.7rem; }
+  .deliveryHelp { margin-top: 0.55rem; }
+}
+
+@media (max-width: 760px) {
+  .shell { padding-block: 0.75rem 1.5rem; }
+  .codeInput { height: 56px; font-size: 1.3rem; }
+}
+
+@media (max-width: 380px) {
+  .codeInput { letter-spacing: 0.25em; }
+  .actions { align-items: center; flex-direction: column; }
+  .actions > span[aria-hidden="true"] { display: none; }
+}

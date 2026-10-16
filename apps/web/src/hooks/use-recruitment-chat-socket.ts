@@ -1,65 +1,54 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRecruitmentWsUrl } from "@/lib/api";
+import { createRecruitmentSocketTicket, getRecruitmentWsUrl } from "@/lib/api";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type { ChatMessage } from "@/lib/types";
 
-const TYPING_START_THROTTLE_MS = 1_500;
-const TYPING_STOP_DELAY_MS = 2_500;
-const PEER_TYPING_EXPIRY_MS = 3_000;
-
-type SocketFrame =
-  | { type: "message_send"; content: string }
-  | { type: "typing_start" }
-  | { type: "typing_stop" };
-
 type IncomingFrame = {
   type?: string;
+  detail?: string;
+  client_message_id?: string;
   message?: ChatMessage;
-  sender_id?: string;
+  message_ids?: string[];
+  read_at?: string;
 };
 
-type UseRecruitmentChatSocketOptions = {
-  applicationId: string;
-  currentUserId?: string;
-  onMessage: (message: ChatMessage) => void;
+type PendingSend = {
+  resolve: (message: ChatMessage) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 };
+
+const ACK_TIMEOUT_MS = 10_000;
+const MAX_RECONNECT_MS = 15_000;
 
 export function useRecruitmentChatSocket({
   applicationId,
-  currentUserId,
   onMessage,
-}: UseRecruitmentChatSocketOptions) {
+  onMessagesRead,
+  onReady,
+}: {
+  applicationId: string;
+  onMessage: (message: ChatMessage) => void;
+  onMessagesRead: (messageIds: string[], readAt: string) => void;
+  onReady?: () => void;
+}) {
   const [live, setLive] = useState(false);
-  const [peerIsTyping, setPeerIsTyping] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
-  const currentUserIdRef = useRef(currentUserId);
-  const onMessageRef = useRef(onMessage);
-  const typingActiveRef = useRef(false);
-  const lastTypingStartAtRef = useRef(0);
-  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const peerTypingExpiryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef(new Map<string, PendingSend>());
+  const handlers = useRef({ onMessage, onMessagesRead, onReady });
+  handlers.current = { onMessage, onMessagesRead, onReady };
 
-  onMessageRef.current = onMessage;
-  currentUserIdRef.current = currentUserId;
-
-  const clearTypingStopTimer = useCallback(() => {
-    if (typingStopTimerRef.current) {
-      clearTimeout(typingStopTimerRef.current);
-      typingStopTimerRef.current = null;
+  const rejectPending = useCallback((reason: string) => {
+    for (const pending of pendingRef.current.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(reason));
     }
+    pendingRef.current.clear();
   }, []);
 
-  const clearPeerTyping = useCallback(() => {
-    if (peerTypingExpiryRef.current) {
-      clearTimeout(peerTypingExpiryRef.current);
-      peerTypingExpiryRef.current = null;
-    }
-    setPeerIsTyping(false);
-  }, []);
-
-  const sendFrame = useCallback((frame: SocketFrame): boolean => {
+  const sendFrame = useCallback((frame: object): boolean => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return false;
     try {
@@ -70,111 +59,104 @@ export function useRecruitmentChatSocket({
     }
   }, []);
 
-  const stopTyping = useCallback(() => {
-    clearTypingStopTimer();
-    if (typingActiveRef.current) sendFrame({ type: "typing_stop" });
-    typingActiveRef.current = false;
-    lastTypingStartAtRef.current = 0;
-  }, [clearTypingStopTimer, sendFrame]);
+  const sendMessage = useCallback((content: string): Promise<ChatMessage> | null => {
+    const clientMessageId = crypto.randomUUID();
+    if (!sendFrame({ type: "message_send", content, client_message_id: clientMessageId })) return null;
+    return new Promise<ChatMessage>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingRef.current.delete(clientMessageId);
+        reject(new Error("Realtime message acknowledgement timed out"));
+      }, ACK_TIMEOUT_MS);
+      pendingRef.current.set(clientMessageId, { resolve, reject, timer });
+    });
+  }, [sendFrame]);
 
-  const notifyTyping = useCallback((value: string) => {
-    if (!value.trim()) {
-      stopTyping();
-      return;
-    }
-    const now = Date.now();
-    if (!typingActiveRef.current || now - lastTypingStartAtRef.current >= TYPING_START_THROTTLE_MS) {
-      if (sendFrame({ type: "typing_start" })) {
-        typingActiveRef.current = true;
-        lastTypingStartAtRef.current = now;
-      }
-    }
-
-    clearTypingStopTimer();
-    typingStopTimerRef.current = setTimeout(stopTyping, TYPING_STOP_DELAY_MS);
-  }, [clearTypingStopTimer, sendFrame, stopTyping]);
-
-  const sendMessage = useCallback((content: string): boolean => {
-    stopTyping();
-    return sendFrame({ type: "message_send", content });
-  }, [sendFrame, stopTyping]);
+  const markMessagesRead = useCallback(() => sendFrame({ type: "messages_read" }), [sendFrame]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !localStorage.getItem(AUTH_TOKEN_KEY)) return;
-    let closed = false;
+    if (!localStorage.getItem(AUTH_TOKEN_KEY)) return;
+    let disposed = false;
     let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempt = 0;
 
-    try {
-      socket = new WebSocket(getRecruitmentWsUrl(applicationId));
-    } catch {
-      return;
-    }
-    socketRef.current = socket;
-
-    socket.onopen = () => {
-      if (!closed) setLive(true);
+    const scheduleReconnect = () => {
+      if (disposed || retryTimer || !navigator.onLine) return;
+      const delay = Math.min(MAX_RECONNECT_MS, 500 * 2 ** reconnectAttempt) + Math.floor(Math.random() * 250);
+      reconnectAttempt += 1;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        void connect();
+      }, delay);
     };
-    socket.onmessage = (event) => {
+
+    async function connect() {
+      if (disposed || !navigator.onLine) return;
       try {
-        const payload = JSON.parse(event.data as string) as IncomingFrame;
-        if (payload.type === "message" && payload.message) {
-          if (payload.message.sender_id !== currentUserIdRef.current) clearPeerTyping();
-          onMessageRef.current(payload.message);
-          return;
-        }
-        if (!payload.sender_id || payload.sender_id === currentUserIdRef.current) return;
-        if (payload.type === "typing_start") {
-          if (peerTypingExpiryRef.current) clearTimeout(peerTypingExpiryRef.current);
-          setPeerIsTyping(true);
-          peerTypingExpiryRef.current = setTimeout(clearPeerTyping, PEER_TYPING_EXPIRY_MS);
-        } else if (payload.type === "typing_stop") {
-          clearPeerTyping();
-        }
+        const { ticket } = await createRecruitmentSocketTicket(applicationId);
+        if (disposed) return;
+        socket = new WebSocket(getRecruitmentWsUrl(applicationId, ticket));
+        socketRef.current = socket;
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data as string) as IncomingFrame;
+            if (payload.type === "ready") {
+              reconnectAttempt = 0;
+              setLive(true);
+              handlers.current.onReady?.();
+            } else if (payload.type === "ping") {
+              if (!sendFrame({ type: "pong" })) socket?.close();
+            } else if (payload.type === "message" && payload.message) {
+              handlers.current.onMessage(payload.message);
+            } else if (payload.type === "message_ack" && payload.message && payload.client_message_id) {
+              handlers.current.onMessage(payload.message);
+              const pending = pendingRef.current.get(payload.client_message_id);
+              if (pending) {
+                clearTimeout(pending.timer);
+                pendingRef.current.delete(payload.client_message_id);
+                pending.resolve(payload.message);
+              }
+            } else if (payload.type === "messages_read" && payload.message_ids?.length && payload.read_at) {
+              handlers.current.onMessagesRead(payload.message_ids, payload.read_at);
+            } else if (payload.type === "conversation_state") {
+              handlers.current.onReady?.();
+            } else if (payload.type === "error" && payload.client_message_id) {
+              const pending = pendingRef.current.get(payload.client_message_id);
+              if (pending) {
+                clearTimeout(pending.timer);
+                pendingRef.current.delete(payload.client_message_id);
+                pending.reject(new Error(payload.detail || "Realtime message was rejected"));
+              }
+            }
+          } catch {
+            // A malformed remote frame cannot alter local state.
+          }
+        };
+        socket.onclose = (event) => {
+          if (socketRef.current === socket) socketRef.current = null;
+          setLive(false);
+          rejectPending("Realtime connection closed before acknowledgement");
+          if (![4401, 4403, 4429].includes(event.code)) scheduleReconnect();
+        };
+        socket.onerror = () => socket?.close();
       } catch {
-        /* Ignore malformed frames and keep the conversation connected. */
-      }
-    };
-    socket.onclose = () => {
-      clearTypingStopTimer();
-      typingActiveRef.current = false;
-      lastTypingStartAtRef.current = 0;
-      if (!closed) {
-        clearPeerTyping();
         setLive(false);
-      } else if (peerTypingExpiryRef.current) {
-        clearTimeout(peerTypingExpiryRef.current);
-        peerTypingExpiryRef.current = null;
+        scheduleReconnect();
       }
-    };
-    socket.onerror = () => {
-      try {
-        socket?.close();
-      } catch {
-        /* noop */
-      }
-    };
+    }
 
-    const stopWhenHidden = () => {
-      if (document.hidden) stopTyping();
-    };
-    document.addEventListener("visibilitychange", stopWhenHidden);
-
+    const reconnectOnline = () => { reconnectAttempt = 0; void connect(); };
+    window.addEventListener("online", reconnectOnline);
+    void connect();
     return () => {
-      closed = true;
-      document.removeEventListener("visibilitychange", stopWhenHidden);
-      stopTyping();
-      if (peerTypingExpiryRef.current) {
-        clearTimeout(peerTypingExpiryRef.current);
-        peerTypingExpiryRef.current = null;
-      }
-      try {
-        socket?.close();
-      } catch {
-        /* noop */
-      }
+      disposed = true;
+      window.removeEventListener("online", reconnectOnline);
+      if (retryTimer) clearTimeout(retryTimer);
+      rejectPending("Conversation closed");
+      socket?.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [applicationId, clearPeerTyping, clearTypingStopTimer, stopTyping]);
+  }, [applicationId, rejectPending, sendFrame]);
 
-  return { live, peerIsTyping, notifyTyping, stopTyping, sendMessage };
+  return { live, markMessagesRead, sendMessage };
 }

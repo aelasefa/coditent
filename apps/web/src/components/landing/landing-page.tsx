@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
+import { TwinklingStars } from "@/components/ui/twinkling-stars";
 import { HeroDemo, ScrollTextReveals, StorySteps } from "./landing-interactions";
 import { SiteHeader } from "./site-header";
 import styles from "./landing-page.module.css";
@@ -15,7 +16,7 @@ const CAPABILITIES = [
 const COMPANY_STEPS = [
   ["Publish opportunities", "Describe the role, requirements and skills."],
   ["Find relevant candidates", "Review applicants with AI match context."],
-  ["Evaluate practical skills", "Use assessment results, not CV keywords alone."],
+  ["Review candidates clearly", "Use profile context and AI screening, not CV keywords alone."],
   ["Manage the pipeline", "Screen, shortlist, interview and hire in one flow."],
   ["Communicate and hire", "Message candidates at the right stage."],
 ];
@@ -132,7 +133,7 @@ export function LandingPage() {
                 Hire on demonstrated skill.
               </h2>
               <p className={styles.companyDescription} data-scroll-reveal data-reveal-delay="2">
-                Publish roles, review candidates with match context, run practical assessments, and move people
+                Publish roles, review candidates with match context, coordinate interviews, and move people
                 through a clear pipeline.
               </p>
               <Link href="/register" className={styles.lightButton} data-scroll-reveal data-reveal-delay="3">
@@ -140,11 +141,7 @@ export function LandingPage() {
               </Link>
             </div>
             <div className={styles.companyPanel}>
-              <div className={styles.companyStars} aria-hidden="true">
-                {Array.from({ length: 18 }, (_, index) => (
-                  <span key={index} className={styles.companyStar} />
-                ))}
-              </div>
+              <TwinklingStars className={styles.companyStars} />
               <ol className={styles.companySteps}>
                 {COMPANY_STEPS.map(([title, description], index) => (
                   <li key={title} data-scroll-reveal data-reveal-delay={(index % 3) + 1}>
@@ -198,6 +195,8 @@ export function LandingPage() {
             <Link href="/offers/all">Opportunities</Link>
             <Link href="/login">Log in</Link>
             <Link href="/register">Get started</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms of Service</Link>
           </nav>
         </div>
       </footer>

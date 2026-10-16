@@ -1,19 +1,28 @@
 services:
   api:
+    image: coditent-api:local
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: coditent-api
     restart: on-failure
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
-      - ./apps/api/.env
+      - ./.env
     environment:
       DATABASE_URL: ${DATABASE_URL}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
-      FRONTEND_URL: http://localhost:3001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      # Optional locally until an authenticator is enrolled. Production
+      # validation still requires a real Fernet key.
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+      EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
       REDIS_URL: redis://redis:6379/0
       ACCESS_TOKEN_COOKIE_SECURE: "${ACCESS_TOKEN_COOKIE_SECURE:-true}"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
@@ -21,45 +30,124 @@ services:
       GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: coditent-vault-token-secret
+      # Supabase session mode on the development plan allows only 15 clients.
+      # Keep API capacity bounded and leave room for workers and admin tools.
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "0"
+      DB_POOL_TIMEOUT_SECONDS: "15"
+      DB_POOL_RECYCLE_SECONDS: "300"
+      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
+      WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
+    volumes:
+      - ./apps/api:/app
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     command: >
       sh -c "alembic upgrade head &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8001"
+      uvicorn app.main:app --host 0.0.0.0 --port 8001 --no-access-log"
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\"",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=12)\"",
         ]
       interval: 10s
-      timeout: 5s
+      timeout: 15s
       retries: 10
+      start_period: 30s
 
   worker:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    container_name: coditent-worker
+    image: coditent-api:local
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - ./.env
     depends_on:
       api:
         condition: service_started
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+      EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
       REDIS_URL: redis://redis:6379/0
-    command: celery -A app.tasks worker --loglevel=info
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
+      DB_POOL_TIMEOUT_SECONDS: "15"
+      DB_POOL_RECYCLE_SECONDS: "300"
+      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
+      WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
+    command: celery -A app.tasks worker --loglevel=info --concurrency=2
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from app.health import worker_heartbeat_is_fresh_sync; raise SystemExit(0 if worker_heartbeat_is_fresh_sync() else 1)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  ai-dispatcher:
+    image: coditent-api:local
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - ./.env
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+      EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
+      REDIS_URL: redis://redis:6379/0
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
+      DB_POOL_TIMEOUT_SECONDS: "15"
+      DB_POOL_RECYCLE_SECONDS: "300"
+      READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
+      WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
+    command: python -m app.ai_dispatcher
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from app.health import dispatcher_heartbeat_is_fresh_sync; raise SystemExit(0 if dispatcher_heartbeat_is_fresh_sync() else 1)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
-    container_name: coditent-redis
     ports:
       - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 
   web:
@@ -67,45 +155,54 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_API_URL: /api-proxy
+        NEXT_PUBLIC_OAUTH_API_URL: ${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}
+        BACKEND_PROXY_URL: http://api:8001
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-    container_name: coditent-web
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8001
+      NEXT_PUBLIC_API_URL: /api-proxy
+      NEXT_PUBLIC_OAUTH_API_URL: ${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}
+      BACKEND_PROXY_URL: http://api:8001
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-    ports:
-      - "3001:3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   proxy:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    container_name: coditent-proxy
     restart: always
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "127.0.0.1:3001:80"
+      - "127.0.0.1:8443:443"
 
     depends_on:
       web:
-        condition: service_started
+        condition: service_healthy
       api:
-        condition: service_started
-
-  vault:
-    image: hashicorp/vault:1.15.0
-    container_name: coditent-vault
-    restart: always
-    ports:
-      - "8200:8200"
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: "coditent-vault-token-secret"
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-    cap_add:
-      - IPC_LOCK
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -T 12 -q -O /dev/null http://127.0.0.1/ready || exit 1"]
+      interval: 10s
+      timeout: 15s
+      retries: 10

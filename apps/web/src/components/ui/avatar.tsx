@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { cn } from "@/lib/cn";
+import { resolveApiAssetUrl } from "@/lib/api";
 
 interface AvatarProps {
   src?: string | null;
@@ -23,6 +24,7 @@ function initials(name: string): string {
 }
 
 export function Avatar({ src, name, size = "md", className }: AvatarProps) {
+  const resolvedSrc = resolveApiAssetUrl(src);
   // Single accessible name on the wrapper: avoids announcing or copying
   // the name twice next to an adjacent visible name label.
   return (
@@ -35,8 +37,8 @@ export function Avatar({ src, name, size = "md", className }: AvatarProps) {
         className
       )}
     >
-      {src ? (
-        <Image src={src} alt="" width={64} height={64} unoptimized className="h-full w-full object-cover" />
+      {resolvedSrc ? (
+        <Image src={resolvedSrc} alt="" width={64} height={64} unoptimized className="h-full w-full object-cover" />
       ) : (
         <span aria-hidden>{initials(name)}</span>
       )}

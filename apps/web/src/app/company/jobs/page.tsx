@@ -15,11 +15,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, getAssessments, setResponsibleHr, offerLogoSrc } from "@/lib/api";
+import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, setResponsibleHr, offerLogoSrc } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
-import { FiBriefcase, FiPlus, FiSearch } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiPlus, FiSearch, FiTrash2, FiUsers } from "react-icons/fi";
 
 function getErrorMessage(err: unknown): string {
   const d = (err as { response?: { data?: { detail?: unknown } }; message?: string })?.response?.data?.detail;
@@ -39,12 +39,20 @@ const EMPTY_FORM = {
   type: "JOB" as "JOB" | "INTERNSHIP",
   description: "",
   requirements: "",
+  salaryRange: "",
+  equity: "",
 };
+
+function compensationDetails(description: string): { salary?: string; equity?: string } {
+  const salary = description.match(/^Compensation:\s*(.+)$/m)?.[1];
+  const equity = description.match(/^Equity:\s*(.+)$/m)?.[1];
+  return { salary, equity };
+}
 
 export default function CompanyJobsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const { data: me, isLoading: meLoading } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   const canCreate = can(me ?? null, "create_offers");
   const canEdit = can(me ?? null, "edit_offers");
@@ -76,11 +84,6 @@ export default function CompanyJobsPage() {
     queryFn: async () => (await getApplications()).applications,
     enabled: !!me,
   });
-  const assQ = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => (await getAssessments()).assessments,
-    enabled: !!me,
-  });
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
@@ -93,7 +96,6 @@ export default function CompanyJobsPage() {
   const [responsibleHrId, setResponsibleHrId] = useState("");
 
   const apps = (appsQ.data ?? []) as unknown as Array<{ opportunity_id: string; status: string }>;
-  const assessments = (assQ.data ?? []) as Array<{ id: string }>;
   const appsByOffer = useMemo(() => {
     const m = new Map<string, number>();
     apps.forEach((a) => m.set(a.opportunity_id, (m.get(a.opportunity_id) ?? 0) + 1));
@@ -118,7 +120,8 @@ export default function CompanyJobsPage() {
       if (!form.region.trim() || !form.field.trim()) throw new Error("Region and field are required");
       if (!form.description.trim() || form.description.trim().length < 10) throw new Error("Description must be at least 10 characters");
       if (!form.requirements.trim() || form.requirements.trim().length < 10) throw new Error("Requirements must be at least 10 characters");
-      return createOffer(form);
+      const compensation = [form.salaryRange.trim() && `Compensation: ${form.salaryRange.trim()}`, form.equity.trim() && `Equity: ${form.equity.trim()}`].filter(Boolean).join("\n");
+      return createOffer({ ...form, description: `${form.description.trim()}${compensation ? `\n\n${compensation}` : ""}` });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-offers"] });
@@ -160,7 +163,7 @@ export default function CompanyJobsPage() {
   const openEdit = (o: Offer) => {
     setEditTarget(o);
     setResponsibleHrId(o.responsible_hr_id ?? "");
-    setEditForm({ title: o.title, company: o.company, region: o.region, field: o.field, type: o.type, description: o.description, requirements: o.requirements });
+    setEditForm({ title: o.title, company: o.company, region: o.region, field: o.field, type: o.type, description: o.description, requirements: o.requirements, salaryRange: "", equity: "" });
   };
 
   const filtered = useMemo(() => {
@@ -196,6 +199,13 @@ export default function CompanyJobsPage() {
           </Select>
         </div>
       </section>
+      <section aria-label="Compensation">
+        <h3 className="text-sm font-semibold text-foreground">Compensation <span className="font-normal text-muted-foreground">(optional)</span></h3>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <Input label="Salary range" value={value.salaryRange} onChange={(e) => set({ ...value, salaryRange: e.target.value })} placeholder="$200k – $350k / yr" />
+          <Input label="Equity" value={value.equity} onChange={(e) => set({ ...value, equity: e.target.value })} placeholder="Equity + Fund Economics" />
+        </div>
+      </section>
       <section aria-label="Description">
         <h3 className="text-sm font-semibold text-foreground">Description</h3>
         <div className="mt-2">
@@ -216,17 +226,16 @@ export default function CompanyJobsPage() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          title="Jobs"
-          subtitle={`${offers?.length ?? 0} roles · ${activeCount(offers)} active. Publish and manage openings.`}
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{offers?.length ?? 0} total</span>}
-          actions={
-            canCreate ? (
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <FiPlus aria-hidden className="h-3.5 w-3.5" /> Create job
-              </Button>
-            ) : null
-          }
+          tone="green"
+          center
+          eyebrow="Open roles"
+          title="Every role, in clear view."
+          subtitle={`${offers?.length ?? 0} roles in one workspace · ${activeCount(offers)} active and ready for candidates.`}
         />
+
+        <div className="company-results-toolbar -my-2">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{offers?.length ?? 0} total</span>
+        </div>
 
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -242,7 +251,7 @@ export default function CompanyJobsPage() {
               className="h-9 w-full rounded-lg border border-border bg-surface-secondary/60 pl-8 pr-3 text-[13px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="Status filter" className="h-9 rounded-lg border border-border bg-surface px-2.5 text-xs">
               <option value="all">All statuses</option>
               <option value="active">Active</option>
@@ -253,6 +262,22 @@ export default function CompanyJobsPage() {
               <option value="JOB">Job</option>
               <option value="INTERNSHIP">Internship</option>
             </select>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!canCreate && !meLoading) {
+                  toast("Permission required", { description: "Only owners, admins, HR, and recruiters can create jobs", variant: "error" });
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={meLoading}
+              title={!canCreate && !meLoading ? "Only owners, admins, HR, and recruiters can create jobs" : undefined}
+              className="h-9 shrink-0 gap-1.5 px-3.5 text-xs font-semibold"
+            >
+              <FiPlus className="h-3.5 w-3.5" aria-hidden />
+              <span>Create job</span>
+            </Button>
           </div>
         </div>
 
@@ -282,20 +307,27 @@ export default function CompanyJobsPage() {
                       <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                         {o.company} · {o.region} · {o.field} · {o.type === "JOB" ? "Job" : "Internship"}
                       </p>
+                      {(compensationDetails(o.description).salary || compensationDetails(o.description).equity) && (
+                        <p className="mt-1 text-xs font-medium text-primary">{[compensationDetails(o.description).salary, compensationDetails(o.description).equity].filter(Boolean).join(" · ")}</p>
+                      )}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {appsByOffer.get(o.id) ?? 0} applicants
-                        {assQ.data ? ` · ${assessments.length} assessments in workspace` : ""}
                       </p>
                     </div>
                   </div>
                   <StatusBadge status={o.active ? "active" : "paused"} size="sm" showDot={false} />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Link href={`/company/candidates?job=${o.id}`} className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-secondary">
-                    View candidates
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
+                  <Link
+                    href={`/company/candidates?job=${o.id}`}
+                    className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-primary-hover hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+                  >
+                    <FiUsers aria-hidden className="h-4 w-4" />
+                    <span>View candidates</span>
+                    <FiArrowRight aria-hidden className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" />
                   </Link>
                   {canEdit && (
-                    <button type="button" onClick={() => openEdit(o)} className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-secondary">
+                    <button type="button" onClick={() => openEdit(o)} className="inline-flex min-h-11 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2">
                       Edit
                     </button>
                   )}
@@ -305,13 +337,18 @@ export default function CompanyJobsPage() {
                       onClick={() => toggleMut.mutate(o.id)}
                       disabled={toggleMut.isPending}
                       aria-pressed={o.active}
-                      className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-secondary"
+                      className="inline-flex min-h-11 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {o.active ? "Pause" : "Activate"}
                     </button>
                   )}
                   {canDelete && (
-                    <button type="button" onClick={() => setDeleteTarget(o)} className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-danger hover:bg-danger-background">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(o)}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
+                    >
+                      <FiTrash2 aria-hidden className="h-4 w-4" />
                       Delete
                     </button>
                   )}
@@ -320,7 +357,7 @@ export default function CompanyJobsPage() {
                       value={o.id === editTarget?.id ? responsibleHrId : o.responsible_hr_id ?? ""}
                       onChange={(e) => hrMut.mutate({ offerId: o.id, hrId: e.target.value })}
                       aria-label={`Responsible recruiter for ${o.title}`}
-                      className="h-8 rounded-lg border border-border bg-surface px-2 text-xs"
+                      className="min-h-11 rounded-lg border border-border bg-surface px-3 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
                     >
                       <option value="">Unassigned HR</option>
                       {members.map((m: { id: string; full_name: string; email: string }) => (
@@ -360,8 +397,19 @@ export default function CompanyJobsPage() {
           isOpen={!!deleteTarget}
           onClose={() => setDeleteTarget(null)}
           title="Delete job"
-          message={`Delete ${deleteTarget?.title}? Candidates lose this listing. This cannot be undone.`}
-          confirmLabel="Delete"
+          message={
+            <div className="space-y-2.5">
+              <p>
+                Are you sure you want to delete <strong className="font-semibold text-foreground">“{deleteTarget?.title}”</strong>?
+              </p>
+              <div className="rounded-lg border border-danger/25 bg-danger-background/60 px-3 py-2 text-xs leading-relaxed text-foreground-secondary">
+                Candidates will lose this listing and active applications cannot be restored. This cannot be undone.
+              </div>
+            </div>
+          }
+          confirmLabel="Delete job"
+          isLoading={deleteMut.isPending}
+          isDestructive={true}
           onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
         />
       </div>

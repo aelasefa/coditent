@@ -1,10 +1,35 @@
 ---
-- name: Build and start application containers with Docker Compose
+# Keep builds serial on small EC2 instances and use Ansible's asynchronous
+# polling so a long, quiet BuildKit operation cannot cross an SSH idle timeout.
+- name: Build application images serially with Docker Compose
   ansible.builtin.command:
-    cmd: "docker compose up -d {% if compose_build | default(true) %}--build{% endif %} {% if compose_remove_orphans | default(true) %}--remove-orphans{% endif %}"
+    cmd: docker compose build
     chdir: "{{ app_dir }}"
+  environment:
+    COMPOSE_PARALLEL_LIMIT: "{{ compose_parallel_limit | default('1') }}"
+  async: 1800
+  poll: 15
+  register: compose_build_output
+  changed_when: compose_build_output.rc == 0
+  when: compose_build | default(true)
+
+- name: Start application containers without rebuilding
+  ansible.builtin.command:
+    cmd: "docker compose up -d --no-build {% if compose_remove_orphans | default(true) %}--remove-orphans{% endif %}"
+    chdir: "{{ app_dir }}"
+  environment:
+    COMPOSE_PARALLEL_LIMIT: "{{ compose_parallel_limit | default('1') }}"
+  async: 900
+  poll: 10
   register: compose_output
-  changed_when: "'Creating' in compose_output.stderr or 'Recreating' in compose_output.stderr or 'Building' in compose_output.stderr"
+  # Docker Compose v2 uses 'Started', 'Recreated', 'Created' instead of the
+  # old v1 strings 'Creating' / 'Recreating'. Match both stdout and stderr
+  # since compose v2 logs to stdout while some build output goes to stderr.
+  changed_when: >-
+    'Started'   in (compose_output.stderr + compose_output.stdout) or
+    'Recreated' in (compose_output.stderr + compose_output.stdout) or
+    'Created'   in (compose_output.stderr + compose_output.stdout) or
+    'Building'  in (compose_output.stderr + compose_output.stdout)
 
 - name: Retrieve container status
   ansible.builtin.command:

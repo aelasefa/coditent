@@ -13,7 +13,7 @@ const HERO_STATES = [
 const STORY_STEPS = [
   { title: "Build your profile", description: "Summarize experience, skills and goals in one place.", preview: "Your experience, in one place" },
   { title: "Discover relevant opportunities", description: "Get openings tailored to your field and preferences.", preview: "Opportunities worth exploring" },
-  { title: "Prove your skills", description: "Complete practical assessments tied to real hiring processes.", preview: "Your work can speak for itself" },
+  { title: "Show your strengths", description: "Build a complete profile that helps the right teams discover your fit.", preview: "Your experience can speak clearly" },
   { title: "Get evaluated", description: "Recruiters review demonstrated ability alongside your profile.", preview: "A fuller view of your ability" },
   { title: "Connect with recruiters", description: "Communication opens as your application advances.", preview: "A conversation at the right stage" },
 ];

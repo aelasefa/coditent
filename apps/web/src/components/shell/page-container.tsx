@@ -30,7 +30,7 @@ export function PageHeader({
   actions,
   breadcrumbs,
 }: {
-  title: string;
+  title: React.ReactNode;
   description?: string;
   actions?: React.ReactNode;
   breadcrumbs?: React.ReactNode;

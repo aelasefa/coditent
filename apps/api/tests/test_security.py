@@ -76,5 +76,5 @@ async def test_legacy_join_deprecated():
 @pytest.mark.asyncio
 async def test_mass_assignment_rejected():
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/auth/register", json={"email": f"bad-{uuid.uuid4().hex[:4]}@example.com", "password": "Pass12345!", "full_name": "Bad", "role": "COMPANY_USER"})
+        r = await c.post("/auth/register", json={"email": f"bad-{uuid.uuid4().hex[:4]}@example.com", "password": "StrongPass123!", "full_name": "Bad", "role": "COMPANY_USER"})
         assert r.status_code == 422

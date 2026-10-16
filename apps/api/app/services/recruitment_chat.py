@@ -22,14 +22,12 @@ from app.models import Application, Offer, User
 # post-review recruitment stage. Uses the existing Application.status values —
 # no duplicate status system.
 #   applied / under_review -> no recruitment chat
-#   shortlisted / assessment_* / interview / accepted -> chat enabled
+#   shortlisted / interview / accepted -> chat enabled
 #   rejected -> chat unavailable (final state; there is no "withdrawn" status
 #   in this codebase, rejected covers final-state lockout)
 CHAT_ENABLED_STATUSES = frozenset(
     {
         "shortlisted",
-        "assessment_required",
-        "assessment_completed",
         "interview",
         "accepted",
     }

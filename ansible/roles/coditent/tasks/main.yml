@@ -17,13 +17,19 @@
     - env
     - config
 
+- name: Configure automated encrypted backup delivery
+  ansible.builtin.include_tasks: backups.yml
+  tags:
+    - backup
+    - operations
+
 - name: Build and launch Docker Compose services
   ansible.builtin.include_tasks: compose_up.yml
   tags:
     - compose
     - deploy
 
-- name: Verify application health
+- name: Verify application readiness
   ansible.builtin.include_tasks: verify.yml
   tags:
     - verify

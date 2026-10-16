@@ -5,6 +5,19 @@
 
 env_name: production
 repo_branch: main
+nginx_tls_enabled: true
+nginx_waf_enabled: true
+compose_file_list: "docker-compose.yml:docker-compose.production.yml"
+
+# The EC2 host serves only the API. The public application is hosted by
+# Vercel, so keep the TLS hostname and browser-facing origin separate.
+server_name: "api.coditent.app"
+frontend_url: "https://coditent.app"
+cors_origins: "https://coditent.app,https://www.coditent.app"
+google_redirect_uri: "https://coditent.app/auth/sso/google/callback"
+linkedin_redirect_uri: "https://coditent.app/auth/sso/linkedin/callback"
+resend_from_email: "notifications@coditent.app"
+letsencrypt_email: "notifications@coditent.app"
 
 # In production, Supabase and AI keys can be provided via:
 # 1. ansible-vault (e.g. including vault.yml)
@@ -18,5 +31,9 @@ next_public_supabase_url: "{{ vault_next_public_supabase_url | default(lookup('e
 next_public_supabase_publishable_key: "{{ vault_next_public_supabase_publishable_key | default(lookup('env', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')) | default('') }}"
 
 jwt_secret: "{{ vault_jwt_secret | default(lookup('env', 'JWT_SECRET')) | default('') }}"
+totp_encryption_key: "{{ vault_totp_encryption_key | default(lookup('env', 'TOTP_ENCRYPTION_KEY')) | default('') }}"
+email_outbox_encryption_key: "{{ vault_email_outbox_encryption_key | default(lookup('env', 'EMAIL_OUTBOX_ENCRYPTION_KEY')) | default('') }}"
 gemini_api_key: "{{ vault_gemini_api_key | default(lookup('env', 'GEMINI_API_KEY')) | default('') }}"
 redis_url: "redis://redis:6380/0"
+backup_s3_uri: "{{ vault_backup_s3_uri | default(lookup('env', 'BACKUP_S3_URI')) | default('') }}"
+backup_aws_region: "{{ vault_backup_aws_region | default(lookup('env', 'BACKUP_AWS_REGION')) | default('') }}"

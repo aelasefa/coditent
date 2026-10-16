@@ -14,7 +14,6 @@ const PERMISSIONS: Record<string, Set<CompanyRole>> = {
   view_applications: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
   evaluate_candidates: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
   move_recruitment_stage: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
-  view_assessments: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
   company_analytics: new Set(["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"]),
   manage_subscription: new Set(["OWNER"]),
 };

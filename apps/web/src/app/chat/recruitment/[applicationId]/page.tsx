@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { use, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getApiBaseUrl,
   getMe,
   getRecruitmentChat,
+  getRecruitmentMessagesPage,
+  markRecruitmentMessagesRead,
   sendRecruitmentMessage,
 } from "@/lib/api";
 import type { ChatMessage, RecruitmentChatContext } from "@/lib/types";
@@ -16,11 +18,13 @@ import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-v
 import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
+import { recruitmentChatErrorMessage } from "@/lib/recruitment-chat-error";
 
-export default function RecruitmentChatPage({ params }: { params: { applicationId: string } }) {
+export default function RecruitmentChatPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { applicationId } = params;
+  const markingReadRef = useRef(false);
+  const { applicationId } = use(params);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   const handleRealtimeMessage = useCallback((message: ChatMessage) => {
@@ -29,35 +33,94 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
       return { ...previous, messages: [...previous.messages, message] };
     });
     qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
+    qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
   }, [applicationId, qc]);
 
-  const recruitmentSocket = useRecruitmentChatSocket({
+  const handleMessagesRead = useCallback((messageIds: string[], readAt: string) => {
+    const ids = new Set(messageIds);
+    qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+      ...previous,
+      messages: previous.messages.map((message) => ids.has(message.id) ? { ...message, read_at: readAt } : message),
+    } : previous);
+    void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
+  }, [applicationId, qc]);
+
+  const {
+    live: recruitmentLive,
+    markMessagesRead: markRealtimeMessagesRead,
+    sendMessage: sendRealtimeMessage,
+  } = useRecruitmentChatSocket({
     applicationId,
-    currentUserId: me?.id,
     onMessage: handleRealtimeMessage,
+    onMessagesRead: handleMessagesRead,
+    onReady: () => {
+      void qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
+    },
   });
 
   const chatQuery = useQuery({
     queryKey: ["recruitment-chat", applicationId],
     queryFn: () => getRecruitmentChat(applicationId),
-    refetchInterval: recruitmentSocket.live ? false : 3000,
+    refetchInterval: recruitmentLive ? false : 3000,
     retry: false,
   });
   const ctx = chatQuery.data;
+  const olderMessagesMut = useMutation({
+    mutationFn: () => getRecruitmentMessagesPage(applicationId, ctx?.next_cursor),
+    onSuccess: (page) => {
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => {
+        if (!previous) return previous;
+        const existing = new Set(previous.messages.map((message) => message.id));
+        return {
+          ...previous,
+          messages: [...page.messages.filter((message) => !existing.has(message.id)), ...previous.messages],
+          next_cursor: page.next_cursor,
+          has_more: page.has_more,
+        };
+      });
+    },
+    onError: () => toast("Could not load earlier messages", { description: "Retry.", variant: "error" }),
+  });
   const backHref = me?.role === "CANDIDATE" ? "/chat" : "/company/candidates";
 
+  const unreadIncomingKey = ctx?.messages
+    .filter((message) => message.receiver_id === me?.id && !message.read_at)
+    .map((message) => message.id)
+    .join(",") ?? "";
+
   useEffect(() => {
-    if (!ctx?.chat_enabled) recruitmentSocket.stopTyping();
-  }, [ctx?.chat_enabled, recruitmentSocket.stopTyping]);
+    const markVisibleMessagesRead = async () => {
+      if (!ctx?.chat_enabled || !unreadIncomingKey || document.visibilityState !== "visible" || !document.hasFocus() || markingReadRef.current) return;
+      markingReadRef.current = true;
+      try {
+        if (markRealtimeMessagesRead()) return;
+        const receipt = await markRecruitmentMessagesRead(applicationId);
+        if (receipt.read_at) handleMessagesRead(receipt.message_ids, receipt.read_at);
+      } finally {
+        markingReadRef.current = false;
+      }
+    };
+    void markVisibleMessagesRead();
+    const onVisibilityChange = () => void markVisibleMessagesRead();
+    window.addEventListener("focus", onVisibilityChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", onVisibilityChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [applicationId, ctx?.chat_enabled, handleMessagesRead, markRealtimeMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
     mutationFn: async (text: string) => {
-      if (ctx?.chat_enabled && recruitmentSocket.sendMessage(text)) return null;
+      const realtime = ctx?.chat_enabled ? sendRealtimeMessage(text) : null;
+      if (realtime) return realtime;
       return sendRecruitmentMessage(applicationId, text);
     },
     onSuccess: (created) => {
-      if (created) qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      handleRealtimeMessage(created);
       qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
+      qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
     onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
   });
@@ -70,13 +133,26 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
       : null;
 
   return (
-    <ChatWorkspace activeHref={`/chat/recruitment/${applicationId}`}>
+    <ChatWorkspace
+      activeHref={`/chat/recruitment/${applicationId}`}
+      profile={ctx?.peer ? {
+        id: ctx.peer.id,
+        name: ctx.peer.full_name,
+        avatarUrl: ctx.peer.avatar_url,
+        role: ctx.peer.role,
+        companyRole: ctx.peer.company_role,
+        companyId: ctx.peer.role === "CANDIDATE" ? null : ctx.company_id,
+        companyName: ctx.peer.role === "CANDIDATE" ? null : ctx.company_name,
+        opportunityTitle: ctx.offer_title,
+        applicationStatus: ctx.status,
+      } : null}
+    >
         <ChatHeader
           title={ctx?.peer?.full_name ?? peerRole}
           subtitle={ctx?.offer_title}
           context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
           avatarSrc={ctx?.peer?.avatar_url ?? companyLogo}
-          status={ctx ? `${recruitmentSocket.live ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
+          status={ctx ? `${peerRole} · ${recruitmentLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />
 
@@ -91,9 +167,7 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
         {chatQuery.isError && (
           <div role="alert" className={styles.threadNotice}>
             <strong>Conversation unavailable</strong>
-            <p>
-              Access denied. Only candidate and responsible hiring team for this application can participate.
-            </p>
+            <p>{recruitmentChatErrorMessage(chatQuery.error)}</p>
             <button type="button" onClick={() => chatQuery.refetch()}>
               Retry
             </button>
@@ -111,18 +185,26 @@ export default function RecruitmentChatPage({ params }: { params: { applicationI
 
         {ctx && ctx.chat_enabled && (
           <>
+            {ctx.has_more ? (
+              <div className="border-b border-border-subtle px-4 py-2 text-center">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-primary underline disabled:opacity-60"
+                  disabled={olderMessagesMut.isPending}
+                  onClick={() => olderMessagesMut.mutate()}
+                >
+                  {olderMessagesMut.isPending ? "Loading…" : "Load earlier messages"}
+                </button>
+              </div>
+            ) : null}
             <MessageList
               messages={ctx.messages}
               myId={me?.id}
-              peerName={peerName}
-              peerIsTyping={recruitmentSocket.peerIsTyping}
             />
             <Composer
               peerName={peerName}
               pending={sendMut.isPending}
-              onSend={(text) => sendMut.mutate(text)}
-              onTyping={recruitmentSocket.notifyTyping}
-              onTypingStop={recruitmentSocket.stopTyping}
+              onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)}
             />
           </>
         )}

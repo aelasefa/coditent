@@ -1,7 +1,9 @@
 """Comprehensive invitation flow tests — production-ready
 Run: DATABASE_URL=... JWT_SECRET=... GEMINI_API_KEY=... python -m pytest apps/api/tests/test_employee_invitations.py -v
 """
+import base64
 import hashlib
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -13,8 +15,57 @@ from sqlalchemy import select, text
 
 from app.database import AsyncSessionLocal, engine
 from app.models import User
+from app.routers import invitations
 
-BASE = "http://localhost:8001"
+BASE = os.getenv("API_TEST_BASE_URL", "http://localhost:8001")
+
+
+def test_employee_invite_email_uses_new_theme_and_escapes_dynamic_values():
+    subject, html = invitations._build_employee_invite_email(
+        "Atlas <script>alert(1)</script>",
+        "HIRING_MANAGER",
+        "safe-token",
+        datetime(2026, 10, 3, 14, 30),
+    )
+
+    assert "You're invited to join Atlas" in subject
+    assert 'src="cid:coditent-employee-invite-art"' in html
+    assert "#194d38" in html
+    assert "Your next chapter starts with the team." in html
+    assert "Your invited role is assigned automatically" in html
+    assert "HIRING_MANAGER" in html
+    assert "Oct 03, 2026 14:30 UTC" in html
+    assert "Atlas &lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "Atlas <script>" not in html
+    assert "/invite/employee?token=safe-token" in html
+
+
+def test_employee_invite_art_is_embedded_as_cid_attachment():
+    attachment = invitations.employee_invite_art_attachment()
+
+    assert attachment["content_id"] == "coditent-employee-invite-art"
+    assert attachment["content_type"] == "image/jpeg"
+    assert attachment["filename"] == "coditent-team-invitation.jpg"
+    decoded = base64.b64decode(attachment["content"])
+    assert decoded.startswith(b"\xff\xd8\xff")
+    assert len(decoded) < 150_000
+
+
+def test_employee_invite_sender_includes_inline_art():
+    with patch("app.services.email.send_email") as send_email:
+        invitations._send_employee_invite_email_safe(
+            "new.hr@example.com",
+            "Atlas Labs",
+            "HR",
+            "safe-token",
+            datetime(2026, 10, 3, 14, 30),
+        )
+
+    send_email.assert_called_once()
+    args, kwargs = send_email.call_args
+    assert args[0] == "new.hr@example.com"
+    assert kwargs["attachments"][0]["content_id"] == "coditent-employee-invite-art"
+
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
@@ -48,7 +99,7 @@ async def test_unauthorized_user_cannot_invite():
     # Create a fresh candidate via API to avoid DB conversion issues
     email = f"tmp-cand-{uuid.uuid4().hex[:6]}@example.com"
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/auth/register", json={"email": email, "password": "Pass12345!", "full_name": "Tmp Cand", "role": "CANDIDATE"})
+        r = await c.post("/auth/register", json={"email": email, "password": "StrongPass123!", "full_name": "Tmp Cand", "role": "CANDIDATE"})
         assert r.status_code == 200, r.text
         tok = r.json()["token"]
         # Try to invite as candidate
@@ -111,12 +162,12 @@ async def test_token_security_invalid_expired_revoked_reuse():
                          {"id": inv_rev_id, "cid": str(owner.company_id), "email": "revoked@example.com", "role": "HR", "hash": h_rev, "by": str(owner.id), "exp": exp_fut})
         await db.commit()
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/invites/employee/accept", json={"token": "totally-invalid-token-xyz", "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": "totally-invalid-token-xyz", "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
-        r = await c.post("/invites/employee/accept", json={"token": token_exp, "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": token_exp, "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
         assert "expired" in r.text.lower()
-        r = await c.post("/invites/employee/accept", json={"token": token_rev, "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": token_rev, "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
     # cleanup
     async with AsyncSessionLocal() as db:
@@ -146,7 +197,7 @@ async def test_new_user_account_creation_and_role_protection():
         owner = (await db.execute(select(User).where(User.email == "owner@coditent.com"))).scalar_one()
         assert str(user.company_id) == str(owner.company_id)
         assert user.password_hash != "SecurePass123!"
-        assert user.password_hash.startswith("$2b$")
+        assert user.password_hash.startswith("$argon2id$")
         await db.execute(text("DELETE FROM users WHERE email=:e"), {"e": email})
         await db.execute(text("DELETE FROM employee_invitations WHERE token_hash=:h"), {"h": h})
         await db.commit()
@@ -246,7 +297,7 @@ async def test_resend_invalidates_old():
     async with httpx.AsyncClient(base_url=BASE) as c:
         r = await c.post("/invites/employee/resend", json={"invitation_id": inv_id}, headers={"Authorization": f"Bearer {tok}"})
         assert r.status_code == 200
-        r = await c.post("/invites/employee/accept", json={"token": token_old, "password": "Pass12345!", "full_name": "Test"})
+        r = await c.post("/invites/employee/accept", json={"token": token_old, "password": "StrongPass123!", "full_name": "Test"})
         assert r.status_code == 400
     async with AsyncSessionLocal() as db:
         row = await db.execute(text("SELECT status FROM employee_invitations WHERE id=:id"), {"id": inv_id})

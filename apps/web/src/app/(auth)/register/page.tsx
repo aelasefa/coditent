@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import { Suspense, useState } from "react";
@@ -13,30 +12,34 @@ import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { register } from "@/lib/api";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRequirements } from "@/lib/password-policy";
 import authStyles from "../login/login-page.module.css";
 import styles from "./register-page.module.css";
 
 const registerSchema = z.object({
   email: z.string().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(128, "Password must not exceed 128 characters"),
+  password: z.string()
+    .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+    .max(PASSWORD_MAX_LENGTH, `Password must not exceed ${PASSWORD_MAX_LENGTH} characters`)
+    .regex(/[a-z]/, "Password must include a lowercase letter")
+    .regex(/[A-Z]/, "Password must include an uppercase letter")
+    .regex(/[0-9]/, "Password must include a number")
+    .regex(/[^A-Za-z0-9\s]/, "Password must include a symbol"),
   full_name: z.string().min(2, "Name is required").max(100, "Name must not exceed 100 characters"),
-  role: z.enum(["candidate", "recruiter"]),
 });
-
 
 type RegisterValues = z.infer<typeof registerSchema>;
 
 function RegisterInner() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const initialRole = searchParams.get("role") === "recruiter" ? "recruiter" : "candidate";
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: "", password: "", full_name: "", role: initialRole },
+    defaultValues: { email: "", password: "", full_name: "" },
   });
 
   const registerMutation = useMutation({
@@ -44,7 +47,10 @@ function RegisterInner() {
     onSuccess: (data) => {
       // No account or token exists yet: verify the emailed code first.
       setErrorMessage(null);
-      router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+      router.push(
+        `/verify-email?email=${encodeURIComponent(data.email)}` +
+        `&registration_id=${encodeURIComponent(data.registration_id)}`
+      );
     },
     onError: (error) => {
       if (axios.isAxiosError(error)) {
@@ -61,8 +67,7 @@ function RegisterInner() {
   });
 
   const isSubmitting = registerMutation.isPending;
-  const selectedRole = form.watch("role");
-
+  const password = form.watch("password");
   return (
     <main className={`${authStyles.page} ${styles.page}`}>
       <video
@@ -76,7 +81,7 @@ function RegisterInner() {
         tabIndex={-1}
       >
         <source
-          src="/images/auth/login-background-full-hd.mp4"
+          src="/images/auth/login-background-hd.mp4?v=2"
           type="video/mp4"
         />
       </video>
@@ -104,7 +109,7 @@ function RegisterInner() {
                 className={`${authStyles.form} ${styles.form}`}
                 onSubmit={form.handleSubmit((values) => {
                   setErrorMessage(null);
-                  registerMutation.mutate({ ...values, role: values.role === "candidate" ? "CANDIDATE" : "RECRUITER" });
+                  registerMutation.mutate(values);
                 })}
               >
                 <SocialLoginButtons className={authStyles.socialLogin} separator="or continue with email" />
@@ -139,10 +144,10 @@ function RegisterInner() {
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
-                    placeholder="At least 8 characters"
-                    helper="Use at least 8 characters."
+                    placeholder="Create a strong password"
                     disabled={isSubmitting}
                     error={form.formState.errors.password?.message}
+                    aria-describedby="password-requirements"
                     className={authStyles.input}
                     {...form.register("password")}
                   />
@@ -155,29 +160,22 @@ function RegisterInner() {
                   >
                     {showPassword ? "Hide password" : "Show password"}
                   </button>
+                  <ul id="password-requirements" className={styles.passwordRequirements} aria-label="Password requirements">
+                    {passwordRequirements.map((requirement) => {
+                      const isMet = requirement.test(password);
+                      return (
+                        <li key={requirement.label} className={isMet ? styles.requirementMet : styles.requirementPending}>
+                          <span aria-hidden="true">{isMet ? "✓" : "○"}</span>
+                          {requirement.label}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
 
-                <fieldset className={styles.roleFieldset} disabled={isSubmitting}>
-                  <legend>I am joining as</legend>
-                  <div className={styles.roleOptions}>
-                    <label className={selectedRole === "candidate" ? styles.roleOptionActive : styles.roleOption}>
-                      <input type="radio" value="candidate" {...form.register("role")} />
-                      <span className={styles.roleContent}>
-                        <strong>Candidate</strong>
-                        <small>Find opportunities and show your skills.</small>
-                      </span>
-                    </label>
-                    <label className={selectedRole === "recruiter" ? styles.roleOptionActive : styles.roleOption}>
-                      <input type="radio" value="recruiter" {...form.register("role")} />
-                      <span className={styles.roleContent}>
-                        <strong>Recruiter</strong>
-                        <small>Discover talent and manage hiring.</small>
-                      </span>
-                    </label>
-                  </div>
-                  <p className={styles.roleHelper}>Company team access is available by invitation.</p>
-                  {form.formState.errors.role?.message ? <p role="alert" className={styles.fieldError}>{form.formState.errors.role.message}</p> : null}
-                </fieldset>
+                <p className={styles.accountNote}>
+                  This creates a candidate account. Company owners, HR managers, and recruiters join through an invitation from their administrator.
+                </p>
 
                 {errorMessage ? (
                   <p id="registration-error" role="alert" className={authStyles.error}>
@@ -185,12 +183,13 @@ function RegisterInner() {
                   </p>
                 ) : null}
                 <Button type="submit" loading={isSubmitting} className={authStyles.submitButton}>
-                  Create {selectedRole === "recruiter" ? "recruiter" : "candidate"} account
+                  Create candidate account
                 </Button>
                 <p className={authStyles.registerPrompt}>
                   Already registered? <Link href="/login">Sign in</Link>
                 </p>
               </form>
+              <LegalLinks className="mt-6" />
             </div>
           </div>
         </section>

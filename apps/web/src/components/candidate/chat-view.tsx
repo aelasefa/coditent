@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { FiUser } from "react-icons/fi";
+import { useChatProfilePanel } from "./chat-workspace";
 import type { ChatMessage } from "@/lib/types";
 import styles from "./chat-workspace.module.css";
 
@@ -23,20 +25,16 @@ function timeLabel(iso: string): string {
 export function MessageList({
   messages,
   myId,
-  peerName = "Someone",
-  peerIsTyping = false,
 }: {
   messages: ChatMessage[];
   myId?: string;
-  peerName?: string;
-  peerIsTyping?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, peerIsTyping]);
+  }, [messages.length]);
 
-  if (messages.length === 0 && !peerIsTyping) {
+  if (messages.length === 0) {
     return <div role="log" aria-label="Messages" className="flex min-h-[240px] flex-1 flex-col items-center justify-center p-6 text-center">
       <p className="text-sm font-semibold text-foreground">No messages yet</p>
       <p className="mt-1 max-w-xs text-[13px] leading-relaxed text-muted-foreground">Start the conversation with a message.</p>
@@ -45,9 +43,16 @@ export function MessageList({
 
   let lastDay = "";
   let lastSender = "";
+  let latestOutgoingIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (myId && messages[index].sender_id === myId) {
+      latestOutgoingIndex = index;
+      break;
+    }
+  }
   return (
     <div role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions text" className="space-y-1 overflow-y-auto p-4">
-      {messages.map((m) => {
+      {messages.map((m, index) => {
         const day = dayLabel(m.created_at);
         const showDay = day && day !== lastDay;
         const mine = myId ? m.sender_id === myId : false;
@@ -60,33 +65,28 @@ export function MessageList({
               <p suppressHydrationWarning className="py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{day}</p>
             ) : null}
             <div className={cn("flex", mine ? "justify-end" : "justify-start", grouped ? "mt-0.5" : "mt-2")}>
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                  mine ? "bg-primary text-primary-foreground" : "bg-surface-secondary text-foreground"
-                )}
-              >
-                <p>{m.content}</p>
-                <p suppressHydrationWarning className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                  {timeLabel(m.created_at)}
-                </p>
+              <div className="flex max-w-[80%] flex-col items-end">
+                <div
+                  className={cn(
+                    "w-fit rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+                    mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground"
+                  )}
+                >
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.content}</p>
+                  <p suppressHydrationWarning className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                    {timeLabel(m.created_at)}
+                  </p>
+                </div>
+                {mine && index === latestOutgoingIndex ? (
+                  <p className="mt-1 pr-1 text-[10px] font-medium leading-none text-muted-foreground" aria-label={m.read_at ? "Message seen" : "Message sent"}>
+                    {m.read_at ? "Seen" : "✓ Sent"}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
         );
       })}
-      {peerIsTyping ? (
-        <div className={styles.typingRow}>
-          <div className={styles.typingBubble}>
-            <span className="sr-only">{peerName} is typing</span>
-            <span aria-hidden="true" className={styles.typingDots}>
-              <span />
-              <span />
-              <span />
-            </span>
-          </div>
-        </div>
-      ) : null}
       <div ref={bottomRef} />
     </div>
   );
@@ -98,16 +98,12 @@ export function Composer({
   disabled,
   disabledReason,
   onSend,
-  onTyping,
-  onTypingStop,
 }: {
   peerName: string;
   pending: boolean;
   disabled?: boolean;
   disabledReason?: string;
-  onSend: (text: string) => void;
-  onTyping?: (value: string) => void;
-  onTypingStop?: () => void;
+  onSend: (text: string) => void | Promise<void>;
 }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -120,16 +116,15 @@ export function Composer({
     field.style.height = `${Math.min(field.scrollHeight, 112)}px`;
   }, [value]);
 
-  function submit() {
+  async function submit() {
     const text = value.trim();
     if (!text || pending || disabled) return;
     setError(null);
     try {
-      onTypingStop?.();
-      onSend(text);
+      await onSend(text);
       setValue("");
     } catch {
-      setError("Message failed to send. Retry.");
+      setError("Message was not confirmed. Your draft is preserved; retry when connected.");
     }
   }
 
@@ -140,7 +135,7 @@ export function Composer({
       style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        void submit();
       }}
     >
       <label htmlFor="chat-composer" className="sr-only">
@@ -151,23 +146,19 @@ export function Composer({
           ref={composerRef}
           id="chat-composer"
           value={value}
-          onChange={(e) => {
-            const nextValue = e.target.value;
-            setValue(nextValue);
-            onTyping?.(nextValue);
-          }}
-          onBlur={() => onTypingStop?.()}
+          maxLength={2000}
+          onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              submit();
+              void submit();
             }
           }}
           placeholder={disabled ? disabledReason ?? "Messaging unavailable" : `Message ${peerName}`}
           disabled={disabled || pending}
           rows={2}
           aria-describedby={error ? "chat-composer-error" : undefined}
-          className="max-h-28 min-h-14 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+          className="max-h-28 min-h-14 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
         />
         <Button type="submit" disabled={disabled || pending || !value.trim()} loading={pending}>
           Send
@@ -198,6 +189,7 @@ export function ChatHeader({
   avatarSrc?: string | null;
   backHref: string;
 }) {
+  const profilePanel = useChatProfilePanel();
   return (
     <div className={styles.chatHeader}>
       <Link href={backHref} className={styles.chatBack}>← All messages</Link>
@@ -210,6 +202,19 @@ export function ChatHeader({
           {context ? <p className={styles.chatContext}>{context}</p> : null}
         </div>
         {status ? <span className={styles.chatStatus}>{status}</span> : null}
+        {profilePanel ? (
+          <button
+            type="button"
+            onClick={(event) => profilePanel.toggle(event.currentTarget)}
+            aria-label={`${profilePanel.open ? "Hide" : "View"} profile of ${title}`}
+            title={profilePanel.open ? "Hide profile" : "View profile"}
+            aria-expanded={profilePanel.open}
+            aria-controls={profilePanel.panelId}
+            className={styles.profileIconButton}
+          >
+            <FiUser aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </div>
   );

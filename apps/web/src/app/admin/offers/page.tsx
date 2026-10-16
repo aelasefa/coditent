@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { MdCard } from "@/components/ui/md-card";
+import { AdminShell } from "@/components/admin/admin-shell";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/shell/page-container";
 import { getAdminOffers } from "@/lib/api";
 
 export default function AdminOffersPage() {
@@ -13,36 +14,28 @@ export default function AdminOffersPage() {
   });
 
   return (
-    <main className="min-h-screen bg-md-background pb-14">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-md-onSurfaceVariant">Admin workspace</p>
-            <h1 className="mt-1 text-3xl font-medium tracking-tight">All offers</h1>
-          </div>
-          <Link className="rounded-full border border-md-outline/60 px-4 py-2 text-sm text-md-primary" href="/admin">
-            Back to dashboard
-          </Link>
-        </header>
+    <AdminShell>
+      <div className="py-2">
+        <PageHeader title="All offers" description="Review every opportunity published across the platform." />
 
-        {offersQuery.isLoading ? <MdCard className="mt-6 p-6">Loading offers...</MdCard> : null}
+        {offersQuery.isLoading ? <Card className="p-6">Loading offers…</Card> : null}
 
         <div className="mt-6 space-y-4">
           {offersQuery.data?.map((offer) => (
-            <MdCard key={offer.id} className="p-5">
-              <p className="font-medium">{offer.title}</p>
-              <p className="mt-1 text-sm text-md-onSurfaceVariant">{offer.company} - {offer.region}</p>
-              <p className="mt-2 text-xs uppercase tracking-[0.08em] text-md-onSurfaceVariant">
+            <Card key={offer.id} className="p-5">
+              <p className="font-semibold">{offer.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{offer.company} · {offer.region}</p>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
                 {offer.type} - {offer.active ? "active" : "inactive"}
               </p>
-            </MdCard>
+            </Card>
           ))}
 
           {offersQuery.data && offersQuery.data.length === 0 ? (
-            <MdCard className="p-6 text-md-onSurfaceVariant">No offers found.</MdCard>
+            <Card className="border-dashed p-8 text-center text-muted-foreground">No offers found.</Card>
           ) : null}
         </div>
       </div>
-    </main>
+    </AdminShell>
   );
 }

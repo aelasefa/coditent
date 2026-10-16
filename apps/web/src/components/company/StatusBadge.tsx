@@ -6,8 +6,6 @@ export type BadgeVariant =
   | "applied"
   | "under_review"
   | "shortlisted"
-  | "assessment_required"
-  | "assessment_completed"
   | "interview"
   | "accepted"
   | "rejected"
@@ -38,8 +36,6 @@ function labelFor(key: string): string {
     applied: "Applied",
     under_review: "Under review",
     shortlisted: "Shortlisted",
-    assessment_required: "Assessment",
-    assessment_completed: "Assessed",
     interview: "Interview",
     accepted: "Hired",
     rejected: "Rejected",
@@ -72,8 +68,6 @@ function variantFor(key: string): CanonicalVariant {
     case "draft":
       return "info";
     case "shortlisted":
-    case "assessment_required":
-    case "assessment_completed":
     case "interview":
     case "OWNER":
     case "ADMIN":
@@ -99,7 +93,11 @@ function variantFor(key: string): CanonicalVariant {
 export function StatusBadge({ status, variant, size = "sm", showDot = true }: StatusBadgeProps) {
   const key = variant || status || "neutral";
   return (
-    <Badge variant={variantFor(key)} dot={showDot} className={size === "md" ? "px-3 py-1" : undefined}>
+    <Badge
+      variant={variantFor(key)}
+      dot={showDot}
+      className={[size === "md" ? "px-3 py-1" : "", key === "rejected" ? "border-danger/30 bg-danger-background font-semibold text-danger" : ""].filter(Boolean).join(" ")}
+    >
       {labelFor(key)}
     </Badge>
   );

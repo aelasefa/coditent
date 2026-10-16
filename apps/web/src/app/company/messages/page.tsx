@@ -24,9 +24,24 @@ function timeLabel(iso?: string | null): string {
 function InboxContent() {
   const searchParams = useSearchParams();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const chatsQ = useQuery({ queryKey: ["company-recruitment-chats"], queryFn: listRecruitmentChats, enabled: !!me });
+  const chatsQ = useQuery({
+    queryKey: ["company-recruitment-chats"],
+    queryFn: listRecruitmentChats,
+    enabled: !!me,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  });
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("app"));
+  const [desktop, setDesktop] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setDesktop(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     const a = searchParams.get("app");
@@ -48,10 +63,16 @@ function InboxContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          title="Messages"
-          subtitle="Recruitment conversations for applications you are responsible for."
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{chats.length} threads</span>}
+          tone="green"
+          center
+          eyebrow="Conversations"
+          title="Every conversation, in clear view."
+          subtitle="Keep candidate conversations focused, responsive and easy to follow."
         />
+
+        <div className="company-results-toolbar -my-2">
+          <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">{chats.length} {chats.length === 1 ? "thread" : "threads"}</span>
+        </div>
 
         {chatsQ.isLoading ? (
           <div className="space-y-2" role="status" aria-label="Loading conversations">
@@ -123,7 +144,7 @@ function InboxContent() {
               <p className="mt-2 text-[11px] text-muted-foreground lg:hidden">Select a thread to open conversation.</p>
             </div>
 
-            <div className="hidden min-h-125 flex-col overflow-hidden rounded-xl border border-border-subtle bg-surface lg:flex">
+            {desktop === true ? <div className="flex min-h-125 flex-col overflow-hidden rounded-xl border border-border-subtle bg-surface">
               {selected ? (
                 <>
                   <div className="border-b border-border-subtle px-4 py-3">
@@ -137,9 +158,9 @@ function InboxContent() {
               ) : (
                 <p className="p-6 text-sm text-muted-foreground">Select a conversation.</p>
               )}
-            </div>
+            </div> : null}
 
-            <div className="lg:hidden">
+            {desktop === false ? <div>
               {selected && (
                 <div className="rounded-xl border border-border-subtle bg-surface">
                   <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
@@ -151,7 +172,7 @@ function InboxContent() {
                   {selectedId && <RecruitmentThread applicationId={selectedId} peerName={selected.peer?.full_name ?? "candidate"} />}
                 </div>
               )}
-            </div>
+            </div> : null}
           </div>
         )}
       </div>

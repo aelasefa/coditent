@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { api, generateRecommendations, getProfile, getRecommendationJob, getRecommendations, scoreRecommendation } from "@/lib/api";
@@ -11,8 +12,11 @@ import { Sheet } from "@/components/ui/sheet";
 import { FilterBar, type DiscoverFilters } from "@/components/candidate/filter-bar";
 import { JobCard, JobCardSkeleton } from "@/components/candidate/job-card";
 import { JobDetails, JobDetailsSkeleton } from "@/components/candidate/job-details";
+import { filterAndSortRecommendations, paginateRecommendations } from "@/lib/discover-search";
 import type { ApplicationItem } from "@/lib/types";
 import styles from "@/components/candidate/candidate-pages.module.css";
+
+const RESULTS_PER_PAGE = 9;
 
 export default function RecommendationsPage() {
   return (
@@ -37,6 +41,7 @@ function RecommendationsContent() {
   const [selectedId, setSelectedId] = useState<string | null>(deepOffer);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [isMobile, setIsMobile] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
@@ -46,7 +51,16 @@ function RecommendationsContent() {
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const recsQuery = useQuery({ queryKey: ["recommendations"], queryFn: getRecommendations });
+  const recsQuery = useQuery({
+    queryKey: ["recommendations"],
+    queryFn: getRecommendations,
+    refetchInterval: (query) => {
+      const recommendations = query.state.data;
+      return recommendations?.some((recommendation) =>
+        recommendation.status === "pending" || recommendation.status === "processing"
+      ) ? 3000 : false;
+    },
+  });
   const { toast } = useToast();
   const [jobFailed, setJobFailed] = useState(false);
   const [pollingJob, setPollingJob] = useState(false);
@@ -106,21 +120,29 @@ function RecommendationsContent() {
     },
   });
 
-  const recs = recsQuery.data ?? [];
+  const recs = useMemo(() => recsQuery.data ?? [], [recsQuery.data]);
+  const scoreableOfferIds = useMemo(
+    () => recs
+      .filter((recommendation) => {
+        const status = recommendation.status;
+        const score = recommendation.ai_score ?? recommendation.score;
+        return status === "pending" || status === "failed" || (!status && !(typeof score === "number" && score > 0));
+      })
+      .slice(0, 10)
+      .map((recommendation) => recommendation.offer.id)
+      .join(","),
+    [recs]
+  );
   // Newly published jobs arrive as pending rows from GET /recommendations.
   // Trigger per-offer scoring for rows with no completed analysis, then
   // refetch so the real score replaces "Match analysis pending".
   useEffect(() => {
     if (recsQuery.isLoading || recsQuery.isError) return;
-    const pending = (recsQuery.data ?? []).filter((r) => {
-      const st = (r as { status?: string }).status;
-      const sc = (r as { ai_score?: number; score?: number }).ai_score ?? (r as { score?: number }).score;
-      return st === "pending" || st === "failed" || (!st && !(typeof sc === "number" && sc > 0));
-    }).slice(0, 10);
-    if (pending.length === 0) return;
+    if (!scoreableOfferIds) return;
+    const offerIds = scoreableOfferIds.split(",");
     let cancelled = false;
     (async () => {
-      await Promise.allSettled(pending.map((r) => scoreRecommendation(r.offer.id)));
+      await Promise.allSettled(offerIds.map((offerId) => scoreRecommendation(offerId)));
       if (cancelled) return;
       // Give the worker a moment, then reload real statuses/scores.
       await new Promise((res) => setTimeout(res, 4000));
@@ -128,34 +150,27 @@ function RecommendationsContent() {
       await queryClient.invalidateQueries({ queryKey: ["recommendations"] });
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recsQuery.data?.length, recsQuery.isLoading, recsQuery.isError]);
+  }, [queryClient, recsQuery.isError, recsQuery.isLoading, scoreableOfferIds]);
   const appliedOfferIds = useMemo(
     () => new Set([...(appsQuery.data ?? []).map((a) => a.opportunity_id), ...applied]),
     [appsQuery.data, applied]
   );
 
   const filtered = useMemo(() => {
-    const q = filters.query.trim().toLowerCase();
-    let list = recs.filter((r) => {
-      const o = r.offer;
-      if (filters.field && !o.field.toLowerCase().includes(filters.field.trim().toLowerCase())) return false;
-      if (filters.region && !o.region.toLowerCase().includes(filters.region.trim().toLowerCase())) return false;
-      if (filters.type !== "ALL" && o.type !== filters.type) return false;
-      if (q) {
-        const hay = `${o.title} ${o.company} ${o.required_skills ?? ""} ${o.field} ${o.region}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-    list = [...list].sort((a, b) => {
-      if (filters.sort === "newest") return String(b.offer.posted_at).localeCompare(String(a.offer.posted_at));
-      return (b.score ?? b.ai_score ?? 0) - (a.score ?? a.ai_score ?? 0);
-    });
-    return list;
+    return filterAndSortRecommendations(recs, filters);
   }, [recs, filters]);
 
-  const selected = filtered.find((r) => r.offer.id === selectedId) ?? filtered[0] ?? null;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / RESULTS_PER_PAGE));
+  const visibleResults = useMemo(
+    () => paginateRecommendations(filtered, page, RESULTS_PER_PAGE),
+    [filtered, page]
+  );
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const selected = filtered.find((r) => r.offer.id === selectedId) ?? visibleResults[0] ?? null;
   const selectedApplied = selected ? appliedOfferIds.has(selected.offer.id) : false;
 
   function handleGenerate() {
@@ -180,81 +195,123 @@ function RecommendationsContent() {
 
   return (
     <PageContainer variant="wide">
-      <div className={styles.discoverIntro}>
-        <div><h1 className="ct-page-title">Discover opportunities</h1><p>Search open roles, then analyze matches for your field and region.</p></div>
-        <p>Match analysis appears on each role when it is ready.</p>
-      </div>
-
-      <div className={styles.filterPanel}><FilterBar
-            filters={filters}
-            onChange={(next) => { setFilters(next); setSelectedId(null); }}
-            onGenerate={handleGenerate}
-            generating={generateMutation.isPending || pollingJob}
-          /></div>
-      <div className={styles.resultsHeading}><h2>Open roles</h2><p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"}`}</p></div>
-      <div className={styles.resultsLayout}>
-        <div className={styles.resultsList}>
-          {jobFailed ? (
-            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
-              <p className="text-sm font-semibold text-danger">Match scoring did not complete.</p>
-              <button type="button" onClick={handleGenerate} className="mt-2 text-sm font-semibold text-danger underline">
-                Retry scoring
-              </button>
-            </div>
-          ) : null}
-          {error ? (
-            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
-              <p className="text-sm font-semibold text-danger">Could not load opportunities.</p>
-              <button type="button" onClick={() => recsQuery.refetch()} className="mt-2 text-sm font-semibold text-danger underline">
-                Retry
-              </button>
-            </div>
-          ) : null}
-          {!error ? (
-            <div className={styles.jobList} role="list" aria-label="Opportunities">
-              {loading
-                ? [1, 2, 3].map((i) => <JobCardSkeleton key={i} />)
-                : filtered.map((r) => (
-                    <div key={r.id} role="listitem">
-                      <JobCard
-                        rec={r}
-                        selected={selected?.offer.id === r.offer.id}
-                        applied={appliedOfferIds.has(r.offer.id)}
-                        onSelect={() => setSelectedId(r.offer.id)}
-                      />
-                    </div>
-                  ))}
-              {!loading && filtered.length === 0 && recs.length > 0 ? (
-                <EmptyState
-                  title="No opportunities match these filters"
-                  description="Adjust search or clear filters to see more matches."
-                  primaryAction={{ label: "Clear filters", onClick: () => setFilters({ query: "", field: "", region: "", type: "ALL", sort: "match" }) }}
-                />
-              ) : null}
-              {!loading && recs.length === 0 ? (
-                <EmptyState
-                  title="No recommendations yet"
-                  description="Enter a field and region, then analyze matches to see roles here."
-                  primaryAction={{ label: "Analyze matches", onClick: handleGenerate }}
-                />
-              ) : null}
-            </div>
-          ) : null}
+      <div className={styles.discoverWorkspace}>
+        <div className={styles.discoverArtwork} aria-hidden="true">
+          <Image
+            src="/images/candidate/discover-career-garden.png"
+            alt=""
+            fill
+            quality={95}
+            sizes="(max-width: 767px) 100vw, (max-width: 1200px) 72vw, 920px"
+          />
+        </div>
+        <div className={styles.discoverIntro}>
+          <div className={styles.discoverHeadingGroup}>
+            <h1 className={styles.discoverTitle}>
+              Discover <span>opportunities</span>
+            </h1>
+            <p className={styles.discoverDescription}>Search open roles, then analyze matches for your field and region.</p>
+          </div>
+          <p className={styles.discoverNote}>Match analysis appears on each role when it is ready.</p>
         </div>
 
-        <div className="hidden lg:block">
-          <div className={`${styles.jobDetail} sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto border border-border-subtle bg-surface p-6`}>
-            {loading ? (
-              <JobDetailsSkeleton />
-            ) : selected ? (
-              <JobDetails
-                rec={selected}
-                applied={selectedApplied}
-                onApplied={(id) => setApplied((s) => new Set([...s, id]))}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">Select an opportunity to see details.</p>
-            )}
+        <div className={styles.filterPanel}>
+          <FilterBar
+            filters={filters}
+            onChange={(next) => { setFilters(next); setSelectedId(null); setPage(1); }}
+            onGenerate={handleGenerate}
+            generating={generateMutation.isPending || pollingJob}
+          />
+        </div>
+        <div className={styles.resultsHeading}>
+          <h2>Open roles</h2>
+          <p role="status">{loading ? "Loading opportunities" : `${filtered.length} opportunit${filtered.length === 1 ? "y" : "ies"} · page ${page} of ${totalPages}`}</p>
+        </div>
+        <div className={styles.resultsLayout}>
+          <div className={styles.resultsList}>
+            {jobFailed ? (
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
+                <p className="text-sm font-semibold text-danger">Match scoring did not complete.</p>
+                <button type="button" onClick={handleGenerate} className="mt-2 text-sm font-semibold text-danger underline">
+                  Retry scoring
+                </button>
+              </div>
+            ) : null}
+            {error ? (
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger-background p-4">
+                <p className="text-sm font-semibold text-danger">Could not load opportunities.</p>
+                <button type="button" onClick={() => recsQuery.refetch()} className="mt-2 text-sm font-semibold text-danger underline">
+                  Retry
+                </button>
+              </div>
+            ) : null}
+            {!error ? (
+              <div className={styles.jobList} role="list" aria-label="Opportunities">
+                {loading
+                  ? [1, 2, 3].map((i) => <JobCardSkeleton key={i} />)
+                  : visibleResults.map((r) => (
+                      <div key={r.id} role="listitem">
+                        <JobCard
+                          rec={r}
+                          selected={selected?.offer.id === r.offer.id}
+                          applied={appliedOfferIds.has(r.offer.id)}
+                          onSelect={() => setSelectedId(r.offer.id)}
+                        />
+                      </div>
+                    ))}
+                {!loading && filtered.length === 0 && recs.length > 0 ? (
+                  <EmptyState
+                    title="No opportunities match these filters"
+                    description="Adjust search or clear filters to see more matches."
+                    primaryAction={{ label: "Clear filters", onClick: () => setFilters({ query: "", field: "", region: "", type: "ALL", sort: "match" }) }}
+                  />
+                ) : null}
+                {!loading && recs.length === 0 ? (
+                  <EmptyState
+                    title="No recommendations yet"
+                    description="Enter a field and region, then analyze matches to see roles here."
+                    primaryAction={{ label: "Analyze matches", onClick: handleGenerate }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {!loading && !error && filtered.length > RESULTS_PER_PAGE ? (
+              <nav className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3" aria-label="Opportunity result pages">
+                <button
+                  type="button"
+                  className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={page === 1}
+                  onClick={() => { setPage((current) => Math.max(1, current - 1)); setSelectedId(null); }}
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+                <button
+                  type="button"
+                  className="rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={page === totalPages}
+                  onClick={() => { setPage((current) => Math.min(totalPages, current + 1)); setSelectedId(null); }}
+                >
+                  Next
+                </button>
+              </nav>
+            ) : null}
+          </div>
+
+          <div className="hidden lg:block">
+            <div className={`${styles.jobDetail} sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto border border-border-subtle bg-surface p-6`}>
+              {loading ? (
+                <JobDetailsSkeleton />
+              ) : selected ? (
+                <JobDetails
+                  rec={selected}
+                  applied={selectedApplied}
+                  onApplied={(id) => setApplied((s) => new Set([...s, id]))}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">Select an opportunity to see details.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

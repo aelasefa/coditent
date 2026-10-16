@@ -1,5 +1,5 @@
 ---
-- name: Wait for API service to become healthy
+- name: Wait for application dependencies to become ready
   ansible.builtin.uri:
     url: "{{ healthcheck_url }}"
     method: GET
@@ -10,13 +10,13 @@
   retries: "{{ healthcheck_retries | default(15) }}"
   delay: "{{ healthcheck_delay | default(5) }}"
 
-- name: Verify API health response content
+- name: Verify application readiness response content
   ansible.builtin.assert:
     that:
       - api_health.status == 200
-      - "'ok' in api_health.content"
-    fail_msg: "API healthcheck failed: {{ api_health.content }}"
-    success_msg: "API healthcheck passed successfully! Status: {{ api_health.json.status | default('ok') }}"
+      - (api_health.json.status | default('')) == 'ready'
+    fail_msg: "Application readiness check failed: {{ api_health.content }}"
+    success_msg: "Application readiness check passed"
 
 - name: Record deployment metadata
   ansible.builtin.copy:

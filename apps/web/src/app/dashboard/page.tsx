@@ -3,11 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { FiArrowRight, FiBriefcase, FiCheckSquare, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
+import { useEffect, useState } from "react";
+import { FiArrowRight, FiBriefcase, FiCheck, FiMessageSquare, FiSearch, FiUser } from "react-icons/fi";
 import { api, getMe, getProfile, getRecommendations, listRecruitmentChats } from "@/lib/api";
 import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TwinklingStars } from "@/components/ui/twinkling-stars";
 import { JobCard } from "@/components/candidate/job-card";
 import { ApplicationStage } from "@/components/candidate/application-stage";
 import { NextActionCard, type NextAction } from "@/components/candidate/next-action-card";
@@ -23,6 +25,8 @@ function greeting(): string {
 }
 
 export default function DashboardPage() {
+  const [timeGreeting, setTimeGreeting] = useState("Welcome");
+  useEffect(() => { setTimeGreeting(greeting()); }, []);
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: getProfile, staleTime: 60_000 });
   const recsQuery = useQuery({ queryKey: ["recommendations"], queryFn: getRecommendations });
@@ -53,16 +57,6 @@ export default function DashboardPage() {
       context: `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} to complete before your profile is ready.`,
       cta: "Open profile",
       href: "/profile",
-    });
-  }
-  const assessmentApps = apps.filter((a) => a.status === "assessment_required");
-  if (assessmentApps.length > 0) {
-    actions.push({
-      icon: FiCheckSquare,
-      title: "Assessment requested",
-      context: `${assessmentApps.length} application${assessmentApps.length > 1 ? "s" : ""} waiting on assessment stage.`,
-      cta: "View applications",
-      href: "/dashboard/applications",
     });
   }
   if (!recsQuery.isLoading && recs.length === 0) {
@@ -97,14 +91,17 @@ export default function DashboardPage() {
     .slice(0, 4);
   const doneCount = completion.done;
   const totalCount = completion.total;
+  const completionPercent = Math.round((doneCount / totalCount) * 100);
+  const profileIsComplete = completion.missing.length === 0;
 
   return (
     <PageContainer>
       <section className={styles.overviewHero} aria-labelledby="dashboard-heading">
+        <TwinklingStars className={styles.overviewStars} />
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>Your career space</p>
           <h1 id="dashboard-heading" className={styles.heroTitle}>
-            {firstName ? `${greeting()}, ${firstName}.` : "Your next chapter starts here."}
+            {firstName ? `${timeGreeting}, ${firstName}.` : "Your next chapter starts here."}
           </h1>
           <p className={styles.heroDescription}>Pick up where you left off, explore opportunities, and keep every application in view.</p>
           <Link href="/dashboard/recommendations" className={styles.heroLink}>
@@ -122,9 +119,11 @@ export default function DashboardPage() {
           <section className={styles.journeyRail} aria-label="Your career at a glance">
             <Link href="/profile" className={styles.journeyItem}>
               <span>Profile</span>
-              <strong>{Math.round((doneCount / totalCount) * 100)}%</strong>
+              <strong className={profileIsComplete ? styles.journeyCompleteMark : undefined}>
+                {profileIsComplete ? <FiCheck aria-hidden="true" /> : `${completionPercent}%`}
+              </strong>
               <p>{completion.missing.length ? `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} left to add` : "Your profile is complete"}</p>
-              <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} /></div>
+              <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${completionPercent}%` }} /></div>
             </Link>
             <Link href="/dashboard/applications" className={styles.journeyItem}>
               <span>Applications</span><strong>{apps.length}</strong><p>Track each stage and next step</p>

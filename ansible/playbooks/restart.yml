@@ -16,7 +16,7 @@
         cmd: docker compose restart
         chdir: "{{ app_dir }}"
 
-    - name: Wait for API service health after restart
+    - name: Wait for application readiness after restart
       ansible.builtin.uri:
         url: "{{ healthcheck_url }}"
         method: GET
@@ -27,8 +27,10 @@
       retries: "{{ healthcheck_retries | default(15) }}"
       delay: "{{ healthcheck_delay | default(3) }}"
 
-    - name: Verify restart healthcheck
+    - name: Verify restart readiness
       ansible.builtin.assert:
         that:
           - restart_health.status == 200
+          - (restart_health.json.status | default('')) == 'ready'
+        fail_msg: "Restart failed: application dependencies are not ready"
         success_msg: "All Coditent services restarted successfully!"

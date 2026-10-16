@@ -15,7 +15,7 @@ interface DialogProps {
   footer?: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
   dismissOnOverlayClick?: boolean;
-  initialFocusRef?: React.RefObject<HTMLElement>;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 const sizes = {
@@ -138,5 +138,5 @@ export function Dialog({
       <style>{`@keyframes ct-dialog-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }`}</style>
     </div>,
     document.body
-  ) as unknown as JSX.Element;
+  );
 }

@@ -2,11 +2,15 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:friends": "node --test --experimental-strip-types tests/friend-ui.test.mts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -14,26 +18,26 @@
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "@tanstack/react-query": "^5.96.2",
-    "axios": "^1.14.0",
+    "axios": "1.20.0",
     "gsap": "^3.15.0",
-    "next": "14.2.32",
+    "next": "16.3.8",
     "ogl": "^1.0.11",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-hook-form": "^7.72.1",
     "react-icons": "^5.6.0",
     "three": "^0.183.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "autoprefixer": "10.4.20",
-    "eslint": "8.57.1",
-    "eslint-config-next": "14.2.32",
-    "postcss": "8.4.49",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.8",
+    "postcss": "8.5.28",
+    "tailwindcss": "3.4.19",
+    "typescript": "5.9.3"
   }
 }

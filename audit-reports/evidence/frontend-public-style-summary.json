@@ -1,0 +1,60 @@
+[
+  {
+    "route": "/login",
+    "viewport": [
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>"
+    ],
+    "css_links": [
+      "/_next/static/chunks/0aqjk91of6x5h.css",
+      "/_next/static/chunks/1xg8amzk_z0cr.css"
+    ],
+    "css_rules": [
+      ".login-page-module__yyjEnW__shell{z-index:2;box-sizing:border-box;flex:1 0 auto;align-items:center;width:min(100% - 4rem,1280px);min-height:auto;margin-inline:auto;padding-block:1rem 1.5rem;display:flex;position:relative}",
+      ".login-page-module__yyjEnW__formColumn{justify-content:flex-start;width:100%;min-height:0;display:flex}",
+      ".login-page-module__yyjEnW__formInner{width:min(100%,510px)}",
+      ".login-page-module__yyjEnW__shell{gap:2.5rem;padding-block:.5rem 1rem}",
+      ".login-page-module__yyjEnW__shell{padding-block:.25rem .5rem}",
+      ".login-page-module__yyjEnW__header,.login-page-module__yyjEnW__shell{width:min(100% - 2rem,1280px)}",
+      ".login-page-module__yyjEnW__shell{flex:1;min-height:0;padding-block:.75rem 1rem}",
+      ".login-page-module__yyjEnW__formColumn{justify-content:stretch;align-items:center}",
+      ".login-page-module__yyjEnW__formInner{width:100%}",
+      ".login-page-module__yyjEnW__shell{padding-block:.4rem .75rem}",
+      ".register-page-module__CHgEIW__shell{flex:1 0 auto;align-items:center;min-height:auto;padding-block:1rem 1.5rem}",
+      ".register-page-module__CHgEIW__formInner{width:min(100%,560px)}",
+      ".register-page-module__CHgEIW__shell{padding-block:.25rem .5rem}",
+      ".register-page-module__CHgEIW__shell{padding-top:2.4rem}",
+      "\n.verify-email-module__XPrOEG__shell{padding-block:1rem 2rem}",
+      ".verify-email-module__XPrOEG__formInner{width:min(100%,520px)}",
+      ".verify-email-module__XPrOEG__shell{padding-block:.75rem 1.5rem}"
+    ]
+  },
+  {
+    "route": "/register",
+    "viewport": [
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>"
+    ],
+    "css_links": [
+      "/_next/static/chunks/0aqjk91of6x5h.css",
+      "/_next/static/chunks/1xg8amzk_z0cr.css"
+    ],
+    "css_rules": [
+      ".login-page-module__yyjEnW__shell{z-index:2;box-sizing:border-box;flex:1 0 auto;align-items:center;width:min(100% - 4rem,1280px);min-height:auto;margin-inline:auto;padding-block:1rem 1.5rem;display:flex;position:relative}",
+      ".login-page-module__yyjEnW__formColumn{justify-content:flex-start;width:100%;min-height:0;display:flex}",
+      ".login-page-module__yyjEnW__formInner{width:min(100%,510px)}",
+      ".login-page-module__yyjEnW__shell{gap:2.5rem;padding-block:.5rem 1rem}",
+      ".login-page-module__yyjEnW__shell{padding-block:.25rem .5rem}",
+      ".login-page-module__yyjEnW__header,.login-page-module__yyjEnW__shell{width:min(100% - 2rem,1280px)}",
+      ".login-page-module__yyjEnW__shell{flex:1;min-height:0;padding-block:.75rem 1rem}",
+      ".login-page-module__yyjEnW__formColumn{justify-content:stretch;align-items:center}",
+      ".login-page-module__yyjEnW__formInner{width:100%}",
+      ".login-page-module__yyjEnW__shell{padding-block:.4rem .75rem}",
+      ".register-page-module__CHgEIW__shell{flex:1 0 auto;align-items:center;min-height:auto;padding-block:1rem 1.5rem}",
+      ".register-page-module__CHgEIW__formInner{width:min(100%,560px)}",
+      ".register-page-module__CHgEIW__shell{padding-block:.25rem .5rem}",
+      ".register-page-module__CHgEIW__shell{padding-top:2.4rem}",
+      "\n.verify-email-module__XPrOEG__shell{padding-block:1rem 2rem}",
+      ".verify-email-module__XPrOEG__formInner{width:min(100%,520px)}",
+      ".verify-email-module__XPrOEG__shell{padding-block:.75rem 1.5rem}"
+    ]
+  }
+]

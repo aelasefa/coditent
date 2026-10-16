@@ -80,8 +80,8 @@ async def flow():
     data: dict = {}
 
     async def setup():
-        async with AsyncSessionLocal() as db:
-            company = Company(name=f"ChatCo-{suffix}")
+        db = AsyncSessionLocal()
+        company = Company(name=f"ChatCo-{suffix}")
         db.add(company)
         await db.flush()
 
@@ -159,6 +159,7 @@ async def flow():
             "other_company": other_company, "offer": offer,
             "other_offer": other_offer, "application": application,
         })
+        await db.close()
 
     await _with_db_retries("flow.setup", setup)
     yield data
@@ -204,7 +205,7 @@ async def _set_status(application_id, new_status):
 
 @pytest.mark.asyncio
 async def test_stage_gate_allows_post_review_only():
-    for s in ["shortlisted", "assessment_required", "assessment_completed", "interview", "accepted"]:
+    for s in ["shortlisted", "interview", "accepted"]:
         assert is_chat_enabled_for_status(s) is True
     for s in ["applied", "under_review", "rejected", None, "", "withdrawn", "hired"]:
         assert is_chat_enabled_for_status(s) is False
@@ -247,6 +248,86 @@ async def test_candidate_sends_to_responsible_hr(client, flow):
     assert msg["receiver_id"] == str(flow["hr"].id)
     assert msg["sender_id"] == str(flow["cand"].id)
     assert msg["application_id"] == str(flow["application"].id)
+    assert msg["read_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_read_receipt_is_persisted_when_recipient_views(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    sent = await client.post(
+        f"/chat/recruitment/{flow['application'].id}",
+        json={"content": "Please confirm the interview time"},
+        headers=auth(flow["cand"]),
+    )
+    message_id = sent.json()["id"]
+
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["hr"]),
+    )
+    assert read.status_code == 200, read.text
+    assert message_id in read.json()["message_ids"]
+    assert read.json()["read_at"] is not None
+
+    refreshed = await client.get(
+        f"/chat/recruitment/{flow['application'].id}",
+        headers=auth(flow["cand"]),
+    )
+    persisted = next(message for message in refreshed.json()["messages"] if message["id"] == message_id)
+    assert persisted["read_at"] == read.json()["read_at"]
+
+
+@pytest.mark.asyncio
+async def test_sender_cannot_mark_own_message_read(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    sent = await client.post(
+        f"/chat/recruitment/{flow['application'].id}",
+        json={"content": "This remains unread by the recruiter"},
+        headers=auth(flow["cand"]),
+    )
+    message_id = sent.json()["id"]
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["cand"]),
+    )
+    assert read.status_code == 200
+    assert message_id not in read.json()["message_ids"]
+
+
+@pytest.mark.asyncio
+async def test_candidate_marks_recruiter_reply_seen_and_state_survives_refetch(client, flow):
+    await _set_status(flow["application"].id, "interview")
+    sent = await client.post(
+        f"/chat/recruitment/{flow['application'].id}",
+        json={"content": "Your interview starts tomorrow at ten"},
+        headers=auth(flow["hr"]),
+    )
+    message_id = sent.json()["id"]
+    assert sent.json()["read_at"] is None
+
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["cand"]),
+    )
+    assert read.status_code == 200, read.text
+    assert message_id in read.json()["message_ids"]
+
+    refreshed = await client.get(
+        f"/chat/recruitment/{flow['application'].id}",
+        headers=auth(flow["hr"]),
+    )
+    persisted = next(message for message in refreshed.json()["messages"] if message["id"] == message_id)
+    assert persisted["read_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_user_cannot_mark_recruitment_messages_read(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    read = await client.post(
+        f"/chat/recruitment/{flow['application'].id}/read",
+        headers=auth(flow["cand2"]),
+    )
+    assert read.status_code in (403, 404)
 
 
 @pytest.mark.asyncio
@@ -448,7 +529,9 @@ async def test_removed_hr_loses_access(client, flow):
         flow["hr"].company_id = None
         flow["hr"].company_role = None
         r = await client.get(f"/chat/recruitment/{flow['application'].id}", headers=auth(flow["hr"]))
-        assert r.status_code == 403
+        # Membership removal invalidates the company account before the
+        # conversation authorization check runs.
+        assert r.status_code == 401, r.text
     finally:
         async def _restore():
             async with AsyncSessionLocal() as db:
@@ -519,12 +602,16 @@ async def test_hr_can_create_offer_and_move_stage(client, flow):
     assert r.json()["responsible_hr_id"] == str(flow["hr"].id)
     offer_id = r.json()["id"]
     try:
-        r = await client.patch(
-            f"/applications/{flow['application'].id}",
-            json={"status": "shortlisted"},
-            headers=auth(flow["hr"]),
-        )
-        assert r.status_code == 200, r.text
+        version = flow["application"].stage_version
+        for stage in ("under_review", "shortlisted"):
+            r = await client.patch(
+                f"/applications/{flow['application'].id}",
+                json={"status": stage, "expected_version": version},
+                headers=auth(flow["hr"]),
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["stage_version"] == version + 1
+            version = r.json()["stage_version"]
         assert r.json()["chat_enabled"] is True
     finally:
         async def _cleanup_offer():

@@ -1,15 +1,17 @@
 import axios from "axios";
 import type { AxiosRequestConfig } from "axios";
+import { resolveAssetUrl } from "@/lib/asset-url";
+import { validateManagedFile, validateManagedFileMetadata } from "@/lib/file-validation";
 
 import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type {
   AdminActivity,
+  AdminMutationResult,
   AdminStats,
   LoginResponse,
   Offer,
   OAuthHandoffResult,
-  OAuthRegistrationHandoff,
   OnboardingState,
   Profile,
   Recommendation,
@@ -22,15 +24,26 @@ import type {
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const envUrl = process.env.NEXT_PUBLIC_API_URL;
-    // When the browser is loaded over HTTPS (e.g. Vercel) and backend is insecure HTTP,
-    // proxy through /api-proxy to prevent browser Mixed Content blocking.
-    if (window.location.protocol === "https:" && envUrl && envUrl.startsWith("http://")) {
+    const envUrl = process.env.NEXT_PUBLIC_API_URL || "/api-proxy";
+    // Production browser traffic stays on the page's HTTPS origin. Never let a
+    // stale public HTTP setting create mixed-content API or WebSocket requests.
+    if (window.location.protocol === "https:" && !envUrl.startsWith("/")) {
       return "/api-proxy";
     }
-    return envUrl ?? "/api-proxy";
+    return envUrl;
   }
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://34.205.255.37";
+  return process.env.BACKEND_PROXY_URL ?? "http://127.0.0.1:8001";
+}
+
+/**
+ * OAuth must start on the same public API origin used by the provider callback.
+ * Normal JSON requests may use the Next.js rewrite, but beginning OAuth through
+ * that rewrite and returning directly to the API can lose the short-lived
+ * browser-binding cookie in some browsers/proxies.
+ */
+export function getOAuthBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_OAUTH_API_URL?.trim();
+  return configured || getApiBaseUrl();
 }
 
 export const api = axios.create({
@@ -42,7 +55,7 @@ const skipAuthRedirectConfig = {
   skipAuthRedirect: true,
 } as AxiosRequestConfig & { skipAuthRedirect: boolean };
 
-const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/recruiter", "/admin"];
+const protectedPrefixes = ["/get-started", "/profile", "/dashboard", "/company", "/companies", "/chat", "/admin"];
 
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/register" || pathname === "/admin/login") {
@@ -69,6 +82,14 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    const method = (config.method ?? "get").toLowerCase();
+    if (!["get", "head", "options"].includes(method)) {
+      const csrf = document.cookie
+        .split("; ")
+        .find((entry) => entry.startsWith("coditent_csrf="))
+        ?.slice("coditent_csrf=".length);
+      if (csrf) config.headers["X-CSRF-Token"] = decodeURIComponent(csrf);
     }
   }
 
@@ -101,14 +122,15 @@ api.interceptors.response.use(
 export interface RegistrationStarted {
   detail: string;
   email: string;
+  registration_id: string;
   expires_in_seconds: number;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
 }
 
 export async function register(payload: {
   email: string;
   password: string;
   full_name: string;
-  role: "CANDIDATE" | "RECRUITER";
 }): Promise<RegistrationStarted> {
   const { data } = await api.post<RegistrationStarted>("/auth/register", payload);
   return data;
@@ -116,20 +138,28 @@ export async function register(payload: {
 
 export async function verifyEmail(payload: {
   email: string;
+  registration_id: string;
   otp: string;
 }): Promise<TokenResponse> {
   const { data } = await api.post<TokenResponse>("/auth/verify-email", payload);
   return data;
 }
 
-export async function resendVerification(email: string): Promise<RegistrationStarted & { retry_after_seconds?: number }> {
-  const { data } = await api.post("/auth/resend-verification", { email });
+export async function resendVerification(
+  email: string,
+  registrationId: string
+): Promise<RegistrationStarted & { retry_after_seconds?: number }> {
+  const { data } = await api.post("/auth/resend-verification", {
+    email,
+    registration_id: registrationId,
+  });
   return data;
 }
 
 export async function login(payload: {
   email: string;
   password: string;
+  account_type: "candidate" | "recruiter";
 }): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>(
     "/auth/login",
@@ -137,6 +167,28 @@ export async function login(payload: {
     skipAuthRedirectConfig
   );
   return data;
+}
+
+export async function requestPasswordRecovery(email: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>("/auth/recovery/request", { email });
+  return data;
+}
+
+export async function confirmPasswordRecovery(payload: {
+  token: string;
+  new_password: string;
+}): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>("/auth/recovery/confirm", payload);
+  return data;
+}
+
+export async function logoutSession(): Promise<void> {
+  try {
+    await api.post("/auth/logout");
+  } finally {
+    removeToken();
+    removeTrustedDevice();
+  }
 }
 
 export async function adminLogin(payload: {
@@ -181,44 +233,6 @@ export async function disableTwoFactor(password: string, code: string): Promise<
   return data;
 }
 
-export async function completeOauthRegistration(payload: {
-  role: "candidate" | "recruiter";
-}): Promise<OAuthRegistrationHandoff> {
-  const response = await fetch(
-    `${getApiBaseUrl()}/auth/oauth/complete-registration`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-
-  let data: OAuthRegistrationHandoff | { detail?: string } | null = null;
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    try {
-      data = (await response.json()) as OAuthRegistrationHandoff | { detail?: string };
-    } catch {
-      data = null;
-    }
-  }
-
-  if (!response.ok) {
-    const detail = typeof data === "object" && data && "detail" in data ? data.detail : null;
-    const textBody = !detail ? await response.text().catch(() => "") : "";
-    const error = new Error(
-      typeof detail === "string" ? detail : textBody || "Complete registration failed"
-    );
-    (error as { status?: number }).status = response.status;
-    throw error;
-  }
-
-  return data as OAuthRegistrationHandoff;
-}
-
 export async function exchangeOAuthHandoff(code: string): Promise<OAuthHandoffResult> {
   const { data } = await api.post<OAuthHandoffResult>("/auth/oauth/handoff/exchange", { code });
   return data;
@@ -229,9 +243,22 @@ export async function getMe(): Promise<User> {
   return data;
 }
 
-export async function updateAvatar(avatarUrl: string): Promise<User> {
-  const { data } = await api.put<User>("/auth/me/avatar", { avatar_url: avatarUrl });
+export async function uploadAvatar(file: File, onProgress?: (percent: number) => void): Promise<User> {
+  const validationError = await validateManagedFile(file, "avatar");
+  if (validationError) throw new Error(validationError);
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+  const { data } = await api.post<User>("/auth/me/avatar", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (event) => {
+      if (onProgress && event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+    },
+  });
   return data;
+}
+
+export function resolveApiAssetUrl(src?: string | null): string | null {
+  return resolveAssetUrl(src, getApiBaseUrl());
 }
 
 export async function updateAccountName(fullName: string): Promise<User> {
@@ -290,10 +317,36 @@ export async function updateProfile(payload: Partial<Profile>): Promise<Profile>
   return data;
 }
 
+export type ProfileAIPayload = {
+  skills: string[];
+  field_of_study?: string | null;
+  headline?: string | null;
+  experience?: string | null;
+  education?: string | null;
+  interests?: string | null;
+  career_goals?: string | null;
+};
+
+export async function generateProfileHeadline(
+  payload: ProfileAIPayload,
+): Promise<{ headline: string }> {
+  const { data } = await api.post("/candidates/ai/headline", payload, { timeout: 35_000 });
+  return data;
+}
+
+export async function generateProfileBio(
+  payload: ProfileAIPayload,
+): Promise<{ success: boolean; bio: string }> {
+  const { data } = await api.post("/candidates/ai/bio", payload, { timeout: 35_000 });
+  return data;
+}
+
 export async function uploadCV(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<import("@/lib/types").CVMeta> {
+  const validationError = await validateManagedFile(file, "cv");
+  if (validationError) throw new Error(validationError);
   const form = new FormData();
   form.append("file", file);
   const { data } = await api.post<import("@/lib/types").CVMeta>("/candidates/cv", form, {
@@ -325,6 +378,10 @@ export function getCVDownloadUrl(): string {
   return `${getApiBaseUrl()}/candidates/cv`;
 }
 
+export function getCVPreviewUrl(): string {
+  return `${getApiBaseUrl()}/candidates/cv?preview=true`;
+}
+
 export async function getOffers(): Promise<Offer[]> {
   const { data } = await api.get<{ offers: Offer[] }>("/offers");
   return data.offers;
@@ -338,6 +395,15 @@ export async function createOffer(payload: {
   type: "JOB" | "INTERNSHIP";
   description: string;
   requirements: string;
+  location?: string | null;
+  work_mode?: "remote" | "hybrid" | "on-site" | null;
+  required_skills?: string | null;
+  required_experience?: string | null;
+  education_requirements?: string | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  deadline?: string | null;
+  opportunity_status?: "draft" | "active";
 }): Promise<Offer> {
   const { data } = await api.post<Offer>("/offers", payload);
   return data;
@@ -348,9 +414,38 @@ export async function toggleOffer(offerId: string): Promise<Offer> {
   return data;
 }
 
+interface RecommendationPage {
+  recommendations: Recommendation[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export async function initializeRecommendations(): Promise<{ created: number; active_offers: number }> {
+  const { data } = await api.post<{ created: number; active_offers: number }>(
+    "/recommendations/initialize"
+  );
+  return data;
+}
+
 export async function getRecommendations(): Promise<Recommendation[]> {
-  const { data } = await api.get<{ recommendations: Recommendation[] }>("/recommendations");
-  return data.recommendations;
+  // Initialization is intentionally explicit: the paginated GET stays
+  // read-only while concurrent page loads remain safe under a DB unique key.
+  await initializeRecommendations();
+
+  const recommendations: Recommendation[] = [];
+  const limit = 50;
+  let offset = 0;
+  for (;;) {
+    const { data } = await api.get<RecommendationPage>("/recommendations", {
+      params: { limit, offset },
+    });
+    recommendations.push(...data.recommendations);
+    if (!data.has_more || data.recommendations.length === 0) break;
+    offset += data.recommendations.length;
+  }
+  return recommendations;
 }
 
 export interface RecommendationJob {
@@ -395,6 +490,39 @@ export async function getAdminStats(): Promise<AdminStats> {
 export async function getAdminUsers(): Promise<User[]> {
   const { data } = await api.get<{ users: User[] }>("/admin/users");
   return data.users;
+}
+
+export async function createAdminUser(payload: {
+  email: string;
+  password: string;
+  full_name: string;
+  role: "CANDIDATE";
+}): Promise<User> {
+  const { data } = await api.post<User>("/admin/users", payload);
+  return data;
+}
+
+export async function updateAdminUser(
+  userId: string,
+  payload: { email?: string; full_name?: string; is_active?: boolean }
+): Promise<User> {
+  const { data } = await api.patch<User>(`/admin/users/${userId}`, payload);
+  return data;
+}
+
+export async function deactivateAdminUser(userId: string): Promise<AdminMutationResult> {
+  const { data } = await api.delete<AdminMutationResult>(`/admin/users/${userId}`);
+  return data;
+}
+
+export async function getAdminCompanies(): Promise<import("@/lib/types").Company[]> {
+  const { data } = await api.get<{ companies: import("@/lib/types").Company[] }>("/admin/companies");
+  return data.companies;
+}
+
+export async function archiveAdminCompany(companyId: string): Promise<AdminMutationResult> {
+  const { data } = await api.delete<AdminMutationResult>(`/admin/companies/${companyId}`);
+  return data;
 }
 
 export async function getAdminOffers(): Promise<Offer[]> {
@@ -462,14 +590,53 @@ export async function sendMessage(receiverId: string, content: string): Promise<
   return data;
 }
 
+export type ChatMessagePage = {
+  messages: import("@/lib/types").ChatMessage[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+export async function getConversationPage(
+  userId: string,
+  before?: string | null,
+  limit = 50,
+): Promise<ChatMessagePage & Pick<import("@/lib/types").FriendChatContext, "peer" | "can_message" | "relationship_state" | "conversation_type">> {
+  const { data } = await api.get<ChatMessagePage & Pick<import("@/lib/types").FriendChatContext, "peer" | "can_message" | "relationship_state" | "conversation_type">>(`/chat/with/${userId}`, {
+    params: { before: before ?? undefined, limit },
+  });
+  return data;
+}
+
 export async function getConversation(userId: string): Promise<import("@/lib/types").ChatMessage[]> {
-  const { data } = await api.get<{ messages: import("@/lib/types").ChatMessage[] }>(`/chat/with/${userId}`);
-  return data.messages;
+  return (await getConversationPage(userId)).messages;
 }
 
 export async function getConversations(): Promise<{ user: import("@/lib/types").User; last_message: string; last_at: string }[]> {
   const { data } = await api.get<{ conversations: { user: import("@/lib/types").User; last_message: string; last_at: string }[] }>("/chat/conversations");
   return data.conversations;
+}
+
+export async function getCombinedInbox(): Promise<import("@/lib/types").ConversationSummary[]> {
+  const { data } = await api.get<{ conversations: import("@/lib/types").ConversationSummary[] }>("/chat/inbox");
+  return data.conversations;
+}
+
+export async function markFriendMessagesRead(peerId: string): Promise<{ message_ids: string[]; read_at: string | null }> {
+  const { data } = await api.post(`/chat/friends/${peerId}/read`);
+  return data;
+}
+
+export async function createFriendSocketTicket(peerId: string): Promise<{ ticket: string; expires_in_seconds: number }> {
+  const { data } = await api.post(`/chat/friends/${peerId}/socket-ticket`);
+  return data;
+}
+
+export function getFriendWsUrl(peerId: string, ticket: string): string {
+  const base = getApiBaseUrl();
+  const wsBase = base.startsWith("/")
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
+    : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  return `${wsBase}/chat/friends/${peerId}/ws?ticket=${encodeURIComponent(ticket)}`;
 }
 
 export interface CompanyInvitationPayload {
@@ -485,6 +652,8 @@ export async function inviteCompany(payload: CompanyInvitationPayload): Promise<
   invitation_url: string;
   email_sent: boolean;
   email_error?: string;
+  delivery_id?: string | null;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
 }> {
   const { data } = await api.post("/invites/company/invite", payload);
   return data;
@@ -502,6 +671,9 @@ export async function resendCompanyInvitation(id: string): Promise<{
   invitation_id: string;
   invitation_url: string;
   email_sent: boolean;
+  email_error?: string | null;
+  delivery_id?: string | null;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
 }> {
   const { data } = await api.post(`/invites/company/invitations/${id}/resend`);
   return data;
@@ -527,11 +699,21 @@ export async function acceptCompanyInvite(payload: { token: string; password: st
   const { data } = await api.post("/invites/company/accept", payload);
   return data;
 }
-export async function inviteEmployee(payload: { email: string; role: string }): Promise<{ detail: string }> {
+export interface EmployeeInvitationDelivery {
+  detail: string;
+  invitation_id: string;
+  invitation_url: string;
+  email_sent: boolean;
+  email_error?: string | null;
+  delivery_id?: string | null;
+  delivery_status: "pending" | "processing" | "retry" | "sent" | "failed";
+}
+
+export async function inviteEmployee(payload: { email: string; role: string }): Promise<EmployeeInvitationDelivery> {
   const { data } = await api.post("/invites/employee/invite", payload);
   return data;
 }
-export async function listEmployeeInvitations(): Promise<{ invitations: { id: string; email: string; role: string; status: string; expires_at: string }[] }> {
+export async function listEmployeeInvitations(): Promise<{ invitations: import("@/lib/types").EmployeeInvitation[] }> {
   const { data } = await api.get("/invites/employee/invitations");
   return data;
 }
@@ -551,16 +733,125 @@ export async function validateEmployeeInvite(token: string): Promise<{ email: st
   const { data } = await api.get("/invites/employee/validate", { params: { token } });
   return data;
 }
-export async function resendEmployeeInvite(invitation_id: string): Promise<{ detail: string; invitation_id: string }> {
+export async function resendEmployeeInvite(invitation_id: string): Promise<EmployeeInvitationDelivery> {
   const { data } = await api.post("/invites/employee/resend", { invitation_id });
+  return data;
+}
+
+export async function listFriends(sort: "name" | "recent" = "name"): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends", { params: { sort, limit: 100, offset: 0 } });
+  return data;
+}
+
+export async function searchPeople(query: string, offset = 0): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends/search", { params: { q: query, limit: 20, offset } });
+  return data;
+}
+
+export async function sendFriendRequest(friendId: string): Promise<import("@/lib/types").FriendRequest> {
+  const { data } = await api.post(`/friends/requests/${friendId}`);
+  return data;
+}
+
+export const addFriend = sendFriendRequest;
+
+export async function listIncomingFriendRequests(): Promise<{ requests: import("@/lib/types").FriendRequest[]; total: number }> {
+  const { data } = await api.get("/friends/requests/incoming");
+  return data;
+}
+
+export async function listSentFriendRequests(): Promise<{ requests: import("@/lib/types").FriendRequest[]; total: number }> {
+  const { data } = await api.get("/friends/requests/sent");
+  return data;
+}
+
+export async function listBlockedCandidates(): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends/blocked");
+  return data;
+}
+
+export async function acceptFriendRequest(requestId: string): Promise<import("@/lib/types").FriendRequest> {
+  const { data } = await api.post(`/friends/requests/${requestId}/accept`);
+  return data;
+}
+
+export async function declineFriendRequest(requestId: string): Promise<void> {
+  await api.delete(`/friends/requests/${requestId}/decline`);
+}
+
+export async function cancelFriendRequest(requestId: string): Promise<void> {
+  await api.delete(`/friends/requests/${requestId}/cancel`);
+}
+
+export async function removeFriend(friendId: string): Promise<void> {
+  await api.delete(`/friends/${friendId}`);
+}
+
+export async function blockCandidate(friendId: string): Promise<void> {
+  await api.post(`/friends/${friendId}/block`);
+}
+
+export async function unblockCandidate(friendId: string): Promise<void> {
+  await api.delete(`/friends/${friendId}/block`);
+}
+
+export async function getPublicCandidateProfile(candidateId: string): Promise<import("@/lib/types").FriendItem> {
+  const { data } = await api.get(`/friends/${candidateId}/profile`);
+  return data;
+}
+
+export async function sendPresenceHeartbeat(connectionId: string): Promise<void> {
+  await api.post("/friends/presence/heartbeat", { connection_id: connectionId });
+}
+
+const PRESENCE_CONNECTION_KEY = "coditent_presence_connection";
+
+export function getPresenceConnectionId(): string {
+  if (typeof window === "undefined") return "server-render";
+  const existing = window.sessionStorage.getItem(PRESENCE_CONNECTION_KEY);
+  if (existing) return existing;
+  const connectionId = window.crypto.randomUUID();
+  window.sessionStorage.setItem(PRESENCE_CONNECTION_KEY, connectionId);
+  return connectionId;
+}
+
+export async function endPresence(connectionId: string): Promise<void> {
+  await api.delete("/friends/presence", {
+    data: { connection_id: connectionId },
+  });
+}
+
+export async function listMissions(filters?: { field?: string; level?: string }): Promise<import("@/lib/types").PracticeMission[]> {
+  const { data } = await api.get<{ missions: import("@/lib/types").PracticeMission[] }>("/missions", { params: filters });
+  return data.missions;
+}
+
+export async function getMissionProgress(): Promise<import("@/lib/types").MissionProgress> {
+  const { data } = await api.get<import("@/lib/types").MissionProgress>("/missions/progress/me");
+  return data;
+}
+
+export async function submitMissionAttempt(missionId: string, evidence: string): Promise<import("@/lib/types").MissionAttempt> {
+  const { data } = await api.post<import("@/lib/types").MissionAttempt>(`/missions/${missionId}/attempts`, { evidence });
+  return data;
+}
+
+export async function createMission(payload: { field: string; level: string; title: string; description: string; evidence_prompt: string; skills: string[] }): Promise<import("@/lib/types").PracticeMission> {
+  const { data } = await api.post<import("@/lib/types").PracticeMission>("/missions", payload);
+  return data;
+}
+
+export async function listPendingMissionAttempts(): Promise<import("@/lib/types").MissionReviewQueueItem[]> {
+  const { data } = await api.get<{ attempts: import("@/lib/types").MissionReviewQueueItem[] }>("/missions/attempts/pending");
+  return data.attempts;
+}
+
+export async function reviewMissionAttempt(attemptId: string, payload: { expected_version: number; status: "validated" | "rejected"; score: number; validated_skills: string[]; feedback: string }): Promise<import("@/lib/types").MissionAttempt> {
+  const { data } = await api.patch<import("@/lib/types").MissionAttempt>(`/missions/attempts/${attemptId}/review`, payload);
   return data;
 }
 export async function getApplications(): Promise<{ applications: { id: string; status: string }[] }> {
   const { data } = await api.get("/applications");
-  return data;
-}
-export async function getAssessments(): Promise<{ assessments: { id: string; status: string }[] }> {
-  const { data } = await api.get("/assessments");
   return data;
 }
 export async function getAuditLogs(): Promise<{ logs: { id: string; action: string; details: string | null; created_at: string }[] }> {
@@ -582,22 +873,30 @@ export async function updateCompany(
 
 export async function getCompanySubscription(
   companyId: string
-): Promise<{ company_id: string; status: string; owner_id: string | null }> {
-  const { data } = await api.get(`/companies/${companyId}/subscription`);
+): Promise<import("@/lib/types").CompanySubscription> {
+  const { data } = await api.get<import("@/lib/types").CompanySubscription>(`/companies/${companyId}/subscription`);
+  return data;
+}
+
+export async function updateAdminCompanySubscription(
+  companyId: string,
+  payload: {
+    plan: "free" | "pro" | "enterprise";
+    subscription_status: "trialing" | "active" | "past_due" | "canceled";
+    expires_at?: string | null;
+  }
+): Promise<import("@/lib/types").CompanySubscription> {
+  const { data } = await api.patch<import("@/lib/types").CompanySubscription>(
+    `/admin/companies/${companyId}/subscription`,
+    payload
+  );
   return data;
 }
 
 export const COMPANY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
-const COMPANY_LOGO_EXTENSIONS = ["png", "jpg", "jpeg", "webp"] as const;
 
 export function validateCompanyLogoFile(file: File): string | null {
-  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
-  if (!(COMPANY_LOGO_EXTENSIONS as readonly string[]).includes(ext)) {
-    return "Invalid file type. Only PNG, JPG, and WebP are supported.";
-  }
-  if (file.size <= 0) return "Empty file.";
-  if (file.size > COMPANY_LOGO_MAX_BYTES) return "File too large. Maximum size is 2MB.";
-  return null;
+  return validateManagedFileMetadata(file, "logo");
 }
 
 /** Public stream URL for a company logo. Null when the company has no logo (caller shows initials). */
@@ -620,7 +919,7 @@ export async function uploadCompanyLogo(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<{ logo_url: string; filename?: string | null; content_type?: string | null; size_bytes?: number | null }> {
-  const validationError = validateCompanyLogoFile(file);
+  const validationError = await validateManagedFile(file, "logo");
   if (validationError) throw new Error(validationError);
   const formData = new FormData();
   formData.append("file", file, file.name);
@@ -644,9 +943,20 @@ export async function getApplication(id: string): Promise<import("@/lib/types").
 
 export async function updateApplicationStatus(
   id: string,
-  status: string
-): Promise<{ id: string; status: string }> {
-  const { data } = await api.patch(`/applications/${id}`, { status });
+  status: string,
+  expectedVersion: number,
+  interview?: { scheduledAt: string; notes?: string }
+): Promise<{ id: string; status: string; stage_version: number; chat_enabled: boolean }> {
+  const { data } = await api.patch(`/applications/${id}`, {
+    status,
+    expected_version: expectedVersion,
+    ...(interview
+      ? {
+          interview_scheduled_at: interview.scheduledAt,
+          interview_notes: interview.notes || null,
+        }
+      : {}),
+  });
   return data;
 }
 
@@ -654,11 +964,6 @@ export async function retryApplicationScreening(
   id: string
 ): Promise<{ id: string; ai_status: string }> {
   const { data } = await api.post(`/applications/${id}/screen`);
-  return data;
-}
-
-export async function getAssessment(id: string): Promise<import("@/lib/types").AssessmentItem> {
-  const { data } = await api.get(`/assessments/${id}`);
   return data;
 }
 
@@ -678,7 +983,25 @@ export async function setResponsibleHr(offerId: string, responsibleHrId: string)
 }
 
 export async function getRecruitmentChat(applicationId: string): Promise<import("@/lib/types").RecruitmentChatContext> {
-  const { data } = await api.get(`/chat/recruitment/${applicationId}`);
+  const { data } = await api.get<import("@/lib/types").RecruitmentChatContext>(`/chat/recruitment/${applicationId}`);
+  if (!data.chat_enabled) return data;
+  const page = await getRecruitmentMessagesPage(applicationId);
+  return {
+    ...data,
+    messages: page.messages,
+    next_cursor: page.next_cursor,
+    has_more: page.has_more,
+  };
+}
+
+export async function getRecruitmentMessagesPage(
+  applicationId: string,
+  before?: string | null,
+  limit = 50,
+): Promise<ChatMessagePage> {
+  const { data } = await api.get<ChatMessagePage>(`/chat/recruitment/${applicationId}/messages`, {
+    params: { before: before ?? undefined, limit },
+  });
   return data;
 }
 
@@ -687,16 +1010,176 @@ export async function sendRecruitmentMessage(applicationId: string, content: str
   return data;
 }
 
+export async function markRecruitmentMessagesRead(
+  applicationId: string,
+): Promise<{ message_ids: string[]; read_at: string | null }> {
+  const { data } = await api.post<{ message_ids: string[]; read_at: string | null }>(
+    `/chat/recruitment/${applicationId}/read`,
+  );
+  return data;
+}
+
 export async function listRecruitmentChats(): Promise<import("@/lib/types").RecruitmentChatListItem[]> {
   const { data } = await api.get<{ recruitment_chats: import("@/lib/types").RecruitmentChatListItem[] }>("/chat/recruitment");
   return data.recruitment_chats;
 }
 
-export function getRecruitmentWsUrl(applicationId: string): string {
+export async function createRecruitmentSocketTicket(
+  applicationId: string,
+): Promise<{ ticket: string; expires_in_seconds: number }> {
+  const { data } = await api.post<{ ticket: string; expires_in_seconds: number }>(
+    `/chat/recruitment/${applicationId}/socket-ticket`,
+  );
+  return data;
+}
+
+export function getRecruitmentWsUrl(applicationId: string, ticket: string): string {
   const base = getApiBaseUrl();
-  const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
-  const wsBase = base.startsWith("/api-proxy")
-    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api-proxy`
-    : base.replace(/^http/, "ws");
-  return `${wsBase}/chat/recruitment/${applicationId}/ws?token=${encodeURIComponent(token ?? "")}`;
+  const wsBase = base.startsWith("/")
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
+    : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  return `${wsBase}/chat/recruitment/${applicationId}/ws?ticket=${encodeURIComponent(ticket)}`;
+}
+
+export async function listNotifications(page = 1, unreadOnly = false): Promise<import("@/lib/types").NotificationPage> {
+  const { data } = await api.get<import("@/lib/types").NotificationPage>("/notifications", {
+    params: { page, limit: 25, unread_only: unreadOnly },
+  });
+  return data;
+}
+
+export async function getNotificationUnreadCount(): Promise<number> {
+  const { data } = await api.get<{ unread: number }>("/notifications/unread");
+  return data.unread;
+}
+
+export async function markNotificationRead(id: string): Promise<import("@/lib/types").ProductNotification> {
+  const { data } = await api.patch<import("@/lib/types").ProductNotification>(`/notifications/${id}/read`);
+  return data;
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await api.post("/notifications/read-all");
+}
+
+export async function getNotificationPreferences(): Promise<import("@/lib/types").NotificationPreferences> {
+  const { data } = await api.get<import("@/lib/types").NotificationPreferences>("/notifications/preferences/me");
+  return data;
+}
+
+export async function updateNotificationPreferences(
+  preferences: Omit<import("@/lib/types").NotificationPreferences, "user_id" | "updated_at">,
+): Promise<import("@/lib/types").NotificationPreferences> {
+  const { data } = await api.put<import("@/lib/types").NotificationPreferences>(
+    "/notifications/preferences/me",
+    preferences,
+  );
+  return data;
+}
+
+export async function listInterviewFeedback(applicationId: string): Promise<import("@/lib/types").InterviewFeedback[]> {
+  const { data } = await api.get<{ feedback: import("@/lib/types").InterviewFeedback[] }>(
+    `/applications/${applicationId}/interview-feedback`,
+  );
+  return data.feedback;
+}
+
+export async function createInterviewFeedback(
+  applicationId: string,
+  payload: {
+    rating: number;
+    recommendation: import("@/lib/types").InterviewRecommendation;
+    strengths: string;
+    concerns?: string | null;
+    notes?: string | null;
+  },
+): Promise<import("@/lib/types").InterviewFeedback> {
+  const { data } = await api.post<import("@/lib/types").InterviewFeedback>(
+    `/applications/${applicationId}/interview-feedback`,
+    payload,
+  );
+  return data;
+}
+
+export async function updateInterviewFeedback(
+  applicationId: string,
+  feedbackId: string,
+  payload: {
+    expected_version: number;
+    rating: number;
+    recommendation: import("@/lib/types").InterviewRecommendation;
+    strengths: string;
+    concerns?: string | null;
+    notes?: string | null;
+  },
+): Promise<import("@/lib/types").InterviewFeedback> {
+  const { data } = await api.patch<import("@/lib/types").InterviewFeedback>(
+    `/applications/${applicationId}/interview-feedback/${feedbackId}`,
+    payload,
+  );
+  return data;
+}
+
+export async function downloadAccountData(payload: { current_password: string; two_factor_code?: string; format: "json" | "csv" | "xml" }): Promise<Blob> {
+  const response = await api.post("/auth/account/data-export", payload, { responseType: "blob" });
+  return response.data as Blob;
+}
+
+export async function importAccountData(payload: {
+  current_password: string;
+  two_factor_code?: string;
+  profile: Record<string, unknown>;
+}): Promise<{ updated_fields: string[]; detail: string }> {
+  const { data } = await api.post<{ updated_fields: string[]; detail: string }>("/auth/account/data-import", payload);
+  return data;
+}
+
+export async function getAccountDeletion(): Promise<import("@/lib/types").AccountDeletionRequest | null> {
+  try {
+    const { data } = await api.get<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion");
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function scheduleAccountDeletion(payload: { current_password: string; two_factor_code?: string; confirmation: "DELETE" }): Promise<import("@/lib/types").AccountDeletionRequest> {
+  const { data } = await api.post<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion", payload);
+  return data;
+}
+
+export async function cancelAccountDeletion(payload: { current_password: string; two_factor_code?: string }): Promise<import("@/lib/types").AccountDeletionRequest> {
+  const { data } = await api.delete<import("@/lib/types").AccountDeletionRequest>("/auth/account/deletion", { data: payload });
+  return data;
+}
+
+export async function listInstitutions(): Promise<import("@/lib/types").Institution[]> {
+  const { data } = await api.get<{ institutions: import("@/lib/types").Institution[] }>("/institutions");
+  return data.institutions;
+}
+
+export async function createInstitution(payload: { name: string; domain?: string | null; license_plan: string; seat_limit: number }): Promise<import("@/lib/types").Institution> {
+  const { data } = await api.post<import("@/lib/types").Institution>("/institutions", payload);
+  return data;
+}
+
+export async function updateInstitutionLicense(id: string, payload: { status: string; license_plan: string; seat_limit: number; license_expires_at?: string | null }): Promise<import("@/lib/types").Institution> {
+  const { data } = await api.patch<import("@/lib/types").Institution>(`/institutions/${id}/license`, payload);
+  return data;
+}
+
+export async function listInstitutionMembers(id: string): Promise<{ institution: import("@/lib/types").Institution; members: import("@/lib/types").InstitutionMember[] }> {
+  const { data } = await api.get(`/institutions/${id}/members`);
+  return data;
+}
+
+export async function addInstitutionMember(id: string, payload: { email: string; role: string }): Promise<import("@/lib/types").InstitutionMember> {
+  const { data } = await api.post<import("@/lib/types").InstitutionMember>(`/institutions/${id}/members`, payload);
+  return data;
+}
+
+export async function removeInstitutionMember(institutionId: string, membershipId: string): Promise<import("@/lib/types").InstitutionMember> {
+  const { data } = await api.delete<import("@/lib/types").InstitutionMember>(`/institutions/${institutionId}/members/${membershipId}`);
+  return data;
 }

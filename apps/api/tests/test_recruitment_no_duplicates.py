@@ -18,6 +18,7 @@ Run (needs Supabase, same as test_recruitment_chat.py):
 """
 import asyncio
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -238,12 +239,15 @@ async def test_1_apply_creates_no_duplicate_chat(client, flow):
 
 @pytest.mark.asyncio
 async def test_2_accept_creates_conversation_once(client, flow):
-    r = await client.patch(
-        f"/applications/{flow['application'].id}",
-        json={"status": "shortlisted"},
-        headers=auth(flow["hr"]),
-    )
-    assert r.status_code == 200, r.text
+    version = flow["application"].stage_version
+    for stage in ("under_review", "shortlisted"):
+        r = await client.patch(
+            f"/applications/{flow['application'].id}",
+            json={"status": stage, "expected_version": version},
+            headers=auth(flow["hr"]),
+        )
+        assert r.status_code == 200, r.text
+        version = r.json()["stage_version"]
     entries = await _recruitment_entries(client, flow["cand"])
     mine = [e for e in entries if e["application_id"] == str(flow["application"].id)]
     assert len(mine) == 1
@@ -252,14 +256,20 @@ async def test_2_accept_creates_conversation_once(client, flow):
 
 @pytest.mark.asyncio
 async def test_3_stage_changes_reuse_same_conversation(client, flow):
-    for stage in ["shortlisted", "interview", "accepted"]:
+    version = flow["application"].stage_version
+    for stage in ["under_review", "shortlisted", "interview", "accepted"]:
+        payload = {"status": stage, "expected_version": version}
+        if stage == "interview":
+            payload["interview_scheduled_at"] = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
         r = await client.patch(
             f"/applications/{flow['application'].id}",
-            json={"status": stage},
+            json=payload,
             headers=auth(flow["hr"]),
         )
         assert r.status_code == 200, r.text
         assert r.json()["id"] == str(flow["application"].id)
+        assert r.json()["stage_version"] == version + 1
+        version = r.json()["stage_version"]
     entries = await _recruitment_entries(client, flow["cand"])
     mine = [e for e in entries if e["application_id"] == str(flow["application"].id)]
     assert len(mine) == 1
@@ -268,13 +278,20 @@ async def test_3_stage_changes_reuse_same_conversation(client, flow):
 
 @pytest.mark.asyncio
 async def test_4_repeat_same_stage_update_is_idempotent(client, flow):
+    await _set_status(flow["application"].id, "shortlisted")
+    version = flow["application"].stage_version
     for _ in range(3):
         r = await client.patch(
             f"/applications/{flow['application'].id}",
-            json={"status": "interview"},
+            json={
+                "status": "interview", "expected_version": version,
+                "interview_scheduled_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            },
             headers=auth(flow["hr"]),
         )
         assert r.status_code == 200, r.text
+        assert r.json()["stage_version"] == flow["application"].stage_version + 1
+        version = r.json()["stage_version"]
     entries = await _recruitment_entries(client, flow["cand"])
     mine = [e for e in entries if e["application_id"] == str(flow["application"].id)]
     assert len(mine) == 1
@@ -289,12 +306,19 @@ async def test_5_concurrent_stage_updates_single_conversation(client, flow):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
             return await c.patch(
                 f"/applications/{flow['application'].id}",
-                json={"status": stage},
+                json={
+                    "status": stage, "expected_version": flow["application"].stage_version,
+                    "interview_scheduled_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+                },
                 headers=auth(flow["hr"]),
             )
 
     results = await asyncio.gather(_move("interview"), _move("interview"))
-    assert all(r.status_code == 200 for r in results), [r.text for r in results]
+    # Both requests submit the same version. The row lock lets one win and
+    # returns a conflict to the stale writer without duplicating the thread.
+    assert sorted(r.status_code for r in results) == [200, 409], [r.text for r in results]
+    conflict = next(r for r in results if r.status_code == 409)
+    assert conflict.json()["detail"]["code"] == "STALE_APPLICATION_STAGE"
     entries = await _recruitment_entries(client, flow["cand"])
     mine = [e for e in entries if e["application_id"] == str(flow["application"].id)]
     assert len(mine) == 1
@@ -333,12 +357,14 @@ async def test_6_direct_stays_separate_and_recruitment_does_not_leak(client, flo
     r = await client.get("/chat/conversations", headers=auth(flow["cand"]))
     assert r.status_code == 200
     assert r.json()["conversations"] == []
+    # Direct friend threads are candidate-only. A recruiter ID must not open a
+    # parallel general thread; the application-scoped route remains canonical.
     r = await client.get(f"/chat/with/{flow['hr'].id}", headers=auth(flow["cand"]))
-    assert r.status_code == 200
-    assert r.json()["messages"] == []
+    assert r.status_code == 404
 
-    # A real direct message (application_id NULL) stays a separate thread and
-    # never merges into / changes the recruitment conversation.
+    # Even a legacy application-less candidate-to-recruiter row must not create
+    # a friend thread. Friend conversations are candidate-to-candidate and must
+    # also have an accepted friendship.
     async def _insert_direct():
         async with AsyncSessionLocal() as db:
             db.add(ChatMessage(
@@ -352,10 +378,9 @@ async def test_6_direct_stays_separate_and_recruitment_does_not_leak(client, flo
     await _with_db_retries("insert.direct", _insert_direct)
     r = await client.get("/chat/conversations", headers=auth(flow["cand"]))
     assert r.status_code == 200
-    assert len(r.json()["conversations"]) == 1
-    assert r.json()["conversations"][0]["last_message"] == "hello direct"
+    assert r.json()["conversations"] == []
     r = await client.get(f"/chat/with/{flow['hr'].id}", headers=auth(flow["cand"]))
-    assert [m["content"] for m in r.json()["messages"]] == ["hello direct"]
+    assert r.status_code == 404
     # Recruitment side untouched.
     entries = await _recruitment_entries(client, flow["cand"])
     mine = [e for e in entries if e["application_id"] == str(flow["application"].id)]
@@ -374,9 +399,9 @@ async def test_7_messages_survive_stage_moves(client, flow):
         )
         assert r.status_code == 200, r.text
     # Move through the pipeline: history (timestamps + senders) preserved.
-    for stage in ["interview", "accepted", "assessment_completed"]:
+    for stage in ["shortlisted", "interview", "accepted"]:
         await _set_status(flow["application"].id, stage)
-        # Re-enable chat-gated stages for readability; assessment_completed
+        # Re-enable chat-gated stages for readability; accepted
         # keeps chat enabled as well.
         r = await client.get(f"/chat/recruitment/{flow['application'].id}", headers=auth(flow["cand"]))
         assert r.status_code == 200

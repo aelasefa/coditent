@@ -1,26 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import axios from "axios";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FiArrowRight, FiCheck, FiFileText, FiTrash2, FiUpload, FiX } from "react-icons/fi";
 import {
   deleteCV,
-  getAssessments,
   getCVMeta,
   getCVDownloadUrl,
+  getCVPreviewUrl,
   getMe,
   getProfile,
+  generateProfileBio,
+  generateProfileHeadline,
   parseCV,
-  updateAvatar,
+  uploadAvatar,
   updateProfile,
   uploadCV,
 } from "@/lib/api";
 import type { CVExtracted } from "@/lib/types";
 import { isQualityBio } from "@/lib/bio-utils";
+import { validateManagedFile } from "@/lib/file-validation";
 import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -91,9 +95,13 @@ export default function ProfileBuilderPage() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUploadProgress, setPhotoUploadProgress] = useState(0);
   const [skills, setSkills] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState<"headline" | "bio" | null>(null);
-  const [cvMeta, setCvMeta] = useState<{ filename?: string | null } | null>(null);
+  const [cvMeta, setCvMeta] = useState<{
+    filename?: string | null;
+    content_type?: string | null;
+  } | null>(null);
   const [cvProgress, setCvProgress] = useState(0);
   const [cvBusy, setCvBusy] = useState<"idle" | "uploading" | "parsing">("idle");
   const [cvError, setCvError] = useState<string | null>(null);
@@ -135,11 +143,6 @@ export default function ProfileBuilderPage() {
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: getProfile });
   const userQuery = useQuery({ queryKey: ["me"], queryFn: getMe });
   const cvMetaQuery = useQuery({ queryKey: ["cv-meta"], queryFn: getCVMeta, retry: false });
-  const assessmentsQuery = useQuery({
-    queryKey: ["my-assessments"],
-    queryFn: getAssessments,
-    retry: false,
-  });
 
   useEffect(() => {
     if (cvMetaQuery.data) setCvMeta(cvMetaQuery.data);
@@ -169,6 +172,7 @@ export default function ProfileBuilderPage() {
     mutationFn: updateProfile,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
       toast("Profile updated", { variant: "success" });
     },
     onError: (err: unknown) => {
@@ -184,22 +188,30 @@ export default function ProfileBuilderPage() {
     }
     setAiLoading("headline");
     try {
-      const res = await fetch("/api/ai/generate-headline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skills, fieldOfStudy: form.getValues("field_of_study") }),
+      const data = await generateProfileHeadline({
+        skills,
+        field_of_study: form.getValues("field_of_study"),
       });
-      const data = await res.json();
       if (data.headline) form.setValue("headline", String(data.headline).slice(0, 120), { shouldDirty: true });
       else toast("AI headline failed", { description: "No headline returned.", variant: "error" });
-    } catch {
-      toast("AI headline failed", { description: "Retry or write headline manually.", variant: "error" });
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        const code = error.response.data?.detail?.code;
+        const dailyLimit = typeof code === "string" && (code.includes("QUOTA") || code.includes("BUDGET"));
+        toast("AI usage limit reached", {
+          description: dailyLimit
+            ? "You’ve reached your daily AI limit. Please try again after it resets."
+            : "Too many AI requests are running. Please wait a moment and try again.",
+          variant: "warning",
+        });
+      } else {
+        toast("AI headline failed", { description: "Retry or write headline manually.", variant: "error" });
+      }
     } finally {
       setAiLoading(null);
     }
   };
 
-  const BIO_REQUEST_TIMEOUT_MS = 45000;
   const bioGenRef = useRef(false);
 
   const handleGenerateBio = async () => {
@@ -212,44 +224,25 @@ export default function ProfileBuilderPage() {
       return;
     }
     setAiLoading("bio");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), BIO_REQUEST_TIMEOUT_MS);
     try {
-      const res = await fetch("/api/ai/generate-bio", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          skills,
-          fieldOfStudy: form.getValues("field_of_study"),
-          headline: form.getValues("headline"),
-        }),
-        signal: controller.signal,
+      const data = await generateProfileBio({
+        skills,
+        field_of_study: form.getValues("field_of_study"),
+        headline: form.getValues("headline"),
       });
-      let data: { success?: boolean; bio?: unknown; error?: unknown } | null = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-      // Contract: { success: true, bio } — legacy keys normalized intentionally.
-      // Client-side quality defense: server already validates, never trust blindly.
-      const raw = data && typeof data === "object" ? (data.bio ?? (data as Record<string, unknown>)["text"] ?? (data as Record<string, unknown>)["result"] ?? (data as Record<string, unknown>)["content"] ?? "") : "";
+      const raw = data.bio;
       const bio = typeof raw === "string" ? raw.trim() : "";
-      if (res.ok && data && (data as { success?: boolean }).success !== false && isQualityBio(bio)) {
+      if (data.success !== false && isQualityBio(bio)) {
         form.setValue("bio", bio.slice(0, 500), { shouldDirty: true });
         form.clearErrors("bio");
       } else {
-        const serverMsg = data && typeof data === "object" && typeof (data as Record<string, unknown>)["error"] === "string" ? String((data as Record<string, unknown>)["error"]) : "";
-        toast("Could not generate your bio. Please try again.", { description: serverMsg || undefined, variant: "error" });
+        toast("Could not generate your bio. Please try again.", { variant: "error" });
       }
-    } catch (error) {
-      const timedOut = error instanceof Error && error.name === "AbortError";
-      const offline = error instanceof TypeError;
-      toast(timedOut ? "Bio generation timed out. Please try again." : offline ? "Unable to connect to the server. Please check your connection and try again." : "Could not generate your bio. Please try again.", {
+    } catch {
+      toast("Could not generate your bio. Please try again.", {
         variant: "error",
       });
     } finally {
-      clearTimeout(timeout);
       bioGenRef.current = false;
       setAiLoading(null);
     }
@@ -302,13 +295,10 @@ export default function ProfileBuilderPage() {
     if (!file) return;
     setCvError(null);
     setCvOk(null);
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "pdf" && ext !== "docx") {
-      setCvError("Invalid file type. Only PDF and DOCX are supported.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setCvError("File too large. Maximum size is 5MB.");
+    const validationError = await validateManagedFile(file, "cv");
+    if (validationError) {
+      setCvError(validationError);
+      e.target.value = "";
       return;
     }
     setCvBusy("uploading");
@@ -367,12 +357,16 @@ export default function ProfileBuilderPage() {
     try {
       if (photoFile && photoPreview) {
         try {
-          const savedUser = await updateAvatar(photoPreview);
+          setPhotoUploadProgress(1);
+          const savedUser = await uploadAvatar(photoFile, setPhotoUploadProgress);
           queryClient.setQueryData(["me"], savedUser);
           setPhotoFile(null);
           setAvatarPreview(null);
+          setPhotoPreview(savedUser.avatar_url ?? null);
+          setPhotoUploadProgress(0);
           if (photoFileRef.current) photoFileRef.current.value = "";
         } catch {
+          setPhotoUploadProgress(0);
           toast("Could not save photo", { description: "Please try again.", variant: "error" });
           return;
         }
@@ -406,12 +400,13 @@ export default function ProfileBuilderPage() {
     window.setTimeout(() => form.setFocus(first), 0);
   });
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
-      toast("Choose an image under 2 MB", { variant: "warning" });
+    const validationError = await validateManagedFile(file, "avatar");
+    if (validationError) {
+      toast(validationError, { variant: "warning" });
       input.value = "";
       return;
     }
@@ -469,14 +464,6 @@ export default function ProfileBuilderPage() {
 
   const fullName = userQuery.data?.full_name ?? "Candidate";
   const loading = profileQuery.isLoading || userQuery.isLoading;
-  const assessmentStatuses = useMemo(() => {
-    const list = assessmentsQuery.data?.assessments ?? [];
-    const counts: Record<string, number> = {};
-    list.forEach((a) => {
-      counts[a.status] = (counts[a.status] ?? 0) + 1;
-    });
-    return { total: list.length, counts };
-  }, [assessmentsQuery.data]);
 
   const active = PROFILE_SECTIONS.find((section) => section.id === activeSection)!;
   const hasDraft = form.formState.isDirty || Boolean(photoFile);
@@ -506,10 +493,6 @@ export default function ProfileBuilderPage() {
       document.removeEventListener("click", onLinkClick, true);
     };
   }, [hasDraft]);
-  const assessmentSummary = Object.entries(assessmentStatuses.counts)
-    .map(([status, count]) => `${count} ${status.replace(/_/g, " ")}`)
-    .join(" · ");
-
   return (
     <PageContainer variant="wide" className={styles.profilePage}>
       <section className={styles.profileIntro} aria-labelledby="profile-heading">
@@ -524,9 +507,9 @@ export default function ProfileBuilderPage() {
             </div>
           </div>
           <div className={styles.profileIntroActions}>
-            <input ref={photoFileRef} type="file" accept="image/*" onChange={handlePhotoChange} className="sr-only" aria-label="Choose profile photo" />
+            <input ref={photoFileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhotoChange} className="sr-only" aria-label="Choose profile photo" />
             <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => photoFileRef.current?.click()}>Change photo</Button>
-            <span>Image up to 2 MB</span>
+            <span>{photoUploadProgress > 0 ? `Uploading ${photoUploadProgress}%` : "PNG, JPG, or WebP up to 2 MB"}</span>
           </div>
         </div>
         <ProfileArtwork />
@@ -553,11 +536,6 @@ export default function ProfileBuilderPage() {
               <div className={styles.statusValue}><FiFileText aria-hidden /><strong className={styles.statusText}>{hasCv ? "Ready to use" : "Add your CV"}</strong></div>
               <p className={styles.truncate}>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "PDF or DOCX · up to 5 MB"}</p>
               <button type="button" onClick={() => setActiveSection("documents")} className={styles.statusLink}>Manage CV <FiArrowRight aria-hidden /></button>
-            </div>
-            <div className={styles.statusItem}>
-              <span className={styles.statusLabel}>Assessments</span>
-              <div className={styles.statusValue}><strong>{assessmentStatuses.total}</strong><span>assigned</span></div>
-              <p>{assessmentsQuery.isLoading ? "Loading assessment activity" : assessmentSummary || "No assessments assigned yet."}</p>
             </div>
           </section>
 
@@ -649,7 +627,10 @@ export default function ProfileBuilderPage() {
                     <div className={styles.documentCurrent}>
                       <FiFileText aria-hidden />
                       <div><strong>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "No CV uploaded"}</strong><p>{hasCv ? "This CV is available when you apply." : "Upload a PDF or DOCX file to make applying easier."}</p></div>
-                      {hasCv && profileQuery.data?.cv_url ? <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a> : null}
+                      {hasCv && profileQuery.data?.cv_url ? <div className="flex items-center gap-3">
+                        {cvMeta?.content_type === "application/pdf" ? <a href={getCVPreviewUrl()} target="_blank" rel="noreferrer noopener">Preview</a> : null}
+                        <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a>
+                      </div> : null}
                     </div>
                     <input ref={cvFileRef} type="file" accept=".pdf,.docx" onChange={handleCVSelect} className="sr-only" aria-label="Choose CV file" />
                     <div className={styles.documentActions}>

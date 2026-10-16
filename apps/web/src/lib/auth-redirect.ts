@@ -16,7 +16,7 @@ export function getAuthenticatedDestination(
   if (user.role === "COMPANY_USER") return "/company";
   if (user.role === "RECRUITER") {
     if (options.isNewRegistration && !user.is_approved) return "/pending-approval";
-    return "/recruiter";
+    return "/companies";
   }
   return "/dashboard";
 }

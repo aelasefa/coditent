@@ -23,4 +23,4 @@ echo "Docs: http://127.0.0.1:3001/docs"
 echo "Health: http://127.0.0.1:3001/health"
 
 echo "[5/5] Running uvicorn..."
-exec uvicorn app.main:app --reload --port 3001
+exec uvicorn app.main:app --reload --port 3001 --no-access-log

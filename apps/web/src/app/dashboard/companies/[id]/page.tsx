@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FiArrowLeft, FiArrowUpRight } from "react-icons/fi";
 import { PageContainer } from "@/components/shell/page-container";
@@ -19,19 +20,27 @@ function websiteUrl(value: string | null | undefined): string | null {
   }
 }
 
-export default function CandidateCompanyProfilePage({ params, searchParams }: { params: { id: string }; searchParams?: { app?: string; from?: string } }) {
+export default function CandidateCompanyProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ app?: string; from?: string }>;
+}) {
+  const { id } = use(params);
+  const query = use(searchParams);
   const companyQuery = useQuery({
-    queryKey: ["company-profile", params.id],
-    queryFn: () => getCompany(params.id),
+    queryKey: ["company-profile", id],
+    queryFn: () => getCompany(id),
     retry: false,
   });
   const company = companyQuery.data;
   const website = websiteUrl(company?.website);
-  const fromDiscover = searchParams?.from === "discover";
+  const fromDiscover = query.from === "discover";
   const backHref = fromDiscover
     ? "/dashboard/recommendations"
-    : searchParams?.app
-      ? `/dashboard/applications?app=${encodeURIComponent(searchParams.app)}`
+    : query.app
+      ? `/dashboard/applications?app=${encodeURIComponent(query.app)}`
       : "/dashboard/applications";
   const backLabel = fromDiscover ? "Back to Discover" : "Back to applications";
   const facts = company ? [

@@ -11,9 +11,9 @@ import {
   completeCandidateOnboarding,
   getCandidateOnboarding,
   getMe,
+  logoutSession,
   saveCandidateOnboardingStep,
 } from "@/lib/api";
-import { removeToken } from "@/lib/auth";
 import { categories } from "@/lib/categories";
 import type { OnboardingState } from "@/lib/types";
 import styles from "./get-started.module.css";
@@ -109,7 +109,7 @@ export default function GetStartedPage() {
       .then(([user, state]) => {
         if (!active) return;
         if (user.role !== "CANDIDATE") {
-          router.replace(user.role === "COMPANY_USER" ? "/company/invitations" : user.role.includes("ADMIN") ? "/admin" : "/recruiter");
+          router.replace(user.role === "COMPANY_USER" ? "/company/invitations" : user.role.includes("ADMIN") ? "/admin" : "/companies");
           return;
         }
         if (state.onboarding_completed) {
@@ -182,8 +182,8 @@ export default function GetStartedPage() {
     }
   }
 
-  function logout() {
-    removeToken();
+  async function logout() {
+    await logoutSession().catch(() => undefined);
     router.push("/login");
   }
 

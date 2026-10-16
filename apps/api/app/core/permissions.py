@@ -27,7 +27,6 @@ PERMISSIONS = {
     "view_applications": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
     "evaluate_candidates": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
     "move_recruitment_stage": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
-    "view_assessments": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
     "company_analytics": {"OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"},
     "manage_subscription": {"OWNER"},
 }

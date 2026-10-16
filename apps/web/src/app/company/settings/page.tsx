@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/company/AppShell";
 import { CompanyLogoSection } from "@/components/company/CompanyLogoSection";
+import { ConfirmDialog } from "@/components/company/ConfirmDialog";
 import { PageHeader } from "@/components/company/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +14,11 @@ import { Tabs } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { getMe, getCompany, updateCompany, getCompanySubscription } from "@/lib/api";
-import { useTheme } from "@/lib/theme-context";
 import { can } from "@/lib/permissions";
-import { FiCheck, FiMoon, FiSun } from "react-icons/fi";
+import type { Company } from "@/lib/types";
+import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiShield } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
+import { AccountDataControls } from "@/components/security/account-data-controls";
 
 // Mirrors apps/api/app/core/permissions.py via lib/permissions.ts. Backend remains authority.
 const MATRIX: Array<{ capability: string; roles: string[] }> = [
@@ -28,20 +30,58 @@ const MATRIX: Array<{ capability: string; roles: string[] }> = [
   { capability: "Edit job offers", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
   { capability: "Delete job offers", roles: ["OWNER", "ADMIN"] },
   { capability: "Review and advance candidates", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
-  { capability: "View assessments and insights", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
+  { capability: "View candidates and insights", roles: ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] },
   { capability: "Manage subscription", roles: ["OWNER"] },
 ];
 
 const ROLE_ORDER = ["OWNER", "ADMIN", "HR", "RECRUITER", "HIRING_MANAGER"] as const;
 
+interface CompanyForm {
+  name: string;
+  industry: string;
+  region: string;
+  location: string;
+  website: string;
+  company_size: string;
+  contact_email: string;
+  contact_phone: string;
+  description: string;
+}
+
+const EMPTY_COMPANY_FORM: CompanyForm = {
+  name: "",
+  industry: "",
+  region: "",
+  location: "",
+  website: "",
+  company_size: "",
+  contact_email: "",
+  contact_phone: "",
+  description: "",
+};
+
+function companyFormValues(company?: Company | null): CompanyForm {
+  if (!company) return EMPTY_COMPANY_FORM;
+  return {
+    name: company.name || "",
+    industry: company.industry || "",
+    region: company.region || "",
+    location: company.location || "",
+    website: company.website || "",
+    company_size: company.company_size || "",
+    contact_email: company.contact_email || "",
+    contact_phone: company.contact_phone || "",
+    description: company.description || "",
+  };
+}
+
 export default function SettingsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { theme, setTheme } = useTheme();
 
   const companyId = me?.company_id;
-  const canEditCompany = can(me ?? null, "edit_company");
+  const canEditCompany = me?.role === "PLATFORM_ADMIN" || can(me ?? null, "edit_company");
 
   const { data: company, isLoading, isError, refetch } = useQuery({
     queryKey: ["company", companyId],
@@ -55,44 +95,63 @@ export default function SettingsPage() {
     retry: false,
   });
 
-  const [form, setForm] = useState({
-    name: "",
-    industry: "",
-    region: "",
-    location: "",
-    website: "",
-    company_size: "",
-    contact_email: "",
-    contact_phone: "",
-    description: "",
-  });
+  const [form, setForm] = useState<CompanyForm>(EMPTY_COMPANY_FORM);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const initialFormRef = useRef<CompanyForm>(EMPTY_COMPANY_FORM);
 
   useEffect(() => {
     if (company) {
-      setForm({
-        name: company.name || "",
-        industry: company.industry || "",
-        region: company.region || "",
-        location: company.location || "",
-        website: company.website || "",
-        company_size: company.company_size || "",
-        contact_email: company.contact_email || "",
-        contact_phone: company.contact_phone || "",
-        description: company.description || "",
-      });
+      const initial = companyFormValues(company);
+      initialFormRef.current = initial;
+      setForm(initial);
     }
   }, [company]);
 
+  const savedForm = company ? companyFormValues(company) : initialFormRef.current;
+  const isDirty = (Object.keys(form) as Array<keyof CompanyForm>).some(
+    (key) => (form[key] ?? "") !== (savedForm[key] ?? "")
+  );
+  const websiteError = form.website && !/^https?:\/\//i.test(form.website) ? "Use a full URL starting with https://" : undefined;
+
   const updateMut = useMutation({
     mutationFn: async () => {
-      if (!companyId) return;
+      const activeCompanyId = companyId || company?.id;
+      if (!activeCompanyId) throw new Error("No company attached to your account");
       if (!form.name.trim()) throw new Error("Company name cannot be empty");
-      return updateCompany(companyId, form);
+
+      const cleanWebsite = form.website?.trim()
+        ? (form.website.trim().startsWith("http://") || form.website.trim().startsWith("https://")
+            ? form.website.trim()
+            : `https://${form.website.trim()}`)
+        : null;
+
+      const payload = {
+        name: form.name.trim(),
+        industry: form.industry?.trim() || null,
+        region: form.region?.trim() || null,
+        location: form.location?.trim() || null,
+        website: cleanWebsite,
+        company_size: form.company_size?.trim() || null,
+        contact_email: form.contact_email?.trim() || null,
+        contact_phone: form.contact_phone?.trim() || null,
+        description: form.description?.trim() || null,
+      };
+
+      return updateCompany(activeCompanyId, payload);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["company", companyId] });
-      qc.invalidateQueries({ queryKey: ["company-profile", companyId] });
-      toast("Company updated", { variant: "success" });
+    onSuccess: (updated) => {
+      const activeCompanyId = companyId || company?.id;
+      if (activeCompanyId) {
+        qc.invalidateQueries({ queryKey: ["company", activeCompanyId] });
+        qc.invalidateQueries({ queryKey: ["company-profile", activeCompanyId] });
+        if (updated) {
+          const fresh = companyFormValues(updated);
+          initialFormRef.current = fresh;
+          qc.setQueryData(["company", activeCompanyId], updated);
+          setForm(fresh);
+        }
+      }
+      toast("Company settings saved", { variant: "success" });
     },
     onError: (e: unknown) => {
       const msg = (e as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail || (e as Error)?.message || "Save failed";
@@ -100,10 +159,56 @@ export default function SettingsPage() {
     },
   });
 
+  const handleSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!canEditCompany) {
+      toast("Permission required", { description: "Only Owner and Admin can edit company details.", variant: "error" });
+      return;
+    }
+    if (!form.name.trim()) {
+      toast("Company name required", { description: "Please enter a valid company name.", variant: "error" });
+      return;
+    }
+    updateMut.mutate();
+  };
+
+  const handleResetClick = () => {
+    if (updateMut.isPending) return;
+    setResetConfirmOpen(true);
+  };
+
+  const handleConfirmReset = () => {
+    const base = company ? companyFormValues(company) : (initialFormRef.current.name ? initialFormRef.current : EMPTY_COMPANY_FORM);
+    setForm({
+      name: base.name || "",
+      industry: base.industry || "",
+      region: base.region || "",
+      location: base.location || "",
+      website: base.website || "",
+      company_size: base.company_size || "",
+      contact_email: base.contact_email || "",
+      contact_phone: base.contact_phone || "",
+      description: base.description || "",
+    });
+    setResetConfirmOpen(false);
+    toast("All changes discarded", { variant: "info" });
+  };
+
   return (
     <AppShell>
-      <div className="mx-auto max-w-5xl space-y-6">
-        <PageHeader title="Settings" subtitle="Company profile, access policy, plan and appearance." />
+      <div className="mx-auto max-w-6xl space-y-6">
+        <PageHeader
+          tone="green"
+          center
+          eyebrow="Workspace settings"
+          title={
+            <>
+              Shape your company <span className="block">workspace.</span>
+            </>
+          }
+          subtitle="Keep your company profile, team access, plan and account security in one place."
+          className="company-settings-hero"
+        />
 
         <Tabs
           items={[
@@ -123,38 +228,107 @@ export default function SettingsPage() {
                     <div className="space-y-4">
                       <CompanyLogoSection company={company ?? null} canEdit={canEditCompany} />
                       <form
-                      className="space-y-4 rounded-xl border border-border-subtle bg-surface p-5"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (canEditCompany) updateMut.mutate();
-                      }}
-                    >
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Input label="Company name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
-                        <Input label="Industry" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
-                        <Input label="Region" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
-                        <Input label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Marina office" />
-                        <Input label="Website" type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://" error={form.website && !form.website.startsWith("http") ? "Use full URL starting with https://" : undefined} />
-                        <Select label="Company size" value={form.company_size} onChange={(e) => setForm({ ...form, company_size: e.target.value })} disabled={!canEditCompany}>
-                          <option value="">Select size</option>
-                          <option value="1-10">1-10</option>
-                          <option value="11-50">11-50</option>
-                          <option value="51-200">51-200</option>
-                          <option value="201-1000">201-1,000</option>
-                          <option value="1000+">1,000+</option>
-                        </Select>
-                        <Input label="Contact email" type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} disabled={!canEditCompany} autoComplete="email" />
-                        <Input label="Contact phone" type="tel" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} disabled={!canEditCompany} autoComplete="tel" />
-                      </div>
-                      <Textarea label="Description" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} />
-                      {canEditCompany ? (
-                        <div className="flex justify-end">
-                          <Button type="submit" loading={updateMut.isPending}>Save changes</Button>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Read-only for your role. Only Owner and Admin can edit company details.</p>
-                      )}
-                    </form>
+                        className="company-settings-form relative rounded-xl border border-border-subtle bg-surface shadow-sm"
+                        onSubmit={handleSave}
+                      >
+                        <section className="space-y-4 p-5 sm:p-6" aria-labelledby="company-profile-heading">
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FiBriefcase aria-hidden className="h-4 w-4" /></span>
+                            <div>
+                              <h3 id="company-profile-heading" className="text-sm font-semibold text-foreground">Company profile</h3>
+                              <p className="mt-0.5 text-xs text-muted-foreground">The core information candidates see across your job postings.</p>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <Input label="Company name" required value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={!canEditCompany} />
+                            <Input label="Industry" value={form.industry ?? ""} onChange={(e) => setForm({ ...form, industry: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Financial Technology" />
+                            <Select label="Company size" value={form.company_size ?? ""} onChange={(e) => setForm({ ...form, company_size: e.target.value })} disabled={!canEditCompany}>
+                              <option value="">Select size</option>
+                              <option value="1-10">1-10</option>
+                              <option value="11-50">11-50</option>
+                              <option value="51-200">51-200</option>
+                              <option value="201-1000">201-1,000</option>
+                              <option value="1000+">1,000+</option>
+                            </Select>
+                            <Input label="Website" type="url" value={form.website ?? ""} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://example.com" error={websiteError} />
+                          </div>
+                          <Textarea label="Company description" rows={4} value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} helper="Share what your company does and what makes it a strong place to work." />
+                        </section>
+
+                        <section className="space-y-4 border-t border-border-subtle p-5 sm:p-6" aria-labelledby="company-location-heading">
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FiMapPin aria-hidden className="h-4 w-4" /></span>
+                            <div>
+                              <h3 id="company-location-heading" className="text-sm font-semibold text-foreground">Location</h3>
+                              <p className="mt-0.5 text-xs text-muted-foreground">Help candidates understand where your team is based.</p>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <Input label="Region" value={form.region ?? ""} onChange={(e) => setForm({ ...form, region: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca" />
+                            <Input label="Office location" value={form.location ?? ""} onChange={(e) => setForm({ ...form, location: e.target.value })} disabled={!canEditCompany} placeholder="e.g. Casablanca Marina" />
+                          </div>
+                        </section>
+
+                        <section className="space-y-4 border-t border-border-subtle p-5 sm:p-6" aria-labelledby="company-contact-heading">
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FiMail aria-hidden className="h-4 w-4" /></span>
+                            <div>
+                              <h3 id="company-contact-heading" className="text-sm font-semibold text-foreground">Contact details</h3>
+                              <p className="mt-0.5 text-xs text-muted-foreground">Where hiring-related communication should be directed.</p>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <Input label="Contact email" type="email" value={form.contact_email ?? ""} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} disabled={!canEditCompany} autoComplete="email" placeholder="hiring@company.com" />
+                            <Input label="Contact phone" type="tel" value={form.contact_phone ?? ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} disabled={!canEditCompany} autoComplete="tel" placeholder="+212 5 00 00 00 00" />
+                          </div>
+                        </section>
+
+                        {canEditCompany ? (
+                          <div className="company-settings-save sticky bottom-0 z-20 flex flex-col gap-3 rounded-b-xl border-t border-border-subtle bg-surface/95 p-4 backdrop-blur-md shadow-[0_-4px_16px_rgb(0_0_0/6%)] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                            <div className="flex items-center gap-2">
+                              {isDirty ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-600/25 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Unsaved changes
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#194d38]/20 bg-[#edf4eb] px-2.5 py-1 text-xs font-medium text-[#194d38]">
+                                  <FiCheck className="h-3.5 w-3.5" />
+                                  All details up to date
+                                </span>
+                              )}
+                              <span className="hidden text-xs text-muted-foreground md:inline">
+                                {isDirty ? "Remember to save before leaving this tab." : "Changes save directly to your workspace."}
+                              </span>
+                            </div>
+
+                            <div className="company-settings-actions flex items-center gap-2.5">
+                              <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                loading={updateMut.isPending}
+                                className="h-10 min-w-[9.5rem] rounded-lg bg-[#194d38] px-5 text-xs font-bold text-[#fffefa] shadow-md hover:bg-[#123e2d] active:scale-[0.98] transition-all cursor-pointer"
+                              >
+                                Save changes
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                onClick={handleResetClick}
+                                disabled={updateMut.isPending}
+                                className="h-10 min-w-[7.5rem] rounded-lg bg-[#b34538] px-5 text-xs font-bold text-white shadow-md hover:bg-[#8e2e23] active:scale-[0.98] transition-all cursor-pointer"
+                              >
+                                Reset
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="border-t border-border-subtle bg-surface-secondary/40 p-4 text-xs text-muted-foreground sm:px-6">
+                            Read-only for your role. Only Owner and Admin can edit company details.
+                          </p>
+                        )}
+                      </form>
                     </div>
                   )}
                 </div>
@@ -164,11 +338,19 @@ export default function SettingsPage() {
               id: "roles",
               label: "Roles",
               content: (
-                <div className="overflow-x-auto rounded-xl border border-border-subtle bg-surface">
-                  <table className="w-full text-left text-xs">
+                <div className="overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-sm">
+                  <div className="flex items-start gap-3 border-b border-border-subtle p-5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FiShield aria-hidden className="h-4 w-4" /></span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Role permissions</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Compare what each company role can view and manage.</p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                  <table className="min-w-[760px] w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wide text-muted-foreground">
-                        <th scope="col" className="px-4 py-3">Capability</th>
+                        <th scope="col" className="sticky left-0 z-10 bg-surface-secondary px-4 py-3">Capability</th>
                         {ROLE_ORDER.map((r) => (
                           <th scope="col" key={r} className="px-3 py-3 text-center">{r === "HIRING_MANAGER" ? "Hiring Mgr" : r === "OWNER" ? "Owner" : r === "ADMIN" ? "Admin" : r === "HR" ? "HR" : "Recruiter"}</th>
                         ))}
@@ -177,7 +359,7 @@ export default function SettingsPage() {
                     <tbody className="divide-y divide-[var(--border-subtle)]">
                       {MATRIX.map((row) => (
                         <tr key={row.capability}>
-                          <th scope="row" className="px-4 py-3 text-left font-medium text-foreground">{row.capability}</th>
+                          <th scope="row" className="sticky left-0 bg-surface px-4 py-3 text-left font-medium text-foreground">{row.capability}</th>
                           {ROLE_ORDER.map((r) => (
                             <td key={r} className="px-3 py-3 text-center">
                               {row.roles.includes(r) ? (
@@ -193,7 +375,8 @@ export default function SettingsPage() {
                       ))}
                     </tbody>
                   </table>
-                  <p className="border-t border-border-subtle px-4 py-3 text-[11px] text-muted-foreground">Enforced by backend on every request. Frontend reflects, never grants.</p>
+                  </div>
+                  <p className="border-t border-border-subtle px-5 py-3 text-xs text-muted-foreground">Owners and admins can update teammate roles from the Team page.</p>
                 </div>
               ),
             },
@@ -201,7 +384,14 @@ export default function SettingsPage() {
               id: "plan",
               label: "Plan",
               content: (
-                <div className="rounded-xl border border-border-subtle bg-surface p-5">
+                <div className="rounded-xl border border-border-subtle bg-surface p-5 shadow-sm sm:p-6">
+                  <div className="mb-5 flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FiCreditCard aria-hidden className="h-4 w-4" /></span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Subscription overview</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Review the plan connected to this workspace.</p>
+                    </div>
+                  </div>
                   {subQ.isLoading ? (
                     <Skeleton className="h-20" />
                   ) : subQ.isError || !subQ.data ? (
@@ -211,63 +401,56 @@ export default function SettingsPage() {
                       <Button size="sm" variant="outline" onClick={() => subQ.refetch()} className="mt-3">Retry</Button>
                     </div>
                   ) : (
-                    <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Status</dt>
-                        <dd className="font-semibold text-foreground">{String((subQ.data as { status?: string }).status ?? "Unknown")}</dd>
+                        <dt className="text-xs text-muted-foreground">Plan</dt>
+                        <dd className="font-semibold capitalize text-foreground">{subQ.data.plan}</dd>
                       </div>
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Company</dt>
-                        <dd className="font-semibold text-foreground">{company?.name ?? "—"}</dd>
+                        <dt className="text-xs text-muted-foreground">Subscription</dt>
+                        <dd className="font-semibold capitalize text-foreground">{subQ.data.subscription_status.replace("_", " ")}</dd>
                       </div>
                       <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
-                        <dt className="text-xs text-muted-foreground">Account</dt>
-                        <dd className="truncate font-semibold text-foreground">{me?.email ?? "—"}</dd>
+                        <dt className="text-xs text-muted-foreground">Active offers</dt>
+                        <dd className="font-semibold text-foreground">{subQ.data.usage.active_offers} / {subQ.data.limits.active_offers}</dd>
+                      </div>
+                      <div className="rounded-lg bg-surface-secondary/50 px-3 py-2">
+                        <dt className="text-xs text-muted-foreground">Member seats</dt>
+                        <dd className="font-semibold text-foreground">{subQ.data.usage.reserved_members} / {subQ.data.limits.members}</dd>
+                        {subQ.data.usage.pending_invitations > 0 && <p className="text-[11px] text-muted-foreground">Includes {subQ.data.usage.pending_invitations} pending invite(s)</p>}
                       </div>
                     </dl>
                   )}
-                  <p className="mt-3 text-xs text-muted-foreground">Plan changes are handled outside this panel. Only Owner manages subscription per platform policy.</p>
+                  <p className="mt-3 text-xs text-muted-foreground">Limits are enforced by the backend under concurrent offer and invitation requests. Plan assignments are managed by a platform administrator; no payment is charged in this development adapter.</p>
                 </div>
               ),
             },
             {
               id: "security",
               label: "Security",
-              content: <TwoFactorSecurity />,
-            },
-            {
-              id: "appearance",
-              label: "Appearance",
-              content: (
-                <div className="rounded-xl border border-border-subtle bg-surface p-5">
-                  <h3 className="text-sm font-semibold text-foreground">Interface theme</h3>
-                  <p className="mt-0.5 text-[13px] text-muted-foreground">Stored on this device. Applies immediately.</p>
-                  <div className="mt-3 grid max-w-md grid-cols-2 gap-3" role="group" aria-label="Theme">
-                    {(
-                      [
-                        { id: "light", label: "Light", Icon: FiSun },
-                        { id: "dark", label: "Dark", Icon: FiMoon },
-                      ] as const
-                    ).map(({ id, label, Icon }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setTheme(id)}
-                        aria-pressed={theme === id}
-                        className={theme === id ? "flex items-center gap-3 rounded-xl border border-primary bg-primary/5 p-3 text-xs font-semibold text-foreground" : "flex items-center gap-3 rounded-xl border border-border p-3 text-xs font-semibold text-muted-foreground hover:text-foreground"}
-                      >
-                        <Icon aria-hidden className="h-4 w-4" />
-                        <span>{label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-4 text-[13px] text-muted-foreground">Notification preferences are not configurable yet. No alert settings are stored.</p>
-                </div>
-              ),
+              content: <div className="space-y-5"><TwoFactorSecurity /><AccountDataControls /></div>,
             },
           ]}
         />
       </div>
+
+      <ConfirmDialog
+        isOpen={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={handleConfirmReset}
+        title="Discard unsaved changes?"
+        message={
+          <div className="space-y-2">
+            <p>Are you sure you want to reset the form? All unsaved edits to your company profile will be discarded.</p>
+            <div className="rounded-lg border border-border-subtle bg-surface-secondary/40 p-2.5 text-xs text-muted-foreground">
+              Form will revert back to: <strong className="text-foreground">{savedForm.name || "Original company details"}</strong>
+            </div>
+          </div>
+        }
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        isDestructive
+      />
     </AppShell>
   );
 }

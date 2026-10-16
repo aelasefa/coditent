@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
 
 export function AuthLayout({
   title,
@@ -30,6 +31,7 @@ export function AuthLayout({
           <div id="auth-form" className="mt-6">{children}</div>
         </div>
       </div>
+      <LegalLinks className="justify-center px-6 pb-6" />
     </main>
   );
 }

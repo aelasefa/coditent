@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { MdButton } from "@/components/ui/md-button";
-import { removeToken } from "@/lib/auth";
+import { logoutSession } from "@/lib/api";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -11,8 +11,8 @@ export function LogoutButton() {
   return (
     <MdButton
       size="sm"
-      onClick={() => {
-        removeToken();
+      onClick={async () => {
+        await logoutSession().catch(() => undefined);
         router.push("/login");
       }}
       variant="outlined"

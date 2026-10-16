@@ -1,0 +1,353 @@
+[
+  {
+    "file": "tests/test_account_data_lifecycle.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_account_data_lifecycle.py",
+    "exit": 0,
+    "duration_seconds": 3.14,
+    "summary": [
+      "3 passed, 29 warnings in 2.25s"
+    ]
+  },
+  {
+    "file": "tests/test_account_recovery.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_account_recovery.py",
+    "exit": 0,
+    "duration_seconds": 1.7,
+    "summary": [
+      "1 passed, 7 warnings in 0.88s"
+    ]
+  },
+  {
+    "file": "tests/test_admin_lifecycle.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_admin_lifecycle.py",
+    "exit": 0,
+    "duration_seconds": 1.7,
+    "summary": [
+      "3 passed, 2 warnings in 0.80s"
+    ]
+  },
+  {
+    "file": "tests/test_ai_jobs.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_ai_jobs.py",
+    "exit": 0,
+    "duration_seconds": 1.14,
+    "summary": [
+      "3 passed, 9 warnings in 0.44s"
+    ]
+  },
+  {
+    "file": "tests/test_async_email_routes.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_async_email_routes.py",
+    "exit": 0,
+    "duration_seconds": 1.95,
+    "summary": [
+      "3 passed, 3 warnings in 1.09s"
+    ]
+  },
+  {
+    "file": "tests/test_avatar_storage.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_avatar_storage.py",
+    "exit": 0,
+    "duration_seconds": 1.12,
+    "summary": [
+      "2 passed in 0.47s"
+    ]
+  },
+  {
+    "file": "tests/test_candidate_onboarding.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_candidate_onboarding.py",
+    "exit": 0,
+    "duration_seconds": 2.28,
+    "summary": [
+      "7 passed, 1 warning in 1.34s"
+    ]
+  },
+  {
+    "file": "tests/test_chat_history.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_chat_history.py",
+    "exit": 0,
+    "duration_seconds": 1.26,
+    "summary": [
+      "3 passed in 0.51s"
+    ]
+  },
+  {
+    "file": "tests/test_chat_realtime.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_chat_realtime.py",
+    "exit": 0,
+    "duration_seconds": 1.02,
+    "summary": [
+      "3 passed in 0.35s"
+    ]
+  },
+  {
+    "file": "tests/test_company_logo.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_company_logo.py",
+    "exit": 0,
+    "duration_seconds": 1.17,
+    "summary": [
+      "16 passed in 0.57s"
+    ]
+  },
+  {
+    "file": "tests/test_cv_asset_lifecycle.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_cv_asset_lifecycle.py",
+    "exit": 0,
+    "duration_seconds": 2.18,
+    "summary": [
+      "5 passed, 23 warnings in 1.22s"
+    ]
+  },
+  {
+    "file": "tests/test_cv_upload.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_cv_upload.py",
+    "exit": 0,
+    "duration_seconds": 2.17,
+    "summary": [
+      "36 passed in 1.46s"
+    ]
+  },
+  {
+    "file": "tests/test_database_url.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_database_url.py",
+    "exit": 0,
+    "duration_seconds": 1.01,
+    "summary": [
+      "4 passed in 0.30s"
+    ]
+  },
+  {
+    "file": "tests/test_deployment_readiness.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_deployment_readiness.py",
+    "exit": 1,
+    "duration_seconds": 0.87,
+    "summary": [
+      "1 failed, 8 passed in 0.25s"
+    ]
+  },
+  {
+    "file": "tests/test_email_outbox.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_email_outbox.py",
+    "exit": 0,
+    "duration_seconds": 1.26,
+    "summary": [
+      "3 passed, 13 warnings in 0.47s"
+    ]
+  },
+  {
+    "file": "tests/test_entitlements.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_entitlements.py",
+    "exit": 0,
+    "duration_seconds": 1.13,
+    "summary": [
+      "2 passed, 28 warnings in 0.40s"
+    ]
+  },
+  {
+    "file": "tests/test_friend_presence.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_friend_presence.py",
+    "exit": 0,
+    "duration_seconds": 0.77,
+    "summary": [
+      "1 passed in 0.15s"
+    ]
+  },
+  {
+    "file": "tests/test_friendships.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_friendships.py",
+    "exit": 0,
+    "duration_seconds": 2.08,
+    "summary": [
+      "8 passed, 60 warnings in 1.24s"
+    ]
+  },
+  {
+    "file": "tests/test_health_readiness.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_health_readiness.py",
+    "exit": 0,
+    "duration_seconds": 0.94,
+    "summary": [
+      "7 passed in 0.32s"
+    ]
+  },
+  {
+    "file": "tests/test_institutions.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_institutions.py",
+    "exit": 0,
+    "duration_seconds": 1.75,
+    "summary": [
+      "2 passed, 30 warnings in 0.90s"
+    ]
+  },
+  {
+    "file": "tests/test_interview_feedback.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_interview_feedback.py",
+    "exit": 0,
+    "duration_seconds": 1.9,
+    "summary": [
+      "2 passed, 31 warnings in 1.06s"
+    ]
+  },
+  {
+    "file": "tests/test_invitation_routes_unit.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_invitation_routes_unit.py",
+    "exit": 0,
+    "duration_seconds": 1.66,
+    "summary": [
+      "1 passed, 4 warnings in 0.80s"
+    ]
+  },
+  {
+    "file": "tests/test_login_account_type.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_login_account_type.py",
+    "exit": 0,
+    "duration_seconds": 2.49,
+    "summary": [
+      "21 passed, 2 warnings in 1.61s"
+    ]
+  },
+  {
+    "file": "tests/test_match_scoring.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_match_scoring.py",
+    "exit": 0,
+    "duration_seconds": 2.46,
+    "summary": [
+      "15 passed, 194 warnings in 1.58s"
+    ]
+  },
+  {
+    "file": "tests/test_notifications.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_notifications.py",
+    "exit": 0,
+    "duration_seconds": 1.68,
+    "summary": [
+      "3 passed, 12 warnings in 0.87s"
+    ]
+  },
+  {
+    "file": "tests/test_oauth_popup.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_oauth_popup.py",
+    "exit": 0,
+    "duration_seconds": 1.97,
+    "summary": [
+      "16 passed, 2 warnings in 1.10s"
+    ]
+  },
+  {
+    "file": "tests/test_observability.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_observability.py",
+    "exit": 0,
+    "duration_seconds": 0.98,
+    "summary": [
+      "3 passed in 0.32s"
+    ]
+  },
+  {
+    "file": "tests/test_passwords.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_passwords.py",
+    "exit": 0,
+    "duration_seconds": 3.2,
+    "summary": [
+      "37 passed, 4 warnings in 2.07s"
+    ]
+  },
+  {
+    "file": "tests/test_production_boundary.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_production_boundary.py",
+    "exit": 0,
+    "duration_seconds": 0.71,
+    "summary": [
+      "8 passed in 0.10s"
+    ]
+  },
+  {
+    "file": "tests/test_rbac.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_rbac.py",
+    "exit": 1,
+    "duration_seconds": 3.6,
+    "summary": [
+      "3 warnings, 5 errors in 2.57s"
+    ]
+  },
+  {
+    "file": "tests/test_recruiter_candidate_data.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_recruiter_candidate_data.py",
+    "exit": 0,
+    "duration_seconds": 2.12,
+    "summary": [
+      "12 passed, 67 warnings in 1.26s"
+    ]
+  },
+  {
+    "file": "tests/test_recruitment_read_events.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_recruitment_read_events.py",
+    "exit": 0,
+    "duration_seconds": 1.74,
+    "summary": [
+      "3 passed, 1 warning in 0.85s"
+    ]
+  },
+  {
+    "file": "tests/test_secret_configuration.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_secret_configuration.py",
+    "exit": 0,
+    "duration_seconds": 0.8,
+    "summary": [
+      "6 passed in 0.16s"
+    ]
+  },
+  {
+    "file": "tests/test_social_missions.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_social_missions.py",
+    "exit": 0,
+    "duration_seconds": 1.74,
+    "summary": [
+      "3 passed, 26 warnings in 0.92s"
+    ]
+  },
+  {
+    "file": "tests/test_socket_tickets.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_socket_tickets.py",
+    "exit": 0,
+    "duration_seconds": 1.34,
+    "summary": [
+      "3 passed in 0.50s"
+    ]
+  },
+  {
+    "file": "tests/test_support.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_support.py",
+    "exit": 1,
+    "duration_seconds": 2.25,
+    "summary": [
+      "16 failed, 1 passed, 81 warnings in 1.38s"
+    ]
+  },
+  {
+    "file": "tests/test_two_factor.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_two_factor.py",
+    "exit": 0,
+    "duration_seconds": 1.44,
+    "summary": [
+      "12 passed in 0.66s"
+    ]
+  },
+  {
+    "file": "tests/test_upload_limits.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_upload_limits.py",
+    "exit": 0,
+    "duration_seconds": 0.6,
+    "summary": [
+      "2 passed in 0.01s"
+    ]
+  },
+  {
+    "file": "tests/test_upload_routes.py",
+    "command": "python -m pytest -q -p no:cacheprovider tests/test_upload_routes.py",
+    "exit": 0,
+    "duration_seconds": 2.09,
+    "summary": [
+      "5 passed, 4 warnings in 1.16s"
+    ]
+  }
+]

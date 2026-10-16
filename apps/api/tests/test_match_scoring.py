@@ -4,9 +4,10 @@ Run: python -m pytest tests/test_match_scoring.py -v
 (from apps/api, with pytest, pytest-asyncio, sqlalchemy, aiosqlite installed)
 
 Covers: new-offer eligibility, completed persistence, API shape, no-regen of
-completed rows, FAILED (never permanent PENDING, never fake scores), retry
+completed rows, local provider fallback, retry
 recovery, apply-independence, candidate isolation, company boundaries.
 """
+import asyncio
 import sys
 import types
 import uuid
@@ -14,15 +15,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-
-# --- Stub heavy modules before importing app code (same pattern as other tests) ---
-_g = types.ModuleType("google")
-_ga = types.ModuleType("google.generativeai")
-_ga.configure = lambda **kwargs: None
-_ga.GenerativeModel = lambda *a, **k: None
-_g.generativeai = _ga
-sys.modules.setdefault("google", _g)
-sys.modules.setdefault("google.generativeai", _ga)
 
 _obs = types.ModuleType("app.observability")
 
@@ -43,6 +35,8 @@ _cfg.settings = types.SimpleNamespace(
     database_url="sqlite://",
     redis_url="redis://localhost:6379/0",
     recommendation_cache_ttl_seconds=900,
+    ai_provider_timeout_seconds=30,
+    gemini_model="gemini-3-flash-preview",
 )
 sys.modules["app.config"] = _cfg
 
@@ -83,6 +77,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 import app.services.ai as ai_module  # noqa: E402
 import app.services.match_scoring as match_scoring  # noqa: E402
@@ -105,7 +100,10 @@ import pytest_asyncio  # noqa: E402
 
 @pytest_asyncio.fixture()
 async def db() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+    )
     async with engine.begin() as conn:
         await conn.run_sync(_Base.metadata.create_all)
     maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
@@ -204,6 +202,82 @@ async def test_inactive_offer_not_eligible(db: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_initialization_and_all_offsets_cover_more_than_twenty_matches(
+    db: AsyncSession,
+) -> None:
+    user = await _candidate(db, "many-matches@test.local")
+    for index in range(27):
+        await _offer(db, user.id, title=f"Role {index:02d}")
+
+    created, active = await match_scoring.initialize_active_matches(db, user.id)
+    assert (created, active) == (27, 27)
+    assert await match_scoring.initialize_active_matches(db, user.id) == (0, 27)
+
+    first, total = await match_scoring.list_active_matches(
+        db, user.id, limit=20, offset=0
+    )
+    second, second_total = await match_scoring.list_active_matches(
+        db, user.id, limit=20, offset=20
+    )
+    assert (len(first), len(second), total, second_total) == (20, 7, 27, 27)
+    assert {row.offer_id for row in first}.isdisjoint(
+        {row.offer_id for row in second}
+    )
+
+    new_offer = await _offer(db, user.id, title="Newly published role")
+    # Listing is read-only; the new offer appears only after explicit init.
+    before, before_total = await match_scoring.list_active_matches(
+        db, user.id, limit=50, offset=0
+    )
+    assert before_total == len(before) == 27
+    assert new_offer.id not in {row.offer_id for row in before}
+    assert await match_scoring.initialize_active_matches(db, user.id) == (1, 28)
+    after, after_total = await match_scoring.list_active_matches(
+        db, user.id, limit=50, offset=0
+    )
+    assert after_total == len(after) == 28
+    assert new_offer.id in {row.offer_id for row in after}
+
+
+@pytest.mark.asyncio
+async def test_concurrent_initializers_are_conflict_safe(tmp_path) -> None:
+    db_path = tmp_path / "recommendation-concurrency.sqlite3"
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path}",
+        connect_args={"timeout": 30},
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(_Base.metadata.create_all)
+    maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with maker() as seed_db:
+            user = await _candidate(seed_db, "concurrent-init@test.local")
+            for index in range(25):
+                await _offer(seed_db, user.id, title=f"Concurrent role {index:02d}")
+            candidate_id = user.id
+
+        async def initialize_once() -> tuple[int, int]:
+            async with maker() as session:
+                return await match_scoring.initialize_active_matches(
+                    session, candidate_id
+                )
+
+        outcomes = await asyncio.gather(initialize_once(), initialize_once())
+        assert sum(created for created, _active in outcomes) == 25
+        assert {active for _created, active in outcomes} == {25}
+
+        async with maker() as check_db:
+            rows, total = await match_scoring.list_active_matches(
+                check_db, candidate_id, limit=50, offset=0
+            )
+            assert total == len(rows) == 25
+            assert len({row.offer_id for row in rows}) == 25
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_recommendation_api_returns_stored_score(db: AsyncSession) -> None:
     user = await _candidate(db)
     offer = await _offer(db, user.id)
@@ -223,6 +297,46 @@ async def test_recommendation_api_returns_stored_score(db: AsyncSession) -> None
     assert out.ai_score == 71
     assert out.status == "completed"
     assert out.offer.id == offer.id
+
+
+@pytest.mark.asyncio
+async def test_profile_change_invalidates_only_that_candidates_scores(db: AsyncSession) -> None:
+    candidate = await _candidate(db, "profile-change@test.local")
+    other_candidate = await _candidate(db, "other-profile@test.local")
+    offer = await _offer(db, candidate.id)
+    db.add_all(
+        [
+            SavedRecommendation(
+                candidate_id=candidate.id,
+                offer_id=offer.id,
+                ai_score=84,
+                ai_reasoning="Old profile score.",
+                status="completed",
+            ),
+            SavedRecommendation(
+                candidate_id=other_candidate.id,
+                offer_id=offer.id,
+                ai_score=73,
+                ai_reasoning="Other candidate score.",
+                status="completed",
+            ),
+        ]
+    )
+    await db.commit()
+
+    await match_scoring.invalidate_candidate_matches(db, candidate.id)
+    await db.commit()
+
+    rows = (
+        await db.execute(
+            select(SavedRecommendation).where(SavedRecommendation.offer_id == offer.id)
+        )
+    ).scalars().all()
+    mine = next(row for row in rows if row.candidate_id == candidate.id)
+    other = next(row for row in rows if row.candidate_id == other_candidate.id)
+    assert (mine.ai_score, mine.status, mine.error) == (0, "pending", None)
+    assert mine.ai_reasoning == "Match analysis pending after profile update."
+    assert (other.ai_score, other.status) == (73, "completed")
 
 
 @pytest.mark.asyncio
@@ -261,7 +375,7 @@ async def test_completed_analysis_is_not_regenerated(db: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ai_failure_produces_failed_not_pending(db: AsyncSession) -> None:
+async def test_ai_failure_uses_local_profile_fallback(db: AsyncSession) -> None:
     user = await _candidate(db)
     offer = await _offer(db, user.id)
 
@@ -271,8 +385,7 @@ async def test_ai_failure_produces_failed_not_pending(db: AsyncSession) -> None:
     monkey = pytest.MonkeyPatch()
     monkey.setattr(ai_module, "score_single_offer", _fail)
     try:
-        with pytest.raises(ValueError):
-            await match_scoring.score_single_match(db, user.id, offer.id)
+        result = await match_scoring.score_single_match(db, user.id, offer.id)
     finally:
         monkey.undo()
     row = (
@@ -282,14 +395,15 @@ async def test_ai_failure_produces_failed_not_pending(db: AsyncSession) -> None:
             )
         )
     ).scalar_one()
-    assert row.status == "failed"  # never stuck in pending/processing
-    assert row.ai_score == 0  # no fake score invented
-    assert "attente" not in (row.ai_reasoning or "").lower()
-    assert row.error
+    assert result == {"status": "completed", "score": 50}
+    assert row.status == "completed"
+    assert row.ai_score == 50  # field + React skill
+    assert "local estimate" in row.ai_reasoning.lower()
+    assert row.error is None
 
 
 @pytest.mark.asyncio
-async def test_ai_exception_stores_safe_reason(db: AsyncSession) -> None:
+async def test_ai_exception_uses_fallback_without_leaking_secret(db: AsyncSession) -> None:
     user = await _candidate(db)
     offer = await _offer(db, user.id)
 
@@ -299,8 +413,7 @@ async def test_ai_exception_stores_safe_reason(db: AsyncSession) -> None:
     monkey = pytest.MonkeyPatch()
     monkey.setattr(ai_module, "score_single_offer", _boom)
     try:
-        with pytest.raises(ValueError):
-            await match_scoring.score_single_match(db, user.id, offer.id)
+        await match_scoring.score_single_match(db, user.id, offer.id)
     finally:
         monkey.undo()
     row = (
@@ -310,8 +423,9 @@ async def test_ai_exception_stores_safe_reason(db: AsyncSession) -> None:
             )
         )
     ).scalar_one()
-    assert row.status == "failed"
-    assert "sk-live-leaked" not in (row.error or "")
+    assert row.status == "completed"
+    assert row.error is None
+    assert "sk-live-leaked" not in (row.ai_reasoning or "")
 
 
 @pytest.mark.asyncio

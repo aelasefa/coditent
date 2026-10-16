@@ -2,12 +2,44 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { validateEmployeeInvite, acceptEmployeeInvite, acceptEmployeeInviteExisting, getMe } from "@/lib/api";
-import { AuthLayout } from "@/components/auth/auth-layout";
+import { validateEmployeeInvite, acceptEmployeeInvite, acceptEmployeeInviteExisting, getMe, logoutSession } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/ui/logo";
+import { LegalLinks } from "@/components/legal/legal-links";
+import { PASSWORD_MAX_LENGTH, passwordPolicyError, passwordRequirements } from "@/lib/password-policy";
 
 export const dynamic = "force-dynamic";
+
+function EmployeeInviteLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <main className="company-theme min-h-screen bg-background text-foreground">
+      <a href="#invite-form" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:text-sm">Skip to invitation form</a>
+      <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
+        <Link href="/" aria-label="Coditent home"><Logo size="md" /></Link>
+        <Link href="/login" className="text-sm font-medium text-foreground-secondary hover:text-primary">Sign in</Link>
+      </header>
+      <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 pb-8 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(28rem,1.1fr)] lg:gap-8 lg:pb-12">
+        <section className="relative min-h-72 overflow-hidden rounded-3xl bg-primary p-8 text-primary-foreground sm:p-10 lg:min-h-[42rem] lg:p-12">
+          <div aria-hidden className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/15" />
+          <div aria-hidden className="absolute -bottom-28 -left-20 h-80 w-80 rounded-full bg-white/5" />
+          <div className="relative flex h-full flex-col justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/70">Your team is waiting</p>
+            <div className="mt-20 lg:mt-auto">
+              <h1 className="max-w-lg font-serif text-5xl font-normal leading-[0.98] tracking-[-0.05em] sm:text-6xl">{title}</h1>
+              {subtitle ? <p className="mt-5 max-w-md text-sm leading-6 text-white/75">{subtitle}</p> : null}
+              <p className="mt-8 max-w-sm text-sm leading-6 text-white/60">One secure invitation connects your account to the right company, role, and workspace.</p>
+            </div>
+          </div>
+        </section>
+        <section id="invite-form" className="flex items-center rounded-3xl border border-border-subtle bg-surface p-6 shadow-md sm:p-10 lg:p-12">
+          <div className="w-full">{children}</div>
+        </section>
+      </div>
+      <LegalLinks className="justify-center px-6 pb-6" />
+    </main>
+  );
+}
 
 function EmployeeInviteInner() {
   const sp = useSearchParams();
@@ -53,51 +85,51 @@ function EmployeeInviteInner() {
 
   if (!token) {
     return (
-      <AuthLayout title="Invitation missing" subtitle="Check your email link and try again.">
+      <EmployeeInviteLayout title="Invitation missing." subtitle="Check your email link and try again.">
         <p role="alert" className="text-sm font-medium text-danger">Missing invitation token.</p>
         <Link href="/login" className="mt-4 inline-block text-sm font-semibold text-primary hover:underline">Go to login</Link>
-      </AuthLayout>
+      </EmployeeInviteLayout>
     );
   }
 
   if (loadingInvite || !authChecked) {
     return (
-      <AuthLayout title="Checking invitation" subtitle="Validating your invite link.">
+      <EmployeeInviteLayout title="Checking invitation." subtitle="Validating your secure invite link.">
         <p role="status" className="text-sm text-muted-foreground">Loading invitation…</p>
-      </AuthLayout>
+      </EmployeeInviteLayout>
     );
   }
 
   if (inviteError || !invite) {
     return (
-      <AuthLayout title="Invitation unavailable" subtitle="This link cannot be used.">
+      <EmployeeInviteLayout title="Invitation unavailable." subtitle="This link cannot be used.">
         <p role="alert" className="text-sm text-muted-foreground">{inviteError || "This invitation is invalid."}</p>
         <Link href="/login" className="mt-4 inline-block text-sm font-semibold text-primary hover:underline">Go to login</Link>
-      </AuthLayout>
+      </EmployeeInviteLayout>
     );
   }
 
   const status = invite.status.toLowerCase();
   if (status === "expired") {
     return (
-      <AuthLayout title="Invitation expired" subtitle={`For ${invite.email} as ${invite.role} at ${invite.company_name}.`}>
+      <EmployeeInviteLayout title="Invitation expired." subtitle={`For ${invite.email} as ${invite.role} at ${invite.company_name}.`}>
         <p className="text-sm text-muted-foreground">Expired {invite.expires_at ? new Date(invite.expires_at).toLocaleString() : ""}. Ask your administrator to resend.</p>
         <Link href="/login" className="mt-4 inline-block text-sm font-semibold text-primary hover:underline">Login</Link>
-      </AuthLayout>
+      </EmployeeInviteLayout>
     );
   }
   if (status === "revoked") {
     return (
-      <AuthLayout title="Invitation revoked" subtitle={`Issued by ${invite.company_name}.`}>
+      <EmployeeInviteLayout title="Invitation revoked." subtitle={`Issued by ${invite.company_name}.`}>
         <p className="text-sm text-muted-foreground">This invitation was revoked. Contact your administrator for a new invite.</p>
-      </AuthLayout>
+      </EmployeeInviteLayout>
     );
   }
   if (status === "accepted") {
     return (
-      <AuthLayout title="Already accepted" subtitle="This invitation has already been used.">
+      <EmployeeInviteLayout title="Already accepted." subtitle="This invitation has already been used.">
         <Link href="/login" className="mt-4 inline-block text-sm font-semibold text-primary hover:underline">Go to login</Link>
-      </AuthLayout>
+      </EmployeeInviteLayout>
     );
   }
 
@@ -108,8 +140,9 @@ function EmployeeInviteInner() {
     e.preventDefault();
     setMsg(null);
     setIsError(false);
-    if (password.length < 8) {
-      setMsg("Password must be at least 8 characters");
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      setMsg(policyError);
       setIsError(true);
       return;
     }
@@ -155,7 +188,7 @@ function EmployeeInviteInner() {
   };
 
   return (
-    <AuthLayout title={`Join ${invite.company_name}`} subtitle={`Invited as ${invite.role}. Expires ${invite.expires_at ? new Date(invite.expires_at).toLocaleDateString() : "in 72h"}.`}>
+    <EmployeeInviteLayout title={`Join ${invite.company_name}.`} subtitle={`You have been invited as ${invite.role}. This invitation expires ${invite.expires_at ? new Date(invite.expires_at).toLocaleDateString() : "in 72 hours"}.`}>
       <dl className="grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary/60 p-3 text-[13px]">
         <div><dt className="text-muted-foreground">Email</dt><dd className="font-semibold">{invite.email}</dd></div>
         <div><dt className="text-muted-foreground">Role</dt><dd className="font-semibold">{invite.role}</dd></div>
@@ -165,7 +198,7 @@ function EmployeeInviteInner() {
       {isLoggedInAsOther && (
         <p role="alert" className="mt-3 rounded-xl border border-warning/30 bg-warning-background p-3 text-[13px]">
           Logged in as <strong>{me?.email}</strong>, invite is for <strong>{invite.email}</strong>.{" "}
-          <button type="button" onClick={() => { localStorage.removeItem("coditent_token"); location.reload(); }} className="font-semibold underline">
+          <button type="button" onClick={() => { void logoutSession().finally(() => location.reload()); }} className="font-semibold underline">
             Log out
           </button>{" "}
           and retry.
@@ -184,10 +217,21 @@ function EmployeeInviteInner() {
           <Input label="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" required autoComplete="name" />
           <Input label="Email (from invitation)" value={invite.email} disabled />
           <div>
-            <Input label="Password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" required autoComplete="new-password" />
+            <Input label="Password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" required autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} aria-describedby="employee-password-requirements" />
             <button type="button" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword} aria-label={showPassword ? "Hide password" : "Show password"} className="mt-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground">
               {showPassword ? "Hide password" : "Show password"}
             </button>
+            <ul id="employee-password-requirements" className="mt-2 grid gap-1 text-xs" aria-label="Password requirements">
+              {passwordRequirements.map((requirement) => {
+                const isMet = requirement.test(password);
+                return (
+                  <li key={requirement.label} className={`flex items-center gap-1.5 ${isMet ? "text-primary" : "text-muted-foreground"}`}>
+                    <span aria-hidden="true">{isMet ? "✓" : "○"}</span>
+                    {requirement.label}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
           <Input label="Confirm password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" required autoComplete="new-password" />
           <Button type="submit" loading={submitting} disabled={Boolean(isLoggedInAsOther)} className="w-full">
@@ -204,7 +248,7 @@ function EmployeeInviteInner() {
       <p className="mt-4 text-center text-xs text-muted-foreground">
         <Link href="/login" className="font-medium underline">Already have an account? Sign in</Link>
       </p>
-    </AuthLayout>
+    </EmployeeInviteLayout>
   );
 }
 

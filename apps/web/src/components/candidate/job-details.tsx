@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { MatchScore, getMatchState } from "./match-score";
 import { formatDate, formatSalary, offerLocation, parseSkills } from "./offer-utils";
 import type { Recommendation } from "@/lib/types";
+import styles from "./candidate-pages.module.css";
 
 interface JobDetailsProps {
   rec: Recommendation;
@@ -128,15 +129,14 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
       ) : null}
 
       {skills.length > 0 ? (
-        <section aria-label="Skills" className="mt-6">
-          <h3 className="ct-section-title">Skills</h3>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {skills.map((s) => (
-              <span key={s} className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-medium text-foreground-secondary">
-                {s}
-              </span>
+        <section aria-label="Skills" className={styles.roleSkills}>
+          <h3>Skills for this role</h3>
+          <p>Skills listed by the employer.</p>
+          <ul className={styles.roleSkillList}>
+            {skills.map((skill, index) => (
+              <li key={`${skill}-${index}`}>{skill}</li>
             ))}
-          </div>
+          </ul>
         </section>
       ) : null}
 

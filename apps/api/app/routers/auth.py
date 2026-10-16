@@ -1,36 +1,42 @@
-import hashlib
+import asyncio
+import io
 import secrets
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
+from html import escape
 from uuid import UUID, uuid4
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse, RedirectResponse
-from passlib.context import CryptContext
-from sqlalchemy import select, text
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.config import settings
+from app.core.audit import log_audit
 from app.database import get_db
-from app.dependencies import get_current_user
-from app.models import CandidateProfile, User, UserRole
+from app.dependencies import get_current_access_payload, get_current_user
+from app.models import AccountDeletionRequest, CandidateProfile, Company, EmailDelivery, OAuthAccount, User, UserRole
 from app.limiter import limiter
 from app.observability import get_logger
 from app.schemas import (
-    AvatarUpdate,
     AccountNameUpdate,
+    AccountDataExportRequest,
+    AccountDataImportOut,
+    AccountDataImportRequest,
+    AccountDeletionCreate,
+    AccountDeletionOut,
     EmailChangeConfirm,
     EmailChangeRequest,
     LoginRequest,
-    OAuthCompleteRegistrationRequest,
-    OAuthCompleteRegistrationResponse,
     OAuthHandoffExchangeRequest,
     OAuthHandoffExchangeResponse,
     PasswordChangeRequest,
     RegisterRequest,
+    RegistrationStarted,
     ResendVerificationRequest,
     TokenResponse,
     TwoFactorChallengeResponse,
@@ -40,52 +46,104 @@ from app.schemas import (
 )
 from app.services.email_verification import (
     attempts_exceeded,
+    build_email_change_email,
+    build_otp_email,
     cooldown_remaining_seconds,
     generate_otp,
     hash_otp,
     is_expired,
     otp_expiry,
-    send_otp_email,
-    send_email_change_code,
+    verification_art_attachment,
     verify_otp,
+)
+from app.services.email_outbox import (
+    EmailOutboxUnavailable,
+    deliver_email_job,
+    enqueue_email_delivery,
 )
 from app.services.oauth_service import (
     OAuthIdentity,
     build_oauth_authorize_url,
-    create_oauth_state,
+    create_oauth_attempt,
     create_oauth_handoff,
+    consume_oauth_attempt,
     consume_oauth_handoff,
-    create_onboarding_session,
     exchange_code_for_access_token,
     fetch_user_identity,
     get_oauth_provider,
     resolve_redirect_uri,
-    validate_oauth_role,
-    verify_onboarding_session,
-    verify_oauth_state,
 )
-from app.utils.jwt import create_access_token, verify_token
-from app.services.two_factor import verify_and_consume_backup_code, verify_totp_code
+from app.services.passwords import hash_password, verify_password, verify_password_and_rehash
+from app.services.authentication import (
+    AuthenticationRejected,
+    AuthenticationStoreUnavailable,
+    complete_authentication,
+    ensure_access_session_active,
+    ensure_account_can_authenticate,
+    ensure_login_account_type,
+    ensure_credential_matches_account,
+    ensure_mfa_challenge_active,
+    issue_access_token,
+    revoke_access_session,
+    revoke_trusted_device,
+)
+from app.utils.jwt import verify_access_token, verify_mfa_token
+from app.services.auth_cookies import (
+    clear_auth_cookies,
+    clear_oauth_browser_cookie,
+    set_access_cookie,
+    set_oauth_browser_cookie,
+)
+from app.services.two_factor import TotpSecretUnavailable, consume_second_factor
+from app.services.avatar_storage import (
+    AvatarStorageError,
+    assert_avatar_path,
+    build_avatar_path,
+    delete_avatar,
+    download_avatar,
+    upload_avatar,
+)
+from app.services.company_logo import (
+    CONTENT_TYPE_BY_EXT as AVATAR_CONTENT_TYPE_BY_EXT,
+    MAX_LOGO_BYTES as MAX_AVATAR_BYTES,
+    LogoResourceLimitError,
+    LogoValidationTimeoutError,
+    validate_logo_content_async,
+    validate_logo_file,
+)
+from app.services.upload_limits import UploadTooLargeError, read_upload_limited
+from app.services.privacy import DELETION_GRACE_DAYS, build_account_export, serialize_account_export
 
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = get_logger("auth")
 
 
-def _verify_sensitive_action(user: User, password: str, two_factor_code: str | None) -> None:
-    if not pwd_context.verify(password, user.password_hash):
+async def _verify_sensitive_action(
+    db: AsyncSession,
+    user: User,
+    password: str,
+    two_factor_code: str | None,
+) -> User:
+    locked = (
+        await db.execute(select(User).where(User.id == user.id).with_for_update())
+    ).scalar_one()
+    if not verify_password(password, locked.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid account password.")
-    if not user.is_2fa_enabled:
-        return
+    if not locked.is_2fa_enabled:
+        return locked
     if not two_factor_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Two-factor code is required.")
-    totp_valid = verify_totp_code(user.totp_secret or "", two_factor_code)
-    backup_valid, remaining = verify_and_consume_backup_code(user.backup_codes, two_factor_code)
-    if not (totp_valid or backup_valid):
+    try:
+        consumed = consume_second_factor(locked, two_factor_code)
+    except TotpSecretUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Two-factor authentication is temporarily unavailable.",
+        ) from exc
+    if not consumed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid authenticator or recovery code.")
-    if backup_valid:
-        user.backup_codes = remaining
+    return locked
 
 
 def _new_candidate_profile(user_id) -> CandidateProfile:
@@ -98,6 +156,104 @@ def _new_candidate_profile(user_id) -> CandidateProfile:
         study_level=None,
         onboarding_step=1,
         onboarding_completed=False,
+    )
+
+
+async def _supersede_code_deliveries(
+    db: AsyncSession,
+    *,
+    kind: str,
+    resource_id: UUID,
+) -> None:
+    """Stop queued codes after rotation or successful consumption."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    await db.execute(
+        update(EmailDelivery)
+        .where(
+            EmailDelivery.kind == kind,
+            EmailDelivery.resource_id == resource_id,
+            EmailDelivery.status.in_(("pending", "retry")),
+        )
+        .values(
+            status="failed",
+            last_error_code="EMAIL_DELIVERY_SUPERSEDED",
+            lease_owner=None,
+            lease_until=None,
+            updated_at=now,
+        )
+    )
+
+
+async def _queue_registration_code(
+    db: AsyncSession,
+    *,
+    registration_id: UUID,
+    email: str,
+    full_name: str,
+    otp: str,
+    expires_at: datetime,
+) -> EmailDelivery:
+    subject, html = build_otp_email(full_name, otp)
+    return await enqueue_email_delivery(
+        db,
+        kind="registration_verification",
+        dedupe_key=f"registration-verification:{registration_id}:{uuid4()}",
+        resource_type="pending_registration",
+        resource_id=registration_id,
+        to_email=email,
+        subject=subject,
+        html=html,
+        attachments=[verification_art_attachment()],
+        expires_at=expires_at,
+    )
+
+
+async def _queue_email_change_code(
+    db: AsyncSession,
+    *,
+    user: User,
+    new_email: str,
+    otp: str,
+    expires_at: datetime,
+) -> EmailDelivery:
+    subject, html = build_email_change_email(user.full_name, otp)
+    return await enqueue_email_delivery(
+        db,
+        kind="email_change_verification",
+        dedupe_key=f"email-change-verification:{user.id}:{uuid4()}",
+        resource_type="user",
+        resource_id=user.id,
+        to_email=new_email,
+        subject=subject,
+        html=html,
+        expires_at=expires_at,
+    )
+
+
+async def _queue_data_operation_confirmation(
+    db: AsyncSession,
+    *,
+    user: User,
+    operation: str,
+    detail: str,
+) -> EmailDelivery:
+    safe_name = escape(user.full_name)
+    safe_detail = escape(detail)
+    subject = f"CODITENT data {operation} confirmation"
+    html = (
+        f"<p>Hello {safe_name},</p><p>{safe_detail}</p>"
+        "<p>If you did not perform this action, contact support immediately.</p>"
+    )
+    return await enqueue_email_delivery(
+        db,
+        kind="account_data_confirmation",
+        dedupe_key=f"account-data-{operation}:{user.id}:{uuid4()}",
+        resource_type="user",
+        resource_id=user.id,
+        to_email=user.email,
+        subject=subject,
+        html=html,
+        text=f"Hello {user.full_name},\n\n{detail}\n\nIf you did not perform this action, contact support immediately.",
     )
 
 
@@ -115,16 +271,22 @@ def _legacy_candidate_profile(user_id) -> CandidateProfile:
     )
 
 
-async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthIdentity) -> User:
+async def _sync_existing_sso_user(
+    db: AsyncSession,
+    user: User,
+    identity: OAuthIdentity,
+    *,
+    commit: bool = True,
+) -> User:
     needs_commit = False
 
     if not user.full_name.strip() and identity.full_name:
         user.full_name = identity.full_name
         needs_commit = True
-    if identity.provider and user.oauth_provider != identity.provider:
+    if identity.provider and not user.oauth_provider:
         user.oauth_provider = identity.provider
         needs_commit = True
-    if identity.oauth_id and user.oauth_id != identity.oauth_id:
+    if identity.oauth_id and not user.oauth_id:
         user.oauth_id = identity.oauth_id
         needs_commit = True
     if identity.avatar_url and user.avatar_url != identity.avatar_url:
@@ -140,45 +302,171 @@ async def _sync_existing_sso_user(db: AsyncSession, user: User, identity: OAuthI
             db.add(_legacy_candidate_profile(user.id))
             needs_commit = True
 
-    if needs_commit:
+    if needs_commit and commit:
         await db.commit()
         await db.refresh(user)
 
     return user
 
 
-async def _create_sso_user(db: AsyncSession, identity: OAuthIdentity, role: UserRole) -> User:
+async def _create_sso_candidate(
+    db: AsyncSession,
+    identity: OAuthIdentity,
+    *,
+    commit: bool = True,
+) -> User:
     user = User(
         email=identity.email,
-        password_hash=pwd_context.hash(secrets.token_urlsafe(32)),
-        role=role,
-        is_approved=role != UserRole.RECRUITER,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        is_active=True,
         full_name=identity.full_name,
         oauth_provider=identity.provider,
         oauth_id=identity.oauth_id,
         avatar_url=identity.avatar_url,
+        company_id=None,
+        company_role=None,
     )
     db.add(user)
     await db.flush()
+    db.add(_new_candidate_profile(user.id))
 
-    if role == UserRole.CANDIDATE:
-        db.add(_new_candidate_profile(user.id))
-
-    await db.commit()
-    await db.refresh(user)
+    if commit:
+        await db.commit()
+        await db.refresh(user)
     return user
 
 
-def _set_access_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=settings.access_token_cookie_name,
-        value=token,
-        httponly=True,
-        secure=settings.access_token_cookie_secure,
-        samesite=settings.access_token_cookie_samesite,
-        max_age=settings.access_token_expire_minutes * 60,
-        path="/",
+async def _optional_authenticated_cookie_user(
+    request: Request,
+    db: AsyncSession,
+) -> User | None:
+    token = (request.cookies.get(settings.access_token_cookie_name) or "").strip()
+    if not token:
+        return None
+    try:
+        payload = verify_access_token(token)
+        await ensure_access_session_active(payload)
+        user_id = UUID(str(payload["sub"]))
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="authentication_service_unavailable",
+        ) from exc
+    except (AuthenticationRejected, ValueError, TypeError, KeyError):
+        return None
+    user = (
+        await db.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if user is None:
+        return None
+    try:
+        ensure_account_can_authenticate(user)
+        ensure_credential_matches_account(payload, user)
+    except AuthenticationRejected:
+        return None
+    return user
+
+
+def _legacy_oauth_link_matches(user: User, identity: OAuthIdentity) -> bool:
+    """Recognize a provider link created by the legacy user-column schema."""
+    return (
+        (user.oauth_provider or "").strip().lower() == identity.provider
+        and (user.oauth_id or "").strip() == identity.oauth_id
     )
+
+
+async def _resolve_oauth_user(
+    db: AsyncSession,
+    request: Request,
+    identity: OAuthIdentity,
+) -> tuple[User, bool]:
+    """Resolve a stable provider subject without email-based account takeover.
+
+    A verified provider email may create a new candidate account. It never
+    silently links to an existing local account: that requires a valid current
+    local session for the same user. The only compatibility exception is an
+    exact provider + subject already recorded by the legacy schema, after
+    which the subject is stored under the hardened uniqueness constraints.
+    """
+    linked_row = (
+        await db.execute(
+            select(OAuthAccount, User)
+            .join(User, User.id == OAuthAccount.user_id)
+            .where(
+                OAuthAccount.provider == identity.provider,
+                OAuthAccount.subject == identity.oauth_id,
+            )
+        )
+    ).first()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if linked_row is not None:
+        account, user = linked_row
+        if account.issuer.rstrip("/") != identity.issuer.rstrip("/"):
+            raise HTTPException(status_code=400, detail="sso_issuer_invalid")
+        account.last_login_at = now
+        await _sync_existing_sso_user(db, user, identity, commit=False)
+        await db.commit()
+        await db.refresh(user)
+        return user, False
+
+    existing = (
+        await db.execute(select(User).where(User.email == identity.email))
+    ).scalar_one_or_none()
+    is_new_registration = existing is None
+    if existing is None:
+        if not identity.email_verified:
+            raise HTTPException(status_code=400, detail="sso_email_unverified")
+        user = await _create_sso_candidate(db, identity, commit=False)
+    else:
+        # Older releases stored the already-verified provider link directly on
+        # the user row. Recover that link only when the immutable provider
+        # subject matches exactly; a matching email alone is never sufficient.
+        if not _legacy_oauth_link_matches(existing, identity):
+            authenticated = await _optional_authenticated_cookie_user(request, db)
+            if authenticated is None or authenticated.id != existing.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="sso_link_confirmation_required",
+                )
+        user = existing
+        await _sync_existing_sso_user(db, user, identity, commit=False)
+
+    db.add(
+        OAuthAccount(
+            user_id=user.id,
+            provider=identity.provider,
+            subject=identity.oauth_id,
+            issuer=identity.issuer,
+            email_at_link=identity.email,
+            created_at=now,
+            last_login_at=now,
+        )
+    )
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        linked_after_race = (
+            await db.execute(
+                select(OAuthAccount, User)
+                .join(User, User.id == OAuthAccount.user_id)
+                .where(
+                    OAuthAccount.provider == identity.provider,
+                    OAuthAccount.subject == identity.oauth_id,
+                )
+            )
+        ).first()
+        if linked_after_race is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="sso_link_confirmation_required",
+            ) from exc
+        _, user = linked_after_race
+        is_new_registration = False
+    await db.refresh(user)
+    return user, is_new_registration
 
 
 def _build_sso_response(
@@ -189,6 +477,9 @@ def _build_sso_response(
     popup_origin: str,
     attempt_id: str,
     provider: str,
+    *,
+    requires_2fa: bool = False,
+    is_new_registration: bool = False,
 ) -> Response:
     accept_header = request.headers.get("accept", "").lower()
     wants_html = "text/html" in accept_header
@@ -200,13 +491,24 @@ def _build_sso_response(
             status_code=status.HTTP_302_FOUND,
         )
     else:
+        if requires_2fa:
+            content = TwoFactorChallengeResponse(
+                mfa_token=token,
+                is_new_registration=is_new_registration,
+            ).model_dump(mode="json")
+        else:
+            content = OAuthHandoffExchangeResponse(
+                token=token,
+                user=UserOut.model_validate(user),
+                is_new_registration=is_new_registration,
+            ).model_dump(mode="json")
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content=TokenResponse(token=token, user=UserOut.model_validate(user)).model_dump(mode="json"),
+            content=content,
         )
 
-    if not wants_html:
-        _set_access_cookie(response, token)
+    if not wants_html and not requires_2fa:
+        set_access_cookie(response, token)
     return response
 
 
@@ -228,50 +530,6 @@ def _build_sso_error_response(
     raise HTTPException(status_code=status_code, detail=detail)
 
 
-def _build_onboarding_response(
-    request: Request,
-    onboarding_token: str,
-    popup_origin: str,
-    attempt_id: str,
-) -> Response:
-    accept_header = request.headers.get("accept", "").lower()
-    wants_html = "text/html" in accept_header
-
-    if wants_html:
-        response: Response = RedirectResponse(
-            url=f"{popup_origin}/choose-role?{urlencode({'attempt': attempt_id})}",
-            status_code=status.HTTP_302_FOUND,
-        )
-    else:
-        response = JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content={"detail": "oauth_role_required"},
-        )
-
-    response.set_cookie(
-        key=settings.oauth_onboarding_cookie_name,
-        value=onboarding_token,
-        httponly=True,
-        secure=settings.oauth_onboarding_cookie_secure,
-        samesite=settings.oauth_onboarding_cookie_samesite,
-        max_age=settings.oauth_onboarding_expire_minutes * 60,
-        path="/",
-    )
-    return response
-
-
-def _clear_onboarding_cookie(response: Response) -> None:
-    response.set_cookie(
-        key=settings.oauth_onboarding_cookie_name,
-        value="",
-        httponly=True,
-        secure=settings.oauth_onboarding_cookie_secure,
-        samesite=settings.oauth_onboarding_cookie_samesite,
-        max_age=0,
-        path="/",
-    )
-
-
 @router.get("/sso/providers")
 async def sso_providers() -> dict[str, bool]:
     return {
@@ -290,14 +548,23 @@ async def sso_start(
     oauth_provider = get_oauth_provider(provider)
     request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
     redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
-    state_token = create_oauth_state(
+    oauth_attempt = await create_oauth_attempt(
         oauth_provider.name,
         popup_origin or settings.frontend_url,
         attempt_id or secrets.token_urlsafe(24),
+        request.cookies.get(settings.oauth_browser_cookie_name),
     )
-    authorization_url = build_oauth_authorize_url(oauth_provider, redirect_uri, state_token)
+    authorization_url = build_oauth_authorize_url(
+        oauth_provider,
+        redirect_uri,
+        oauth_attempt.state,
+        code_verifier=oauth_attempt.code_verifier,
+        nonce=oauth_attempt.nonce,
+    )
     logger.info("sso_start", provider=oauth_provider.name)
-    return RedirectResponse(url=authorization_url, status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(url=authorization_url, status_code=status.HTTP_302_FOUND)
+    set_oauth_browser_cookie(response, oauth_attempt.browser_id)
+    return response
 
 
 @router.get("/sso/{provider}/callback", name="sso_callback")
@@ -320,13 +587,21 @@ async def sso_callback(
         attempt_id = None
         if state:
             try:
-                popup_origin, attempt_id = verify_oauth_state(state, oauth_provider.name)
+                oauth_attempt = await consume_oauth_attempt(
+                    state,
+                    oauth_provider.name,
+                    request.cookies.get(settings.oauth_browser_cookie_name),
+                )
+                popup_origin = oauth_attempt.popup_origin
+                attempt_id = oauth_attempt.attempt_id
             except HTTPException:
                 pass
-        return _build_sso_error_response(
+        response = _build_sso_error_response(
             request, "sso_provider_error", status.HTTP_400_BAD_REQUEST,
             oauth_provider.name, popup_origin, attempt_id,
         )
+        clear_oauth_browser_cookie(response)
+        return response
 
     if not code or not state:
         logger.warning("sso_error", provider=provider, error="sso_code_or_state_missing")
@@ -336,140 +611,103 @@ async def sso_callback(
         )
 
     try:
-        popup_origin, attempt_id = verify_oauth_state(state, oauth_provider.name)
+        oauth_attempt = await consume_oauth_attempt(
+            state,
+            oauth_provider.name,
+            request.cookies.get(settings.oauth_browser_cookie_name),
+        )
+        popup_origin, attempt_id = oauth_attempt.popup_origin, oauth_attempt.attempt_id
         request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
         redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
-        provider_access_token = await exchange_code_for_access_token(oauth_provider, code, redirect_uri)
+        provider_access_token = await exchange_code_for_access_token(
+            oauth_provider,
+            code,
+            redirect_uri,
+            code_verifier=oauth_attempt.code_verifier,
+        )
         identity = await fetch_user_identity(oauth_provider, provider_access_token)
-        result = await db.execute(select(User).where(User.email == identity.email))
-        user = result.scalar_one_or_none()
+        user, is_new_registration = await _resolve_oauth_user(db, request, identity)
     except HTTPException as exc:
-        logger.warning("sso_error", provider=provider, error=str(exc.detail))
+        logger.warning(
+            "sso_error",
+            provider=provider,
+            status_code=exc.status_code,
+            reason="provider_request_rejected",
+            error_code=str(exc.detail),
+        )
         return _build_sso_error_response(
             request, str(exc.detail), exc.status_code, oauth_provider.name,
             locals().get("popup_origin"), locals().get("attempt_id"),
         )
-    except Exception:
-        logger.exception("sso_error", provider=provider, error="sso_internal_error")
+    except Exception as exc:
+        logger.error(
+            "sso_error",
+            provider=provider,
+            reason="sso_internal_error",
+            exception_type=type(exc).__name__,
+        )
         return _build_sso_error_response(
             request, "sso_internal_error", status.HTTP_500_INTERNAL_SERVER_ERROR,
             oauth_provider.name, locals().get("popup_origin"), locals().get("attempt_id"),
         )
 
-    if user is None:
-        onboarding_token = create_onboarding_session(identity, popup_origin, attempt_id)
-        response = _build_onboarding_response(request, onboarding_token, popup_origin, attempt_id)
-        logger.info("sso_onboarding", provider=oauth_provider.name, email=identity.email)
-        return response
-
-    user = await _sync_existing_sso_user(db, user, identity)
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    trusted_device = request.cookies.get(settings.trusted_device_cookie_name)
+    try:
+        completion = await complete_authentication(
+            user,
+            trusted_device_token=trusted_device,
+        )
+    except AuthenticationRejected:
+        return _build_sso_error_response(
+            request,
+            "account_not_active",
+            status.HTTP_403_FORBIDDEN,
+            oauth_provider.name,
+            popup_origin,
+            attempt_id,
+        )
+    except AuthenticationStoreUnavailable:
+        return _build_sso_error_response(
+            request,
+            "authentication_service_unavailable",
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            oauth_provider.name,
+            popup_origin,
+            attempt_id,
+        )
+    token = completion.token
     wants_html = "text/html" in request.headers.get("accept", "").lower()
-    handoff_code = await create_oauth_handoff(token, str(user.id), False) if wants_html else ""
+    handoff_code = (
+        await create_oauth_handoff(
+            token,
+            str(user.id),
+            is_new_registration,
+            requires_2fa=completion.requires_2fa,
+        )
+        if wants_html
+        else ""
+    )
 
     response = _build_sso_response(
-        request, token, user, handoff_code, popup_origin, attempt_id, oauth_provider.name
+        request,
+        token,
+        user,
+        handoff_code,
+        popup_origin,
+        attempt_id,
+        oauth_provider.name,
+        requires_2fa=completion.requires_2fa,
+        is_new_registration=is_new_registration,
     )
+    clear_oauth_browser_cookie(response)
     logger.info("sso_success", provider=oauth_provider.name, user_id=str(user.id))
     return response
 
 
-@router.post("/oauth/complete-registration", response_model=OAuthCompleteRegistrationResponse)
-async def complete_oauth_registration(
-    data: OAuthCompleteRegistrationRequest,
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> OAuthCompleteRegistrationResponse:
-    try:
-        role = validate_oauth_role(data.role)
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_400_BAD_REQUEST:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid role selected",
-            ) from exc
-        raise
-    onboarding_token = request.cookies.get(settings.oauth_onboarding_cookie_name)
-    logger.info(
-        "sso_complete_registration_start",
-        role=role,
-        has_onboarding_cookie=bool(onboarding_token),
-    )
-    if not onboarding_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="OAuth session missing",
-        )
-
-    try:
-        onboarding = verify_onboarding_session(onboarding_token)
-        identity = onboarding.identity
-        logger.info(
-            "sso_complete_registration_identity",
-            email=identity.email,
-            provider=identity.provider,
-            role=role,
-        )
-        result = await db.execute(select(User).where(User.email == identity.email))
-        user = result.scalar_one_or_none()
-
-        if user is None:
-            user_role = UserRole(role.upper())
-            user = await _create_sso_user(db, identity, user_role)
-        else:
-            user = await _sync_existing_sso_user(db, user, identity)
-    except HTTPException as exc:
-        logger.warning(
-            "sso_complete_registration_failed",
-            role=role,
-            provider=getattr(locals().get("identity"), "provider", None),
-        )
-        if exc.detail == "oauth_onboarding_invalid":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session expired, please login again",
-            ) from exc
-        raise
-    except Exception as exc:
-        logger.exception("sso_complete_registration_failed", role=role)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="oauth_complete_registration_failed",
-        ) from exc
-
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
-    handoff_code = await create_oauth_handoff(token, str(user.id), True)
-
-    response = JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=OAuthCompleteRegistrationResponse(
-            handoff_code=handoff_code,
-            attempt_id=onboarding.attempt_id,
-            provider=identity.provider,
-        ).model_dump(mode="json"),
-    )
-    _clear_onboarding_cookie(response)
-    logger.info(
-        "sso_complete_registration",
-        provider=identity.provider,
-        user_id=str(user.id),
-    )
-    return response
-
-
-@router.post("/oauth/handoff/exchange", response_model=OAuthHandoffExchangeResponse)
+@router.post(
+    "/oauth/handoff/exchange",
+    response_model=OAuthHandoffExchangeResponse | TwoFactorChallengeResponse,
+)
 async def exchange_oauth_handoff(
     data: OAuthHandoffExchangeRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -483,7 +721,36 @@ async def exchange_oauth_handoff(
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff")
+    try:
+        ensure_account_can_authenticate(user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account_not_active") from exc
     token = str(handoff["token"])
+    requires_2fa = bool(handoff.get("requires_2fa"))
+    try:
+        if requires_2fa:
+            payload = verify_mfa_token(token)
+            await ensure_mfa_challenge_active(payload)
+        else:
+            payload = verify_access_token(token)
+            await ensure_access_session_active(payload)
+        ensure_credential_matches_account(payload, user)
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="authentication_service_unavailable",
+        ) from exc
+    except (AuthenticationRejected, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_sso_handoff") from exc
+
+    if requires_2fa:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=TwoFactorChallengeResponse(
+                mfa_token=token,
+                is_new_registration=bool(handoff.get("is_new_registration")),
+            ).model_dump(mode="json"),
+        )
     response = JSONResponse(
         status_code=status.HTTP_200_OK,
         content=OAuthHandoffExchangeResponse(
@@ -492,17 +759,21 @@ async def exchange_oauth_handoff(
             is_new_registration=bool(handoff.get("is_new_registration")),
         ).model_dump(mode="json"),
     )
-    _set_access_cookie(response, token)
+    set_access_cookie(response, token)
     return response
 
 
-@router.post("/register", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/register",
+    response_model=RegistrationStarted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit("10/minute")
 async def register(
     data: RegisterRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> RegistrationStarted:
     """Start password registration: validate, create/refresh a pending OTP
     record, email the code. No user account and no token exist until
     POST /auth/verify-email succeeds."""
@@ -510,18 +781,15 @@ async def register(
 
     result = await db.execute(select(User).where(User.email == email))
     if result.scalar_one_or_none() is not None:
-        logger.warning("register_failed", email=email, reason="email_in_use")
+        logger.warning("register_failed", reason="email_in_use")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
-
-    # Enforce candidate-only public registration — prevent mass assignment
-    if data.role != "CANDIDATE":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only CANDIDATE registration is public")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     res = await db.execute(
         text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
     )
     pending = res.mappings().first()
+    previous_registration_id = UUID(str(pending["id"])) if pending is not None else None
     if pending is not None:
         if not is_expired(pending["otp_expires_at"], now):
             remaining = cooldown_remaining_seconds(pending["last_otp_sent_at"], now)
@@ -536,6 +804,9 @@ async def register(
 
     otp = generate_otp()
     expires_at = otp_expiry()
+    registration_id = uuid4()
+    password_hash = hash_password(data.password)
+    full_name = data.full_name.strip()
     if pending is None:
         try:
             await db.execute(
@@ -544,16 +815,16 @@ async def register(
                     " VALUES (:id, :email, :name, :pw, :otp, :exp, 0, :now, :now)"
                 ),
                 {
-                    "id": str(uuid4()),
+                    "id": str(registration_id),
                     "email": email,
-                    "name": data.full_name.strip(),
-                    "pw": pwd_context.hash(data.password),
+                    "name": full_name,
+                    "pw": password_hash,
                     "otp": hash_otp(otp),
                     "exp": expires_at,
                     "now": now,
                 },
             )
-            await db.commit()
+            await db.flush()
         except IntegrityError:
             # Lost a concurrent race: another request created the row first.
             await db.rollback()
@@ -562,29 +833,67 @@ async def register(
                 detail="A verification is already in progress for this email",
             )
     else:
+        # This is a complete attempt replacement, not an OTP-only rotation.
+        # The new public attempt id, password hash, name, and OTP move together
+        # under the email row lock. A code or id from the former attempt can no
+        # longer complete registration or inherit the other attempt's fields.
         await db.execute(
             text(
-                "UPDATE pending_registrations SET otp_hash=:otp, otp_expires_at=:exp,"
-                " otp_attempts=0, last_otp_sent_at=:now WHERE email=:email"
+                "UPDATE pending_registrations SET id=:id, full_name=:name,"
+                " password_hash=:pw, otp_hash=:otp, otp_expires_at=:exp,"
+                " otp_attempts=0, last_otp_sent_at=:now, created_at=:now"
+                " WHERE email=:email"
             ),
-            {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
+            {
+                "id": str(registration_id),
+                "name": full_name,
+                "pw": password_hash,
+                "otp": hash_otp(otp),
+                "exp": expires_at,
+                "now": now,
+                "email": email,
+            },
         )
-        await db.commit()
+        await db.flush()
 
     try:
-        send_otp_email(email, data.full_name.strip(), otp, expires_at)
-    except RuntimeError:
-        # Never leave a pending record the user cannot complete.
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
-        await db.commit()
-        logger.warning("register_failed", email=email, reason="otp_email_failed")
+        if previous_registration_id is not None:
+            await _supersede_code_deliveries(
+                db,
+                kind="registration_verification",
+                resource_id=previous_registration_id,
+            )
+        delivery = await _queue_registration_code(
+            db,
+            registration_id=registration_id,
+            email=email,
+            full_name=full_name,
+            otp=otp,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        logger.error("register_failed", reason="email_outbox_unavailable")
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not send verification email. Please try again.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email service is temporarily unavailable.",
         )
 
-    logger.info("register_otp_sent", email=email)
-    return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
+    await db.commit()
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+
+    logger.info("register_otp_queued", delivery_status=delivery_status)
+    return RegistrationStarted(
+        detail=(
+            "Verification code sent"
+            if delivery_status == "sent"
+            else "Verification code queued for delivery"
+        ),
+        email=email,
+        registration_id=registration_id,
+        expires_in_seconds=settings.otp_expire_minutes * 60,
+        delivery_status=delivery_status,
+    )
 
 
 @router.post("/verify-email", response_model=TokenResponse)
@@ -592,24 +901,38 @@ async def register(
 async def verify_email(
     data: VerifyEmailRequest,
     request: Request,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     """Verify the OTP and atomically create the real user account."""
     from app.models import CandidateProfile
 
     email = data.email.strip().lower()
+    registration_id = data.registration_id
     code = data.otp.strip()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     res = await db.execute(
-        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+        text(
+            "SELECT * FROM pending_registrations"
+            " WHERE id=:id AND email=:email FOR UPDATE"
+        ),
+        {"id": str(registration_id), "email": email},
     )
     pending = res.mappings().first()
     if pending is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
 
     if is_expired(pending["otp_expires_at"], now):
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await _supersede_code_deliveries(
+            db,
+            kind="registration_verification",
+            resource_id=registration_id,
+        )
+        await db.execute(
+            text("DELETE FROM pending_registrations WHERE id=:id"),
+            {"id": str(registration_id)},
+        )
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -617,7 +940,15 @@ async def verify_email(
         )
 
     if attempts_exceeded(pending["otp_attempts"]):
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await _supersede_code_deliveries(
+            db,
+            kind="registration_verification",
+            resource_id=registration_id,
+        )
+        await db.execute(
+            text("DELETE FROM pending_registrations WHERE id=:id"),
+            {"id": str(registration_id)},
+        )
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -625,12 +956,30 @@ async def verify_email(
         )
 
     if not verify_otp(code, pending["otp_hash"]):
-        await db.execute(
-            text("UPDATE pending_registrations SET otp_attempts = otp_attempts + 1 WHERE email=:email"),
-            {"email": email},
-        )
+        next_attempt = pending["otp_attempts"] + 1
+        if attempts_exceeded(next_attempt):
+            # Destroy the challenge as soon as its final allowed attempt is
+            # spent. A correct guess after this point can never revive it.
+            await db.execute(
+                text("DELETE FROM pending_registrations WHERE id=:id"),
+                {"id": str(registration_id)},
+            )
+            await _supersede_code_deliveries(
+                db,
+                kind="registration_verification",
+                resource_id=registration_id,
+            )
+        else:
+            await db.execute(
+                text(
+                    "UPDATE pending_registrations SET otp_attempts=:attempts"
+                    " WHERE id=:id"
+                ),
+                {"attempts": next_attempt, "id": str(registration_id)},
+            )
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
+        detail = "Too many attempts. Please register again." if attempts_exceeded(next_attempt) else "Invalid verification code"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     result = await db.execute(select(User).where(User.email == email))
     if result.scalar_one_or_none() is not None:
@@ -643,6 +992,7 @@ async def verify_email(
         password_hash=pending["password_hash"],
         role=UserRole.CANDIDATE,
         is_approved=True,
+        is_active=True,
         full_name=pending["full_name"],
         company_id=None,
         company_role=None,
@@ -651,42 +1001,54 @@ async def verify_email(
     await db.flush()
 
     db.add(_new_candidate_profile(user.id))
+    await _supersede_code_deliveries(
+        db,
+        kind="registration_verification",
+        resource_id=registration_id,
+    )
     await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
     await db.commit()
     await db.refresh(user)
 
     logger.info("register_success", user_id=str(user.id), role=user.role.value)
 
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    token = issue_access_token(user)
+    set_access_cookie(response, token)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
-@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/resend-verification",
+    response_model=RegistrationStarted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit("5/minute")
 async def resend_verification(
     data: ResendVerificationRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> RegistrationStarted:
     """Issue a fresh OTP, invalidating the previous one. Cooldown enforced."""
     email = data.email.strip().lower()
+    registration_id = data.registration_id
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     res = await db.execute(
-        text("SELECT * FROM pending_registrations WHERE email=:email FOR UPDATE"), {"email": email}
+        text(
+            "SELECT * FROM pending_registrations"
+            " WHERE id=:id AND email=:email FOR UPDATE"
+        ),
+        {"id": str(registration_id), "email": email},
     )
     pending = res.mappings().first()
     if pending is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending verification for this email")
 
     if is_expired(pending["otp_expires_at"], now):
-        await db.execute(text("DELETE FROM pending_registrations WHERE email=:email"), {"email": email})
+        await db.execute(
+            text("DELETE FROM pending_registrations WHERE id=:id"),
+            {"id": str(registration_id)},
+        )
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -705,25 +1067,52 @@ async def resend_verification(
     await db.execute(
         text(
             "UPDATE pending_registrations SET otp_hash=:otp, otp_expires_at=:exp,"
-            " otp_attempts=0, last_otp_sent_at=:now WHERE email=:email"
+            " otp_attempts=0, last_otp_sent_at=:now WHERE id=:id"
         ),
-        {"otp": hash_otp(otp), "exp": expires_at, "now": now, "email": email},
+        {
+            "otp": hash_otp(otp),
+            "exp": expires_at,
+            "now": now,
+            "id": str(registration_id),
+        },
     )
     await db.flush()
 
     try:
-        send_otp_email(email, pending["full_name"], otp, expires_at)
-    except RuntimeError:
-        # Roll back to the previous code so the user is not locked out.
+        await _supersede_code_deliveries(
+            db,
+            kind="registration_verification",
+            resource_id=registration_id,
+        )
+        delivery = await _queue_registration_code(
+            db,
+            registration_id=registration_id,
+            email=email,
+            full_name=pending["full_name"],
+            otp=otp,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not send verification email. Please try again.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email service is temporarily unavailable.",
         )
     await db.commit()
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
 
-    logger.info("register_otp_resent", email=email)
-    return {"detail": "Verification code sent", "email": email, "expires_in_seconds": settings.otp_expire_minutes * 60}
+    logger.info("register_otp_requeued", delivery_status=delivery_status)
+    return RegistrationStarted(
+        detail=(
+            "Verification code sent"
+            if delivery_status == "sent"
+            else "Verification code queued for delivery"
+        ),
+        email=email,
+        registration_id=registration_id,
+        expires_in_seconds=settings.otp_expire_minutes * 60,
+        delivery_status=delivery_status,
+    )
 
 
 @router.post("/login", response_model=TokenResponse | TwoFactorChallengeResponse)
@@ -731,47 +1120,63 @@ async def resend_verification(
 async def login(
     data: LoginRequest,
     request: Request,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse | TwoFactorChallengeResponse:
     email = data.email.strip().lower()
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if user is None or not pwd_context.verify(data.password, user.password_hash):
-        logger.warning("login_failed", email=email)
+    password_verified = False
+    replacement_hash: str | None = None
+    if user is not None:
+        password_verified, replacement_hash = verify_password_and_rehash(
+            data.password,
+            user.password_hash,
+        )
+    if user is None or not password_verified:
+        logger.warning("login_failed", reason="invalid_credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    # Reject the wrong tab before any access cookie, trusted-device bypass,
+    # password rehash, or pending MFA challenge can be created.
+    try:
+        ensure_login_account_type(user, data.account_type)
+    except AuthenticationRejected as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
     if user.role == UserRole.RECRUITER and not user.is_approved:
-        logger.warning("login_failed", email=email, reason="recruiter_unapproved")
+        logger.warning("login_failed", reason="recruiter_unapproved")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recruiter account is pending admin approval",
         )
 
-    trusted_device = data.trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
-    trusted_device_valid = False
-    if user.is_2fa_enabled and trusted_device:
-        try:
-            trusted_payload = verify_token(trusted_device)
-            trusted_device_valid = (
-                trusted_payload.get("type") == "trusted_device"
-                and trusted_payload.get("sub") == str(user.id)
-                and trusted_payload.get("factor")
-                == hashlib.sha256((user.totp_secret or "").encode()).hexdigest()
-            )
-        except ValueError:
-            trusted_device_valid = False
+    if replacement_hash is not None:
+        user.password_hash = replacement_hash
+        await db.commit()
+        logger.info("password_hash_upgraded", user_id=str(user.id), algorithm="argon2id")
 
-    if user.is_2fa_enabled and not trusted_device_valid:
-        from datetime import timedelta
-        mfa_token = create_access_token(
-            {"sub": str(user.id), "type": "mfa_pending"},
-            expires_delta=timedelta(minutes=5),
+    trusted_device = data.trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
+    try:
+        completion = await complete_authentication(
+            user,
+            trusted_device_token=trusted_device,
+            account_type=data.account_type,
         )
+    except AuthenticationRejected as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active") from exc
+    except AuthenticationStoreUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+
+    if completion.requires_2fa:
         logger.info("login_2fa_challenge_issued", user_id=str(user.id))
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content={"require_2fa": True, "mfa_token": mfa_token},
+            content={"require_2fa": True, "mfa_token": completion.token},
         )
 
     if user.is_2fa_enabled:
@@ -782,13 +1187,8 @@ async def login(
     ip_addr = request.client.host if request.client else ""
     await check_and_notify_new_device(user, ua_header, ip_addr)
 
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-        }
-    )
+    token = completion.token
+    set_access_cookie(response, token)
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
 
@@ -797,7 +1197,9 @@ async def login(
 @limiter.limit("5/minute")
 async def logout_all_devices(
     request: Request,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Revoke all active JWT access tokens across all devices for the current user."""
     from app.cache import get_async_redis
@@ -810,6 +1212,11 @@ async def logout_all_devices(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not revoke sessions because session storage is unavailable.",
         ) from exc
+
+    current_user.auth_version = (current_user.auth_version or 0) + 1
+    await db.commit()
+    clear_auth_cookies(response)
+
     logger.info("logout_all_devices_success", user_id=str(current_user.id))
     return {"detail": "Logged out of all devices successfully."}
 
@@ -832,6 +1239,239 @@ async def update_account_name(
     return UserMeOut.model_validate(result.scalar_one())
 
 
+@router.post("/account/data-export")
+async def export_account_data(
+    data: AccountDataExportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    payload = await build_account_export(db, current_user)
+    content, media_type = serialize_account_export(payload, data.format)
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="export",
+            detail=f"Your account data was exported in {data.format.upper()} format.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
+    await db.commit()
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
+    await log_audit(
+        db,
+        action="ACCOUNT_DATA_EXPORTED",
+        actor=current_user,
+        company_id=current_user.company_id,
+        resource_type="user",
+        resource_id=current_user.id,
+    )
+    filename = f"coditent-account-{current_user.id}.{data.format}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/account/data-import", response_model=AccountDataImportOut)
+async def import_account_data(
+    data: AccountDataImportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDataImportOut:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    profile = await db.scalar(
+        select(CandidateProfile).where(CandidateProfile.user_id == current_user.id).with_for_update()
+    )
+    if profile is None:
+        raise HTTPException(status_code=409, detail="Only candidate profile data can be imported")
+    updates = data.profile.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(profile, field, value)
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="import",
+            detail=f"{len(updates)} profile fields were imported into your account.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
+    await db.commit()
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
+    await log_audit(
+        db,
+        action="ACCOUNT_DATA_IMPORTED",
+        actor=current_user,
+        resource_type="user",
+        resource_id=current_user.id,
+        details=f"updated_fields={','.join(sorted(updates))}",
+    )
+    return AccountDataImportOut(
+        updated_fields=sorted(updates),
+        detail=f"Imported {len(updates)} profile fields.",
+    )
+
+
+@router.get("/account/deletion", response_model=AccountDeletionOut)
+async def get_account_deletion(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    deletion = (
+        await db.execute(
+            select(AccountDeletionRequest).where(
+                AccountDeletionRequest.user_id == current_user.id
+            )
+        )
+    ).scalar_one_or_none()
+    if deletion is None:
+        raise HTTPException(status_code=404, detail="No account deletion is scheduled")
+    return AccountDeletionOut.model_validate(deletion)
+
+
+@router.post("/account/deletion", response_model=AccountDeletionOut, status_code=202)
+async def schedule_account_deletion(
+    data: AccountDeletionCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    if current_user.company_id is not None:
+        owned_company = await db.scalar(
+            select(Company.id).where(Company.owner_id == current_user.id)
+        )
+        if owned_company is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Transfer or archive the company before deleting its owner account",
+            )
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    execute_after = now + timedelta(days=DELETION_GRACE_DAYS)
+    deletion = (
+        await db.execute(
+            select(AccountDeletionRequest)
+            .where(AccountDeletionRequest.user_id == current_user.id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if deletion is not None and deletion.status in {"scheduled", "processing", "retry"}:
+        return AccountDeletionOut.model_validate(deletion)
+    if deletion is None:
+        deletion = AccountDeletionRequest(
+            user_id=current_user.id,
+            status="scheduled",
+            execute_after=execute_after,
+            next_attempt_at=execute_after,
+        )
+        db.add(deletion)
+    else:
+        deletion.status = "scheduled"
+        deletion.execute_after = execute_after
+        deletion.next_attempt_at = execute_after
+        deletion.attempts = 0
+        deletion.lease_owner = None
+        deletion.lease_expires_at = None
+        deletion.last_error_type = None
+        deletion.requested_at = now
+        deletion.canceled_at = None
+        deletion.completed_at = None
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="deletion request",
+            detail=f"Your account deletion is scheduled for {execute_after.isoformat()}Z. You can cancel it before processing begins.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
+    await db.commit()
+    await db.refresh(deletion)
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
+    await log_audit(
+        db,
+        action="ACCOUNT_DELETION_SCHEDULED",
+        actor=current_user,
+        company_id=current_user.company_id,
+        resource_type="account_deletion",
+        resource_id=deletion.id,
+        details=f"grace_days={DELETION_GRACE_DAYS}",
+    )
+    return AccountDeletionOut.model_validate(deletion)
+
+
+@router.delete("/account/deletion", response_model=AccountDeletionOut)
+async def cancel_account_deletion(
+    data: AccountDataExportRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    deletion = (
+        await db.execute(
+            select(AccountDeletionRequest)
+            .where(AccountDeletionRequest.user_id == current_user.id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if deletion is None or deletion.status not in {"scheduled", "retry"}:
+        raise HTTPException(status_code=409, detail="Account deletion cannot be canceled")
+    deletion.status = "canceled"
+    deletion.canceled_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    deletion.lease_owner = None
+    deletion.lease_expires_at = None
+    try:
+        delivery = await _queue_data_operation_confirmation(
+            db,
+            user=current_user,
+            operation="deletion cancellation",
+            detail="Your scheduled account deletion was canceled. Your account remains active.",
+        )
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data-operation confirmation email is temporarily unavailable.",
+        )
+    await db.commit()
+    await db.refresh(deletion)
+    await deliver_email_job(db, delivery.id, worker_id="api-data-confirmation")
+    await log_audit(
+        db,
+        action="ACCOUNT_DELETION_CANCELED",
+        actor=current_user,
+        company_id=current_user.company_id,
+        resource_type="account_deletion",
+        resource_id=deletion.id,
+    )
+    return AccountDeletionOut.model_validate(deletion)
+
+
 @router.post("/account/email/request", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("5/hour")
 async def request_email_change(
@@ -840,7 +1480,9 @@ async def request_email_change(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    _verify_sensitive_action(current_user, data.current_password, data.two_factor_code)
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
     new_email = str(data.new_email).strip().lower()
     if new_email == current_user.email.lower():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This is already your email address.")
@@ -848,17 +1490,41 @@ async def request_email_change(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That email address is already in use.")
     otp = generate_otp()
+    expires_at = otp_expiry()
     current_user.pending_email = new_email
     current_user.pending_email_otp_hash = hash_otp(otp)
-    current_user.pending_email_expires_at = otp_expiry()
+    current_user.pending_email_expires_at = expires_at
     current_user.pending_email_attempts = 0
     try:
-        send_email_change_code(new_email, current_user.full_name, otp)
-    except Exception:
+        await _supersede_code_deliveries(
+            db,
+            kind="email_change_verification",
+            resource_id=current_user.id,
+        )
+        delivery = await _queue_email_change_code(
+            db,
+            user=current_user,
+            new_email=new_email,
+            otp=otp,
+            expires_at=expires_at,
+        )
+    except EmailOutboxUnavailable:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not send the verification code.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email service is temporarily unavailable.",
+        )
     await db.commit()
-    return {"detail": "Verification code sent to the new email address.", "email": new_email}
+    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    return {
+        "detail": (
+            "Verification code sent to the new email address."
+            if delivery_status == "sent"
+            else "Verification code queued for delivery."
+        ),
+        "email": new_email,
+        "delivery_status": delivery_status,
+    }
 
 
 @router.post("/account/email/confirm", response_model=TokenResponse)
@@ -870,9 +1536,25 @@ async def confirm_email_change(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
+    # Verification attempts and auth_version are shared counters. Reload the
+    # account under a row lock so parallel confirmations cannot lose an
+    # attempt or consume the same pending change twice.
+    current_user = (
+        await db.execute(
+            select(User)
+            .where(User.id == current_user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     if not current_user.pending_email or not current_user.pending_email_otp_hash or not current_user.pending_email_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email change is pending.")
     if is_expired(current_user.pending_email_expires_at):
+        await _supersede_code_deliveries(
+            db,
+            kind="email_change_verification",
+            resource_id=current_user.id,
+        )
         current_user.pending_email = current_user.pending_email_otp_hash = None
         current_user.pending_email_expires_at = None
         current_user.pending_email_attempts = 0
@@ -881,23 +1563,34 @@ async def confirm_email_change(
     if not verify_otp(data.otp, current_user.pending_email_otp_hash):
         current_user.pending_email_attempts += 1
         if current_user.pending_email_attempts >= settings.otp_max_attempts:
+            await _supersede_code_deliveries(
+                db,
+                kind="email_change_verification",
+                resource_id=current_user.id,
+            )
             current_user.pending_email = current_user.pending_email_otp_hash = None
             current_user.pending_email_expires_at = None
             current_user.pending_email_attempts = 0
         await db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code.")
     new_email = current_user.pending_email
+    await _supersede_code_deliveries(
+        db,
+        kind="email_change_verification",
+        resource_id=current_user.id,
+    )
     current_user.email = new_email
     current_user.pending_email = current_user.pending_email_otp_hash = None
     current_user.pending_email_expires_at = None
     current_user.pending_email_attempts = 0
+    current_user.auth_version += 1
     try:
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That email address is already in use.") from exc
-    token = create_access_token({"sub": str(current_user.id), "email": current_user.email, "role": current_user.role.value})
-    _set_access_cookie(response, token)
+    token = issue_access_token(current_user)
+    set_access_cookie(response, token)
     return TokenResponse(token=token, user=UserOut.model_validate(current_user))
 
 
@@ -906,31 +1599,169 @@ async def confirm_email_change(
 async def change_account_password(
     data: PasswordChangeRequest,
     request: Request,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    _verify_sensitive_action(current_user, data.current_password, data.two_factor_code)
-    if pwd_context.verify(data.new_password, current_user.password_hash):
+    current_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    if verify_password(data.new_password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different from the current password.")
-    current_user.password_hash = pwd_context.hash(data.new_password)
+    current_user.password_hash = hash_password(data.new_password)
+    current_user.auth_version += 1
     await db.commit()
+    clear_auth_cookies(response)
     return {"detail": "Password changed successfully."}
 
 
-@router.put("/me/avatar", response_model=UserMeOut)
-async def update_avatar(
-    data: AvatarUpdate,
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    request: Request,
+    response: Response,
+    payload: Annotated[dict, Depends(get_current_access_payload)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """Revoke the active access session and remembered-device credential."""
+    try:
+        await revoke_access_session(payload, db)
+        await revoke_trusted_device(
+            request.cookies.get(settings.trusted_device_cookie_name), db
+        )
+    except AuthenticationStoreUnavailable as exc:
+        # Do not claim logout while a still-valid bearer session could remain
+        # usable on another process.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+    clear_auth_cookies(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
+@router.post("/me/avatar", response_model=UserMeOut)
+async def upload_account_avatar(
+    file: Annotated[UploadFile, File(...)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserMeOut:
-    current_user.avatar_url = data.avatar_url.strip() or None
-    await db.commit()
-    await db.refresh(current_user)
+    try:
+        data = await read_upload_limited(file, MAX_AVATAR_BYTES)
+    except UploadTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 2MB",
+        ) from exc
+    finally:
+        await file.close()
+    try:
+        ext = validate_logo_file(file.filename, file.content_type, len(data))
+        await validate_logo_content_async(data, ext)
+    except LogoResourceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+        ) from exc
+    except LogoValidationTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Avatar could not be validated within the processing limit",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    locked = (
+        await db.execute(select(User).where(User.id == current_user.id).with_for_update())
+    ).scalar_one()
+    old_path = locked.avatar_storage_path
+    new_path = build_avatar_path(str(locked.id), ext)
+    try:
+        await asyncio.to_thread(
+            upload_avatar, new_path, data, AVATAR_CONTENT_TYPE_BY_EXT[ext]
+        )
+    except AvatarStorageError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    locked.avatar_storage_path = new_path
+    locked.avatar_url = f"/auth/users/{locked.id}/avatar"
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        try:
+            await asyncio.to_thread(delete_avatar, new_path)
+        except AvatarStorageError:
+            logger.warning("avatar_failed_upload_cleanup_deferred", user_id=str(locked.id))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Avatar could not be saved",
+        ) from exc
+    if old_path and old_path != new_path:
+        try:
+            assert_avatar_path(old_path, str(locked.id))
+            await asyncio.to_thread(delete_avatar, old_path)
+        except AvatarStorageError:
+            logger.warning("avatar_replacement_cleanup_deferred", user_id=str(locked.id))
+    await log_audit(
+        db,
+        action="ACCOUNT_AVATAR_UPDATED",
+        actor=locked,
+        resource_type="user",
+        resource_id=locked.id,
+    )
     result = await db.execute(
         select(User).options(joinedload(User.profile)).where(User.id == current_user.id)
     )
     user = result.scalar_one()
     return UserMeOut.model_validate(user)
+
+
+@router.delete("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account_avatar(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    locked = (
+        await db.execute(select(User).where(User.id == current_user.id).with_for_update())
+    ).scalar_one()
+    old_path = locked.avatar_storage_path
+    if old_path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found")
+    assert_avatar_path(old_path, str(locked.id))
+    locked.avatar_storage_path = None
+    locked.avatar_url = None
+    await db.commit()
+    try:
+        await asyncio.to_thread(delete_avatar, old_path)
+    except AvatarStorageError:
+        logger.warning("avatar_delete_cleanup_deferred", user_id=str(locked.id))
+
+
+@router.get("/users/{user_id}/avatar", response_class=StreamingResponse)
+async def stream_account_avatar(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StreamingResponse:
+    path = (
+        await db.execute(select(User.avatar_storage_path).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if not path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found")
+    try:
+        assert_avatar_path(path, str(user_id))
+        data = await asyncio.to_thread(download_avatar, path)
+    except AvatarStorageError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found") from exc
+    ext = path.rsplit(".", 1)[-1].lower()
+    content_type = AVATAR_CONTENT_TYPE_BY_EXT.get(ext, "application/octet-stream")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=300, immutable"},
+    )
 
 
 @router.get("/me", response_model=UserMeOut)

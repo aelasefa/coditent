@@ -3,8 +3,7 @@
 # CODITENT — Talent Workflow Platform for Morocco
 
 ## Description
-
-CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins approve accounts, moderate content, impersonate users for support, and audit activity.
+CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins invite companies, moderate content, impersonate users for support, and audit activity.
 
 ## Project goals
 
@@ -15,7 +14,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 
 ## Key features
 
-- Custom JWT auth (register + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
+- Custom JWT auth (candidate-only registration + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
 - Invitation-only company system (platform→company invites, owner→employee invites, token hashing, expiry, resend rotation).
 - Offer CRUD + responsible-HR assignment + activation toggle.
 - Recommendations: Celery + Gemini ranking with deterministic heuristic fallback; per-offer match scoring with `pending → processing → completed | failed` lifecycle.
@@ -49,7 +48,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 17. [Chat system](#chat-system)
 18. [AI architecture](#ai-architecture)
 19. [Recommendation system](#recommendation-system)
-20. [Assessments / practice missions](#assessments--practice-missions)
+20. [Practice missions](#practice-missions)
 21. [Company logo](#company-logo)
 22. [Running CODITENT](#running-coditent)
 23. [Complete user flows](#complete-user-flows)
@@ -75,7 +74,7 @@ CODITENT connects candidates and company recruiters in one workspace. Candidates
 ### Prerequisites
 
 - Docker + Docker Compose (recommended path).
-- Node 20 + npm (frontend local dev / CI uses `npm ci`, `npm run lint`, `npm run build`).
+- Node 22 or newer + npm (frontend local dev / CI uses `npm ci`, `npm run lint`, `npm run build`).
 - Python 3.12 (backend local dev / CI).
 - An active **Supabase project** (sole persistent database — there is no local Postgres container, no SQLite).
 - A Google Gemini API key (`GEMINI_API_KEY`).
@@ -98,17 +97,19 @@ cp apps/web/.env.example apps/web/.env.local  # frontend: public vars only
 | `SUPABASE_SERVICE_KEY` | API only (`apps/api/app/db.py`, `services/cv_storage.py`, `services/company_logo.py`) | `sb_secret_...` service-role key for private buckets. Never `NEXT_PUBLIC_*` | Yes (uploads) | Yes | `sb_secret_YOUR_SERVICE_ROLE_KEY` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Web | Public Supabase URL (SSR cookie refresh only, `apps/web/src/utils/supabase/`) | Yes | No | `https://YOUR_PROJECT_REF.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Web | Publishable key for SSR session refresh. App users are NOT Supabase Auth users | Yes | No | `sb_publishable_YOUR_PUBLISHABLE_KEY` |
-| `NEXT_PUBLIC_API_URL` | Web (`apps/web/src/lib/api.ts`, `next.config.mjs`, Docker build arg) | Backend base URL; `http://localhost:8001` locally | Yes | No | `http://localhost:8001` |
+| `NEXT_PUBLIC_API_URL` | Web (`apps/web/src/lib/api.ts`, `next.config.mjs`, Docker build arg) | Browser API base. Production uses the same-origin HTTPS proxy path; `BACKEND_PROXY_URL` is the container-only upstream. | Yes | No | `/api-proxy` |
 | `JWT_SECRET` | API (`apps/api/app/utils/jwt.py`, `app/config.py`) | HS256 signing secret, 60-min tokens | Yes | Yes | `change-me-to-a-random-32-char-secret` |
+| `TOTP_ENCRYPTION_KEY` | API MFA service and migrations | Fernet key for encrypted authenticator secrets; generate once and keep in the secret manager | Yes when MFA exists | Yes | *(generate with `Fernet.generate_key()`)* |
+| `EMAIL_OUTBOX_ENCRYPTION_KEY` | API and AI/email dispatcher | Independent Fernet key encrypting recipients, OTPs, and invitation URLs in the durable email outbox | Yes when email is enabled | Yes | *(generate independently with `Fernet.generate_key()`)* |
 | `GEMINI_API_KEY` | API (`services/ai.py`, `services/screening.py`, `services/cv_extraction.py`); Web bio route (`apps/web/src/app/api/ai/generate-bio/route.ts`) | Google Gemini key, model `gemini-3-flash-preview` | Yes (AI) | Yes | `YOUR_GEMINI_API_KEY` |
 | `REDIS_URL` | API + worker (`apps/api/app/cache.py`, `app/tasks.py`) | Redis for Celery broker/backend, rec cache, job keys | Yes | No | `redis://redis:6379/0` |
 | `FRONTEND_URL` | API (`docker-compose.yml`, invite emails) | Builds invitation links `${FRONTEND_URL}/invite/...` | Yes | No | `http://localhost:3000` |
 | `INVITATION_EXPIRATION_HOURS` | API (employee invites) | Employee invitation TTL (company invites use fixed 7 days in code) | No | No | `72` |
 | `RESEND_API_KEY` | API (`apps/api/app/services/email.py`) | Resend key for OTP + invitation emails | For email | Yes | *(empty allowed; email logged as warning)* |
 | `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | API | Sender identity | For email | No | `coditent@yourdomain.com` / `CODITENT` |
-| `OTP_EXPIRE_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_RESEND_COOLDOWN_SECONDS` | API (auth OTP) | `10` / `5` / `60` defaults | No | No | `10` / `5` / `60` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | API (SSO) | Google OAuth; both-or-neither enforced in `app/config.py` | For SSO | Secret mixed | `http://localhost:8001/auth/sso/google/callback` |
-| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | API (SSO) | LinkedIn OAuth; both-or-neither enforced | For SSO | Secret mixed | `http://localhost:8001/auth/sso/linkedin/callback` |
+| `OTP_EXPIRE_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_RESEND_COOLDOWN_SECONDS` | API (auth OTP) | `5` / `5` / `60` defaults | No | No | `5` / `5` / `60` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | API (SSO) | Google OAuth; both-or-neither enforced in `app/config.py` | For SSO | Secret mixed | `https://coditent.app/auth/sso/google/callback` |
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | API (SSO) | LinkedIn OAuth; both-or-neither enforced | For SSO | Secret mixed | `https://coditent.app/auth/sso/linkedin/callback` |
 
 ### Run with Docker (single command)
 
@@ -120,6 +121,12 @@ docker compose up --build
 # web: http://localhost:3001  api: http://localhost:8001  docs: http://localhost:8001/docs
 # `alembic upgrade head` runs automatically on api start against Supabase
 ```
+
+The Docker development site uses **http://localhost:3001** (also
+http://127.0.0.1:3001) without redirecting to HTTPS. Port 8443 remains available
+for optional HTTPS testing with a self-signed certificate, which browsers do
+not trust automatically. Production uses the separate Ansible ingress with a
+trusted certificate and HTTP-to-HTTPS redirects.
 
 ### Local dev without Docker
 
@@ -140,7 +147,7 @@ cd apps/web && npm ci && npm run dev -- --port 3000
 
 ## Technical stack
 
-- **Frontend:** Next.js 14.2 (React 18, App Router, SSR), Tailwind CSS + CSS Modules, axios, `@tanstack/react-query`, `react-hook-form` + `zod`, `@supabase/ssr` (session refresh only).
+- **Frontend:** Next.js 16.3.8 (React 19.3, App Router), Tailwind CSS + CSS Modules, axios, `@tanstack/react-query`, `react-hook-form` + `zod`, `@supabase/ssr` (session refresh only).
 - **Backend:** FastAPI (Python 3.12), SQLAlchemy 2 async (`asyncpg`) + Alembic, `python-jose` (JWT HS256), `passlib[bcrypt]`, `slowapi` (rate limits), `structlog` + `prometheus-client` (observability), Celery + Redis 7 (async jobs), `google-generativeai`, `supabase` (Storage admin only), `pypdf` / `python-docx` (CV text), Resend via stdlib `urllib` (email).
 - **Database:** **Supabase PostgreSQL** — sole persistent store. No local Postgres container, no SQLite, no localhost fallback (rejected at startup in `apps/api/app/database.py:9-33` and `apps/api/app/config.py:47-56`).
 - **Storage:** Supabase Storage, private buckets `candidate-cvs` and `company-logos` (backend service-role key only).
@@ -161,7 +168,7 @@ cd apps/web && npm ci && npm run dev -- --port 3000
 
 ```mermaid
 flowchart TD
-    Browser[Browser] --> Web[Next.js 14 - apps/web - :3001 local]
+    Browser[Browser] --> Web[Next.js 16 - apps/web - :3001 local]
     Web --> MW[middleware.ts - edge role redirects + Supabase cookie refresh]
     Web --> APIClient[lib/api.ts - axios + Bearer + /api-proxy fallback]
     APIClient --> ProxyRewrite[/api-proxy/:path* rewrite - next.config.mjs/]
@@ -170,7 +177,7 @@ flowchart TD
     API --> RL[slowapi - auth/OTP rate limits]
     API --> AuthZ[get_current_user - Bearer first + access_token cookie fallback]
     AuthZ --> Gates[require_* gates + can role,action matrix]
-    Gates --> Routers[12 routers - auth/candidates/offers/recommendations/companies/requests/invites/applications/assessments/audit/chat/admin]
+    Gates --> Routers[Auth, candidate, company, hiring, messaging, and admin routers]
     Routers --> Services[Services: ai/screening/cv_parser/cv_extraction/cv_storage/company_logo/email/recruitment_chat/match_scoring/recommendation_jobs]
     Services --> PG[(Supabase Postgres - SQLAlchemy asyncpg - PgBouncer-safe)]
     Services --> CVStore[(Storage bucket candidate-cvs - private)]
@@ -211,7 +218,7 @@ CODITENT/
 ├── apps/
 │   ├── api/                    # FastAPI backend
 │   │   ├── app/
-│   │   │   ├── main.py         # app factory, 12 routers, CORS, rate-limit, /health /metrics /protected
+│   │   │   ├── main.py         # app factory, routers, CORS, rate-limit, health/readiness, metrics
 │   │   │   ├── config.py       # pydantic-settings, Supabase-only guard, OAuth both-or-neither
 │   │   │   ├── database.py     # async engine (statement_cache_size=0), sessions, URL normalizer
 │   │   │   ├── db.py           # Supabase admin client factory (backend-only)
@@ -230,7 +237,7 @@ CODITENT/
 │   │   │   ├── limiter.py      # slowapi Limiter
 │   │   │   └── observability.py# structlog + Prometheus metrics
 │   │   ├── alembic/            # 19 migration versions, async env
-│   │   ├── tests/              # 14 pytest suites (live-DB + offline mix)
+│   │   ├── tests/              # 47 pytest files (live-DB + offline mix)
 │   │   ├── requirements.txt    # 22 deps
 │   │   └── Dockerfile
 │   ├── web/                    # Next.js frontend
@@ -241,7 +248,7 @@ CODITENT/
 │   │   │   ├── utils/supabase/ # SSR/middleware Supabase clients (session refresh only)
 │   │   │   └── middleware.ts   # edge protection + role redirects
 │   │   ├── next.config.mjs     # /api-proxy rewrite, image hosts
-│   │   └── package.json        # next 14.2.32, react 18.3.1, axios, react-query, zod
+│   │   └── package.json        # Next 16.3.8, React 19.3.0, axios, React Query, zod
 │   └── apps/web/               # nested legacy copy — TO-VERIFY (appears unused; do not rely on it)
 ├── docker-compose.yml          # api/worker/redis/web/proxy/vault
 ├── nginx/                      # reverse-proxy build
@@ -254,11 +261,11 @@ CODITENT/
 
 | Directory | Contains | Why it exists | Used by / connects to |
 | --------- | -------- | ------------- | --------------------- |
-| `apps/api/app/routers/` | 12 routers, 89 endpoints | HTTP layer only (no business logic) | Mounted by `main.py`; call `dependencies.py`, `core/permissions.py`, `services/*` |
+| `apps/api/app/routers/` | 19 mounted routers | HTTP layer | Mounted by `main.py`; call `dependencies.py`, `core/permissions.py`, `services/*` |
 | `apps/api/app/services/` | AI, screening, CV, logo, email, chat rules, jobs | Reusable business logic + external I/O | Routers + Celery tasks |
 | `apps/api/app/core/` | permissions matrix, audit writer, vault | Centralized policy + side effects | Every write path |
-| `apps/api/alembic/` | 20 versions | Schema history for Supabase | `api` container runs `alembic upgrade head` on boot |
-| `apps/api/tests/` | 14 suites | Regression + security coverage | CI import check; manual `pytest` runs |
+| `apps/api/alembic/` | 42 version files | Schema history for Supabase | `api` container runs `alembic upgrade head` on boot |
+| `apps/api/tests/` | 47 test files | Regression + security coverage | CI import check; manual `pytest` runs |
 | `apps/web/src/app/` | Route groups + pages | User-facing screens per role | Calls `lib/api.ts` helpers |
 | `apps/web/src/components/` | Reusable UI (incl. `ui/avatar.tsx`, `company/CompanyLogoSection.tsx`) | Consistent design system | Pages |
 | `apps/web/src/lib/` | API client, auth, types, permissions mirror | Single frontend↔backend contract | All pages/components |
@@ -268,7 +275,7 @@ CODITENT/
 
 ## Frontend architecture
 
-- **Framework:** Next.js 14.2 (App Router, SSR), React 18.3.1, Tailwind + CSS Modules, `axios`, `@tanstack/react-query`, `react-hook-form` + `zod` (`apps/web/package.json`).
+- **Framework:** Next.js 16.3.8 (App Router), React 19.3.0, Tailwind + CSS Modules, `axios`, `@tanstack/react-query`, `react-hook-form` + `zod` (`apps/web/package.json`).
 - **Routing:** App Router groups — `(auth)/login`, `(auth)/register`, `admin/`, `company/`, `dashboard/`, `offers/`, `profile/`, `chat/`, `invite/`, `requests/`, `recruiter/`, `get-started/`, `verify-email/`, `choose-role/`, `accept-invitation/`, `api/ai/generate-bio/`.
 - **Layouts:** role shells (`components/company/AppShell.tsx`, `components/shell/*`) + route protection in `src/middleware.ts` (token presence + JWT `role` claim decode → redirects + `?next=`).
 - **API communication:** `src/lib/api.ts` — `getApiBaseUrl()` (HTTPS page + `http://` backend → `/api-proxy`; else `NEXT_PUBLIC_API_URL`), axios `withCredentials:true`, request interceptor injects `Bearer <coditent_token>`, response interceptor clears token + redirects protected paths on 401 (`lib/api.ts:18-90`).
@@ -328,8 +335,8 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 
 ## Backend architecture
 
-- **Framework/entry:** FastAPI (`apps/api/app/main.py:17-21`, `title="CODITENT API"`), Python 3.12 (`apps/api/Dockerfile`, CI `setup-python 3.12`). Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001` (`docker-compose.yml:25-27`); healthcheck polls `GET /health`.
-- **Routers:** 12 mounted with prefixes in `main.py:45-56` (`/auth`, `/candidates`, `/offers`, `/recommendations`, `/companies`, `/requests`, `/invites`, `/applications`, `/assessments`, `/audit`, `/chat`, admin without prefix).
+- **Framework/entry:** FastAPI (`apps/api/app/main.py`, `title="CODITENT API"`), Python 3.12 (`apps/api/Dockerfile`, CI `setup-python 3.12`). Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001`. `GET /health` is process liveness only; Compose and deployment gates poll `GET /ready`, which checks PostgreSQL, Redis, and a TTL-backed Celery worker heartbeat with bounded timeouts.
+- **Routers:** FastAPI routers are mounted in `main.py` for authentication, candidates, offers, recommendations, companies, requests, invitations, applications, audit, chat, notifications, missions, institutions, and administration.
 - **AuthN:** `get_current_user` (`dependencies.py:20-48`) — `HTTPBearer(auto_error=False)` first, `access_token` cookie fallback; `sub`→UUID→`users` row. OpenAPI Bearer scheme so Swagger "Authorize" works.
 - **AuthZ gates** (`dependencies.py:51-177`): `require_platform_admin`, `require_company_user`, `require_company_owner`, `require_company_admin` (OWNER/ADMIN), `require_company_member` (all 5 company roles), `require_candidate`, `require_candidate_account` (strict), `require_recruiter` (COMPANY_USER-approved or legacy), `require_admin` (PLATFORM_ADMIN + legacy ADMIN compat). Write paths double-gate (dependency + `can()`).
 - **Validation:** Pydantic `schemas.py` (357 lines) + `sanitize_input_text` validators on profile/offer text; UUID parsing; `401` unauthenticated only, `403` wrong role/scope/approval, `404` miss *or deliberate isolation* (same "not found" to avoid leaking cross-company existence).
@@ -342,12 +349,12 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 
 ## How frontend and backend communicate
 
-1. **Base URL** (`lib/api.ts:18-29`): browser + HTTPS page + `http://` backend → `/api-proxy` (Next.js rewrite to `NEXT_PUBLIC_API_URL`, `next.config.mjs:17-32`); else direct `NEXT_PUBLIC_API_URL`; SSR fallback `http://34.205.255.37`.
+1. **Base URL** (`lib/api.ts` and `next.config.mjs`): production browsers use same-origin `/api-proxy`, so browser traffic stays on `https://coditent.app`. Vercel forwards those requests over HTTPS to the EC2 ingress through `BACKEND_PROXY_URL=https://api.coditent.app/api-proxy`; the EC2-hosted Compose frontend continues to use the private `http://api:8001` upstream.
 2. **Credentials:** `withCredentials:true` + `Authorization: Bearer <localStorage coditent_token>` per request (`lib/api.ts:31-67`). Backend accepts Bearer first, `access_token` HttpOnly cookie fallback (cookie is only set on SSO flows — `routers/auth.py:153-161` — so email-login users rely on Bearer).
 3. **CORS** (`main.py:29-41`): explicit frontend origins (`settings.frontend_url`, `localhost:3000/3001` + `127.0.0.1` variants), `allow_credentials=True`, all methods/headers.
 4. **Protected endpoints:** `require_*` dependency → 401 (missing/bad/expired token, vanished user) or 403 (wrong role/scope/approval). Frontend 401 interceptor clears token and redirects protected paths to `/login?next=` or `/admin/login?next=` (`lib/api.ts:69-90`).
 5. **Errors:** `HTTPException` + global `Exception→500` (`main.py:95-98`), slowapi 429, Pydantic 422. Typed CV/AI errors: 400 file errors, 422 no-text, 502 upstream AI/mail/storage, 503 unconfigured SSO/storage-missing, 504 AI timeout, 413 oversized logo, 409 OTP race, 410 deprecated `POST /companies/{id}/join`.
-6. **Realtime:** WS URL builder (`lib/api.ts:620-627`) puts the JWT in `?token=` (proxy/CDN-log exposure tradeoff, documented); per-message re-auth server-side; 3 s polling fallback in UI.
+6. **Realtime:** socket-ticket endpoints issue short-lived, single-use tickets. On the production HTTPS origin, both URL builders produce `wss://coditent.app/api-proxy/...`; the UI retains a polling fallback when an upstream proxy does not preserve the WebSocket upgrade.
 7. **Avatar/logo note:** `PUT /auth/me/avatar` stores a URL string; company logos upload bytes to `POST /companies/{id}/logo` and expose only the storage path + scoped stream.
 
 Real example — "User clicks Apply":
@@ -385,7 +392,6 @@ Recruiter sees score via GET /applications (company join, view_applications gate
 | `candidate_requests` (`models.py:230-247`) | Company→candidate outreach | UUID `id` | `candidate_id` CASCADE, `company_id` CASCADE, `recruiter_id` SET NULL; `message`; `status` enum default `pending` (no pair-unique — duplicates possible) | M2O candidate/company/recruiter |
 | `chat_messages` (`models.py:250-289`) | All messages; `application_id` NULL = legacy general chat | UUID `id` | `sender_id/receiver_id` CASCADE; `application_id` CASCADE NULL; `content` Text | M2O sender/receiver/application |
 | `applications` (`models.py:292-316`) | Candidate application + AI screening result | UUID `id` | `candidate_id` CASCADE, `opportunity_id` CASCADE, `company_id` NULL; `status` free String default `applied`; `cv_url/cover_letter` NULL; `ai_score/ai_report` NULL; `ai_status` default `pending`; UQ pair | M2O candidate/opportunity/company |
-| `assessments` (`models.py:319-338`) | Assessment rows (read-only API) | UUID `id` | `application_id` CASCADE, `candidate_id` CASCADE, `created_by` NULL; `title`; `status` default `pending`; `score/report` NULL (no writer in `app/`) | M2O application/candidate |
 | `admin_activity_logs` (`models.py:341-351`) | Append-only audit | UUID `id` | `action(80)`, `admin_id` FK, `admin_email` (denormalized), `target_user_id` UUID NULL **no FK** (can dangle), `target_user_email`, `details` | M2O admin only |
 | `company_invitations` (raw SQL) | Platform→company invites | `id` | email, company_name, token_hash UNIQUE, status, invited_by, company_id NULL, expires_at (7 d), accepted/revoked_at | No ORM relations |
 | `employee_invitations` (raw SQL) | Owner→employee invites | `id` | email, company_id NOT NULL CASCADE, role NOT NULL, token_hash UNIQUE, expires_at (72 h) | No ORM relations |
@@ -407,7 +413,7 @@ Offer
  ├── SavedRecommendation (1-M) + Application (1-M via opportunity_id)
  └── responsible_hr (→ users.id; fallback created_by → recruiter_id)
 Application (= one logical recruitment conversation)
- ├── ChatMessage (1-M via application_id) + Assessment (1-M)
+ ├── ChatMessage (1-M via application_id)
  └── CandidateRequest is separate (company→candidate outreach, not application-bound)
 ```
 
@@ -445,7 +451,6 @@ offers.recruiter_id(-)/.created_by(*,-)/.responsible_hr_id(*,-) → users; offer
 saved_recommendations [UQ pair](-,-) → users + offers
 candidate_requests → users(C) + companies(C); recruiter_id(*,N) → users
 applications [UQ pair] → users(C) + offers(C); company_id(*,-) → companies
-assessments → applications(C) + users(C); created_by(*,-) → users
 chat_messages → users(C) + users(C) + applications(C, nullable)
 admin_activity_logs.admin_id(-) → users; target_user_id: no FK
 ```
@@ -460,7 +465,8 @@ Base: `NEXT_PUBLIC_API_URL` (local `http://localhost:8001`; prod via `/api-proxy
 
 | Method | Endpoint | Purpose | Auth | Frontend usage |
 | ------ | -------- | ------- | ---- | -------------- |
-| GET | `/health` | Liveness (compose healthcheck + deploy gate) | PUB | deploy/ops |
+| GET | `/health` | Process liveness; never probes dependencies | PUB | orchestration |
+| GET | `/ready` | Bounded PostgreSQL, Redis, and worker readiness; returns safe component states and `503` when unavailable | PUB | compose/deploy gate |
 | GET | `/metrics` | Prometheus metrics (`observability.py`) | PUB | ops |
 | GET | `/protected` | Auth probe (returns id/email/role) | any user | debug |
 
@@ -556,7 +562,7 @@ No logout / refresh / password-reset endpoints — NOT IMPLEMENTED (frontend cle
 | GET | `/applications/{id}/cv` | Application CV stream | scoped (candidate owner / same-company / admin) |
 | POST | `/applications` | Apply `{opportunity_id, cv_url?, cover_letter?}` → 400 "Already applied" on dup (UQ backstop); `company_id` from offer; audit + queue `applications.screen`. No withdraw endpoint | CANDIDATE only (403 else) |
 | POST | `/applications/{id}/screen` | Reset to pending + requeue screening (`processing` short-circuits) | COMPANY_USER + `evaluate_candidates` same-company; PLATFORM_ADMIN |
-| PATCH | `/applications/{id}` | Stage change (7-value allowlist: `under_review, shortlisted, assessment_required, assessment_completed, interview, accepted, rejected`; free jumping allowed); audit (`APPLICATION_STATUS_CHANGED` / `CANDIDATE_SHORTLISTED` / `CANDIDATE_REJECTED` / `RECRUITMENT_CHAT_ENABLED` on chat-stage entry) | PLATFORM_ADMIN wide or COMPANY_USER + `move_recruitment_stage` same-company; CANDIDATE always 403 |
+| PATCH | `/applications/{id}` | Versioned stage transition through `applied → under_review → shortlisted → interview → accepted/rejected`; interview scheduling evidence is required; audit + candidate notification | PLATFORM_ADMIN wide or COMPANY_USER + `move_recruitment_stage` same-company; CANDIDATE always 403 |
 
 ### Recommendations (`routers/recommendations.py`, prefix `/recommendations`)
 
@@ -568,15 +574,6 @@ No logout / refresh / password-reset endpoints — NOT IMPLEMENTED (frontend cle
 | GET | `/recommendations/by-offer/{offer_id}` | Single match row | candidate owner |
 | GET | `/recommendations/config-status` | AI provider configured? (no secret leakage) | candidate |
 | GET | `/recommendations` | Ranked `SavedRecommendation`s; auto-inserts `ai_score=0` **pending placeholder** rows for unscored active offers | candidate (own rows) |
-
-### Assessments (`routers/assessments.py`, prefix `/assessments`) — read-only
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/assessments` | Sparse list (`{id,status[,score]}`): admin wide, candidate own, company via offer join + `view_assessments` | role-branched |
-| GET | `/assessments/{id}` | Sparse detail with ownership/company checks (404 isolation) | role-branched |
-
-Create / assign / submit / score / delete: NOT IMPLEMENTED (no writers in `app/`).
 
 ### Chat (`routers/chat.py`, prefix `/chat`)
 
@@ -671,11 +668,10 @@ Real matrix (`app/core/permissions.py:18-33`, mirrored in `web/src/lib/permissio
 | view_applications | ✓ | ✓ | ✓ | ✓ | ✓ |
 | evaluate_candidates | ✓ | ✓ | ✓ | ✓ | ✓ |
 | move_recruitment_stage | ✓ | ✓ | ✓ | ✓ | ✓ |
-| view_assessments | ✓ | ✓ | ✓ | ✓ | ✓ |
 | company_analytics | ✓ | ✓ | ✓ | ✓ | ✓ |
 | manage_subscription | ✓ | — | — | — | — |
 
-Enforcement: `require_*` dependency (platform role + membership) **plus** `can(company_role, action)` in the handler; cross-company/cross-candidate access returns `404` (not 403) to avoid leaking existence (`companies.py:124-125,139-140` member scoping + logo endpoints `212-213,267-268`; `offers.py` scoped reads; `applications.py` role shapes; `assessments.py:56-61`; `chat.py` 404-vs-403 docstring). Backend authorization is the security boundary; frontend `lib/permissions.ts` is UX-only (hides buttons, never trusted).
+Enforcement: `require_*` dependency (platform role + membership) **plus** `can(company_role, action)` in the handler; cross-company/cross-candidate access returns `404` (not 403) to avoid leaking existence. Backend authorization is the security boundary; frontend `lib/permissions.ts` is UX-only (hides buttons, never trusted).
 
 ---
 
@@ -719,11 +715,10 @@ flowchart TD
     Screen --> Review[Recruiter reviews - GET /applications - view_applications]
     Review --> Stage[Stage change - PATCH /applications - move_recruitment_stage]
     Stage --> Chat{Stage chat-enabled?}
-    Chat -->|shortlisted/assessment_*/interview/accepted| Talk[Recruitment chat - REST + WS]
+    Chat -->|shortlisted/interview/accepted| Talk[Recruitment chat - REST + WS]
     Chat -->|applied/under_review/rejected| Locked[Chat locked]
-    Stage --> Assess[Assessment - read-only GET - assign/submit NOT IMPLEMENTED]
-    Stage --> Interview[interview = status string only - scheduling NOT IMPLEMENTED]
-    Stage --> Hire[accepted/rejected - audit only, no notifications]
+    Stage --> Interview[Interview scheduling and structured feedback]
+    Stage --> Hire[Accepted/rejected with candidate notification]
 ```
 
 | Step | Frontend | API call | Backend | DB | State |
@@ -733,11 +728,11 @@ flowchart TD
 | Apply | job-details apply | `POST /applications` (no `createApplication` helper — direct call) | `applications.py:289` CANDIDATE-only; 400 dup; UQ backstop | INSERT `applications` (`company_id` from offer) | `applied`, screening queued |
 | Screening | application detail (`ai_status`) | auto + `POST /applications/{id}/screen` | `screen_application_task` → `screening.py` | `ai_score/ai_report/ai_status` | `pending→processing→completed\|failed` |
 | Review | company candidates | `GET /applications` | join + scores, same-company | read | — |
-| Stage | pipeline UI | `PATCH /applications/{id}` | 7-value allowlist, free jumping; audit | status update | any of 8 statuses |
-| Chat | chat workspace / RecruitmentThread | `/chat/recruitment*` + WS | stage gate + responsible-HR gate | `chat_messages` rows | enabled only in 5 stages |
+| Stage | pipeline UI | `PATCH /applications/{id}` | transition graph + optimistic version; audit | status update | applied/review/shortlist/interview/decision |
+| Chat | chat workspace / RecruitmentThread | `/chat/recruitment*` + WS | stage gate + responsible-HR gate | `chat_messages` rows | enabled after shortlisting and through accepted |
 | Hire/reject | pipeline | same PATCH → `accepted/rejected` | audit only | status update | no notifications |
 
-Backend has **no stage state machine** — `applications.status` is a free String; the only enforced rule is the 7-value allowlist on PATCH. Chat unlock is stage-derived (`CHAT_ENABLED_STATUSES` in `recruitment_chat.py:28-36`), not event-driven.
+The backend enforces the transition graph and optimistic stage versions in the application router. Chat unlock is stage-derived (`CHAT_ENABLED_STATUSES`), not event-driven.
 
 ---
 
@@ -747,7 +742,7 @@ Backend has **no stage state machine** — `applications.status` is a free Strin
 flowchart TD
     Stage[Application status] --> Gate{is_chat_enabled_for_status?}
     Gate -->|applied/under_review/rejected| No[chat_enabled=false - [] + no peer]
-    Gate -->|shortlisted/assessment_required/assessment_completed/interview/accepted| Auth{can_access_recruitment_chat}
+    Gate -->|shortlisted/interview/accepted| Auth{can_access_recruitment_chat}
     Auth -->|CANDIDATE = application.candidate_id| PeerHR[peer = responsible_hr - offer.responsible_hr_id → created_by → recruiter_id]
     Auth -->|COMPANY_USER = responsible HR + same company + view_applications| PeerC[peer = candidate]
     Auth -->|anyone else incl. platform admins| Deny[deny - 404/403]
@@ -807,12 +802,9 @@ flowchart TD
 
 ---
 
-## Assessments / practice missions
+## Practice missions
 
-- **Implemented:** model (`assessments` table: `application_id` CASCADE, `candidate_id` CASCADE, `created_by` NULL, `title`, `status` default `pending`, `score/report` NULL) + two read-only GETs (`assessments.py:16-73`) with role/company/ownership scoping returning sparse `{id,status[,score]}`.
-- **Not implemented:** create, assign, submit answers, scoring, status updates, delete, deadlines, questions, attempts. `status/score/report` columns exist but no writer was found in `app/`.
-- **Interview:** only the `interview` status string exists. No scheduling, slots, location/link, interviewer, feedback, reschedule, cancel, or notifications anywhere in backend or migrations — explicitly NOT IMPLEMENTED.
-- Trace (as far as code goes): recruiter sets `PATCH /applications/{id}` → `assessment_required` → (nothing creates an assessment row) → candidate `GET /assessments` reads whatever sparse rows exist → UI tabs render them.
+Practice missions are candidate-owned learning exercises and are separate from the hiring pipeline. Candidates can submit evidence, and authorized reviewers can review attempts and validate skills.
 
 ---
 
@@ -840,7 +832,7 @@ flowchart TD
 
 ### Prerequisites
 
-Docker + Compose, Node 20, Python 3.12, Supabase project, Gemini key, Resend key (email).
+Docker + Compose, Node 22+, Python 3.12, Supabase project, Gemini key, Resend key (email).
 
 ### Startup
 
@@ -855,14 +847,14 @@ Only commands that work with this repo are shown; there is no `db` service and n
 
 | Service | Technology | Internal port | Exposed port | Depends on |
 | ------- | ---------- | ------------: | -----------: | ---------- |
-| `api` | FastAPI/Uvicorn (`alembic upgrade head && uvicorn ... --port 8001`) | 8001 | `8001:8001` | — (healthcheck `GET /health`, 10 s × 10) |
-| `worker` | Celery (`celery -A app.tasks worker`) | — | — | `api`, `redis` started |
-| `redis` | `redis:7-alpine` | 6379 | `6379:6379` | — |
-| `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | `3001:3000` | `api` started |
-| `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | `80:80, 443:443` | `web`, `api` started |
-| `vault` | `hashicorp/vault:1.15.0` dev | 8200 | `8200:8200` | — |
+| `api` | FastAPI/Uvicorn (`alembic upgrade head && uvicorn ... --port 8001`) | 8001 | `8001:8001` | PostgreSQL + Redis + worker readiness (`GET /ready`) |
+| `worker` | Celery (`celery -A app.tasks worker`) | — | — | `api` started, `redis` healthy |
+| `ai-dispatcher` | Durable AI job dispatcher | — | — | `api` started, `redis` healthy |
+| `redis` | `redis:7-alpine` | 6379 | loopback `6380` | — |
+| `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | internal only | `api` healthy |
+| `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | loopback `3001/8443` | `web`, `api` healthy |
 
-Networks/volumes: default compose network; no `db_data` volume (Supabase is the store). Env: `api` uses `apps/api/.env` file + `environment:` overrides (`FRONTEND_URL=http://localhost:3001` locally — note it differs from `.env.example`'s `:3000`; TO-VERIFY which your deploy uses). Production: push to `main` → Actions (web lint+build with `NEXT_PUBLIC_API_URL=http://34.205.255.37`, api import check) → Ansible SSH to EC2, render missing `.env` files only, `docker compose up -d --build`, health-gate `http://127.0.0.1:8001/health`.
+Networks/volumes: default Compose network; no `db_data` volume (Supabase is the persistent store). Compose reads the single documented root `.env`. Production Ansible configures the EC2 ingress as `https://api.coditent.app`, allows the Vercel frontend origins (`https://coditent.app` and `https://www.coditent.app`), issues and renews a Let's Encrypt certificate, redirects HTTP with status 308, and keeps container upstreams loopback/private. Vercel keeps browser API/OAuth routes same-origin and proxies them to the EC2 ingress. CD rejects a non-HTTPS public URL and verifies both the redirect target and the certificate-backed `/ready` response.
 
 ---
 
@@ -924,10 +916,6 @@ See [example in Frontend↔backend](#how-frontend-and-backend-communicate). File
 
 Pipeline UI → `PATCH /applications/{id}` (`applications.py:346`) → allowlist check → audit (+ chat-enabled audit on stage entry). No notifications.
 
-### Assessment
-
-`GET /assessments` → sparse rows only. Creation/submission/scoring: NOT IMPLEMENTED.
-
 ### Recommendation generation
 
 See [Recommendation system](#recommendation-system). Files: `dashboard/*`, `routers/recommendations.py:38-80`, `tasks.py:29-87`, `services/recommendation_jobs.py`, `services/ai.py`.
@@ -946,7 +934,7 @@ NOT IMPLEMENTED as a product system: no notification table/channel/hooks for app
 
 ### Candidate features — Implemented
 
-Registration + OTP verify/resend, login, SSO (Google/LinkedIn), onboarding steps, profile builder, avatar, CV upload/meta/download/delete/parse, recommendations (generate/poll/score/by-offer/list), offer browse/detail, apply, application list/detail/CV view, stage + `ai_status` tracking, stage-gated chat (REST + WS + polling), requests inbox (accept/reject), assessments read.
+Registration + OTP verify/resend, login, SSO (Google/LinkedIn), onboarding steps, profile builder, avatar, CV upload/meta/download/delete/parse, recommendations (generate/poll/score/by-offer/list), offer browse/detail, apply, application list/detail/CV view, stage + `ai_status` tracking, stage-gated chat (REST + WS + polling), requests inbox (accept/reject), and practice missions.
 
 ### Company features — Implemented
 
@@ -954,7 +942,7 @@ Invitation accept, employee invites + team list/role-change/remove, company CRUD
 
 ### Recruiter/HR features — Implemented
 
-Same as company features scoped by `responsible_hr_id` for chat; all recruitment roles share view/evaluate/move/assess/analytics; only OWNER/ADMIN administer.
+Same as company features scoped by `responsible_hr_id` for chat; all recruitment roles share view/evaluate/move/analytics; only OWNER/ADMIN administer.
 
 ### Admin features — Implemented
 
@@ -976,35 +964,42 @@ bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require
 
 ## Planned / incomplete features
 
-- Assessments: model + read-only GETs exist; create/assign/submit/score/delete NOT IMPLEMENTED (`assessments.py` has 2 GETs, no writers).
 - Interviews: status string only; scheduling/detail/feedback NOT IMPLEMENTED.
-- Notifications (in-app/email/push) for product events: NOT IMPLEMENTED (audit + emails for invites/OTP only).
+- Notifications are durable in-app records for recruitment and friend-message events; account data operations also use the encrypted retrying email outbox.
 - Public company self-registration; ownership transfer; org deletion: NOT IMPLEMENTED.
 - Password reset and token refresh/logout revocation: NOT IMPLEMENTED. TOTP 2FA with single-use recovery codes is implemented for login and account settings.
 - RLS policies: none in repo (bypassed by design; dashboard state TO-VERIFY).
-- WS multi-replica fan-out (needs Redis pub/sub per code comment), idempotency keys, periodic cleanup jobs (no beat): NOT IMPLEMENTED.
+- WebSocket chat uses Redis multi-replica fan-out, bounded tickets/rate limits/heartbeats, server acknowledgements, reconnect backoff and persisted-history recovery. Periodic cleanup beyond existing TTLs remains separate operations work.
 - Frontend/backend mismatches M1–M10 (join 410, company PATCH full-payload 422, OAuth key workaround, register RECRUITER rejected, sparse shapes vs rich TS types, unvalidated status strings, legacy `recruiter_id` checks, `updateRequestStatus` admin 403, admin first-page-only, WS token key) — documented, not fixed here.
 
 ---
 
 ## 42 Modules
 
-> TO-VERIFY: no 42 subject file exists in the repository (glob `**/*subject*` empty). The table below reconstructs claims from the previous README + code evidence. Do not present point totals as validated until checked against your actual subject.
+The chosen set below follows the supplied ft_transcendence subject v21.2. The score is implementation/test-supported; evaluators make the final determination. Detailed evidence, gaps and all 55 official choices are in `audit-reports/MODULE_POINTS.md`.
 
-| Module | Claimed | Requirement (assumed) | Implementation | Evidence / files | Status |
-| ------ | ------- | --------------------- | -------------- | ---------------- | ------ |
-| Web Major: Framework front+back | 2 | Next.js + FastAPI | Next 14.2 App Router + FastAPI `:8001` | `apps/web`, `apps/api/app/main.py:17` | Implemented |
-| Web Minor: ORM | 1 | ORM usage | SQLAlchemy 2 async + Alembic (19 versions) | `app/database.py`, `app/models.py`, `alembic/versions/` | Implemented |
-| Web Minor: Advanced search | 1 | Filter/search | Offer filter region/field/type; rec criteria | `routers/offers.py:36`, `services/recommendation_jobs.py:82-89` | Implemented |
-| Web Minor: File upload | 1 | Upload files | Avatar URL + CV upload + company logos | `routers/auth.py:739`, `routers/candidates.py:195`, `routers/companies.py:204` | Implemented |
-| User Major: Standard user mgmt | 2 | Profile + friends + online (assumed) | Profile + avatar done; friends/online NOT FOUND | `routers/candidates.py`, `routers/auth.py` | Partially implemented |
-| User Minor: OAuth 2.0 | 1 | OAuth login | Google/LinkedIn SSO + handoff | `routers/auth.py:252-475`, `oauth-popup.ts` | Implemented |
-| User Major: Advanced permissions | 2 | Roles/permissions | Platform + 5 company roles, `can()` matrix, 404 isolation | `dependencies.py`, `core/permissions.py` | Implemented |
-| AI Major: Recommendation system | 2 | Recommendations | Gemini ranking + fallback + per-offer lifecycle | `services/ai.py:14`, `services/recommendation_jobs.py:23`, `services/match_scoring.py` | Implemented |
-| **Implemented total** | **10** | — | Excludes partial User-mgmt major | — | TO-VERIFY |
-| **Partially implemented** | **2** | User mgmt major (friends/online missing) | Needs `POST /friends`-class scope or replacement module | — | TO-VERIFY |
+| Chosen module | Points | Implemented scope | Primary evidence |
+| --- | ---: | --- | --- |
+| Web — frontend and backend frameworks (major) | 2 | Next.js App Router frontend and FastAPI backend | `apps/web/package.json`, `apps/api/app/main.py` |
+| Web — realtime features (major) | 2 | Cross-process Redis fan-out, short-lived socket tickets, acknowledgements, heartbeats, reconnect/backoff, persisted recovery and stage/relationship revocation | `apps/api/app/services/chat_realtime.py`, `apps/api/app/routers/chat.py`, `apps/web/src/hooks/` |
+| Web — basic user interaction (major) | 2 | Candidate profiles, friend requests/approval/removal, persistent approved-friend chat | `apps/api/app/routers/friends.py`, `apps/api/app/routers/chat.py`, `apps/web/src/app/dashboard/friends/page.tsx` |
+| Web — ORM (minor) | 1 | SQLAlchemy async relational models and Alembic migrations | `apps/api/app/database.py`, `apps/api/app/models.py`, `apps/api/alembic/` |
+| Web — server-side rendering (minor) | 1 | Public category routes fetch and filter offer data on the server and emit category SEO metadata before hydration | `apps/web/src/app/offers/[category]/page.tsx`, `apps/web/src/lib/offer-category.ts` |
+| Web — progressive web app (minor) | 1 | Install manifest, 192/512 icons, registered service worker, versioned static cache and offline navigation fallback | `apps/web/public/manifest.webmanifest`, `apps/web/public/sw.js`, `apps/web/src/app/offline/page.tsx` |
+| Web — custom design system (minor) | 1 | Shared palette, typography, icons and more than10 reusable UI components | `apps/web/src/app/globals.css`, `apps/web/src/components/ui/` |
+| Web — advanced search (minor) | 1 | Discover text/field/region/type filters, match/newest sorting and 9-result pagination | `apps/web/src/lib/discover-search.ts`, `apps/web/src/app/dashboard/recommendations/page.tsx`, `apps/web/tests/discover-search.test.mts` |
+| Web — file upload and management (minor) | 1 | Images plus PDF/DOCX; client/server MIME, extension, signature and size validation; progress, secured storage, preview/download and deletion | `apps/web/src/lib/file-validation.ts`, `apps/api/app/routers/candidates.py`, `apps/web/src/app/dashboard/profile/page.tsx` |
+| User management — standard management/authentication (major) | 2 | Editable/displayed profiles, avatar/default, friends, global multi-tab online status and last-seen display | `apps/web/src/components/candidate/candidate-presence.tsx`, `apps/api/app/services/presence.py`, `apps/api/app/routers/friends.py` |
+| User management — advanced permissions (major) | 2 | Platform user lifecycle plus organization roles and role-specific actions | `apps/api/app/core/permissions.py`, `apps/api/app/routers/admin.py`, `apps/api/app/routers/companies.py` |
+| User management — organization system (major) | 2 | Company create/read/update/archive, employee membership lifecycle and organization-scoped actions | `apps/api/app/routers/companies.py`, `apps/api/app/routers/invitations.py`, `apps/web/src/app/company/` |
+| User management — complete 2FA (minor) | 1 | TOTP enrollment/login challenge, recovery codes and disable flow | `apps/api/app/routers/two_factor.py`, `apps/api/tests/test_two_factor.py`, `apps/web/src/app/dashboard/security/page.tsx` |
+| DevOps — health/status and backup/DR (minor) | 1 | Liveness/readiness probes, public status page, scheduled verified encrypted offsite backups and isolated restore procedure | `apps/api/app/health.py`, `apps/web/src/app/status/page.tsx`, `ansible/roles/coditent/tasks/backups.yml`, `docs/operations/backup-restore-rollback.md` |
+| Data — export/import (minor) | 1 | JSON/CSV/XML export, validated JSON profile import and atomic multi-field bulk update | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/web/src/components/security/account-data-controls.tsx` |
+| Data — GDPR features (minor) | 1 | Authenticated readable export, confirmed/cancelable erasure and durable confirmation emails for data operations | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/api/tests/test_account_data_lifecycle.py` |
+| **Completed raw module total** | **22** | Eight raw points above the 14-point minimum | `audit-reports/MODULE_POINTS.md`, `audit-reports/TEST_RESULTS.md` |
+| **Official counted score** | **19 / 19** | The subject counts at most five bonus points above 14 | `audit-reports/MODULE_POINTS.md` |
 
-Previous README claimed 12 pts including the full User-mgmt major "needs friends+online to validate (add `POST /friends`)". Code shows no friends/online system, so validated-from-code total is **10 implemented + 2 partial**. If your subject allows substituting Analytics (candidate `overall_score`/`validated_skills` + admin stats exist as partial evidence) or Public API key modules, confirm against the subject before claiming.
+User and organization deletion are implemented as retention-safe logical deactivation/archive. Present that design and retained-history behavior clearly during evaluation. The repository now contains 22 raw implementation/test-supported points, giving a three-point buffer above the official 19-point counted cap. Demonstrate two-client realtime delivery/reconnect, PWA offline/install behavior, actual object-storage backup/restore, and configured email delivery during evaluation; local checks do not fabricate external-provider success.
 
 ---
 
@@ -1028,7 +1023,7 @@ Previous README claimed 12 pts including the full User-mgmt major "needs friends
 
 ## Testing
 
-- **Frameworks:** backend `pytest` + `httpx` (`apps/api/tests/`, 14 files, mixed live-DB + offline); frontend lint + prod build in CI (`npm run lint`, `npm run build` with `NEXT_PUBLIC_API_URL=http://34.205.255.37`); backend CI is import-check only (`python -c "import app.main"`-class step) — full suites run manually.
+- **Frameworks:** backend `pytest` + `httpx`; frontend lint, type checks, regression tests and a production build run in CI. The production-build contract uses `NEXT_PUBLIC_API_URL=/api-proxy` and an internal-only `BACKEND_PROXY_URL`.
 - **Suites:**
   - `test_company_logo.py` — 13 offline logo tests (validation, RBAC, isolation, fallback, storage properties).
   - `test_company_invitations.py` / `test_employee_invitations.py` — invite/accept/ownership/roles (live; employee suite uses fixed emails — non-idempotent, residue-sensitive).
@@ -1042,7 +1037,7 @@ Previous README claimed 12 pts including the full User-mgmt major "needs friends
   cd apps/api && python -m pytest tests/ -v                        # live suites need localhost:8001 + Supabase
   cd apps/web && npm run lint && npm run build
   ```
-- **Coverage (from code):** auth/OTP/RBAC/isolation/offers/applications-dup/CV/chat-gates/invitations COVERED; screening trigger + recommendations generate PARTIAL (manually verified, no committed end-to-end AI test); admin happy paths PARTIAL; assessments read-only PARTIAL; notifications NOT COVERED (nothing to cover).
+- **Coverage (from code):** auth/OTP/RBAC/isolation/offers/applications-dup/CV/chat-gates/invitations COVERED; screening trigger + recommendations generate PARTIAL; admin happy paths PARTIAL.
 
 ---
 
@@ -1051,8 +1046,8 @@ Previous README claimed 12 pts including the full User-mgmt major "needs friends
 ```text
 Symptom: frontend cannot connect to API
 Likely cause: NEXT_PUBLIC_API_URL unset (build-time) or backend down
-Check: apps/web/.env.local, browser network (direct :8001 vs /api-proxy), docker compose ps, GET /health
-Debug: curl http://localhost:8001/health; rebuild web after changing NEXT_PUBLIC_* (build arg)
+Check: apps/web/.env.local, browser network (direct :8001 vs /api-proxy), `docker compose ps`, `GET /health`, then `GET /ready`
+Debug: `curl http://localhost:8001/health` confirms the process is alive; `curl -f http://localhost:8001/ready` verifies PostgreSQL, Redis, and the worker. Rebuild web after changing `NEXT_PUBLIC_*` build arguments.
 ```
 
 ```text
@@ -1147,7 +1142,7 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 - Gemini model name drift risk (`gemini-3-flash-preview` pinned in 3 backend files + frontend bio REST; a 404 requires a coordinated bump).
 - Legacy `RECRUITER`/`ADMIN` roles readable but deprecated; several compat paths drift (M4/M7/M8 mismatches + B3/B4).
 - No zero-downtime deploys (compose rebuild restarts API; in-flight requests dropped).
-- Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns unenforceable at DB level; dangerous cascades (deleting a User/Offer cascades applications → assessments + messages; deleting a User wipes sent/received messages and requests).
+- Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns require application-level validation; deleting a User can cascade applications and messages.
 - `apps/apps/web/` nested copy appears unused — TO-VERIFY, do not rely on it.
 
 ---
@@ -1207,15 +1202,14 @@ Study in this order (files are exact):
 18. How are logos stored? — Same pattern, separate `company-logos` bucket, path `{company_id}/{uuid}.{ext}`, served via public scoped stream (never raw bucket URLs).
 19. What validates uploads? — Extension + MIME + magic bytes + size (CV 5 MB/413; logo 2 MB/400+413 gate), both sides, backend authoritative.
 20. How does the WS stay in sync? — In-memory fan-out + per-message re-auth + `ready/message/error` frames + 4401/4403/4404 closes + 3 s polling fallback; single-replica only.
-21. How are stages moved? — `PATCH /applications/{id}` with 7-value allowlist, free jumping, audit per transition; no state machine, no notifications.
-22. When does chat unlock? — Crossing into `shortlisted/assessment_required/assessment_completed/interview/accepted` (`CHAT_ENABLED_STATUSES`); `rejected` locks again.
+21. How are stages moved? — `PATCH /applications/{id}` uses an explicit transition graph, optimistic versions, evidence validation, audit, and notifications.
+22. When does chat unlock? — Crossing into `shortlisted`, `interview`, or `accepted` (`CHAT_ENABLED_STATUSES`); `rejected` locks again.
 23. What does `GET /recommendations` do besides listing? — Inserts `0`-score pending placeholders for unscored active offers (why Discover shows "en attente").
 24. What does offer create/toggle bust? — `recommendations:*` Redis keys (`_bust_recommendation_cache`, `offers.py:54-63`), forcing the next Generate to rescan.
 25. How long do caches/jobs live? — Result cache 900 s (`recommendation_cache_ttl_seconds`), job keys 3600 s; invites 7 d / 72 h; OTP 10 min / 5 attempts / 60 s cooldown.
-26. How are assessments stored vs served? — Full columns in `assessments`, but API returns sparse `{id,status[,score]}`; no writers exist.
 27. Can a candidate message any HR? — No: only the responsible HR of an application in a chat-enabled stage; receiver derived server-side.
 28. What can a platform admin do that a company OWNER cannot? — Platform invites, user/offer moderation, stats, impersonation, cross-company reads; admins are denied recruitment chats and employee-invite paths.
-29. What can HIRING_MANAGER do? — View + edit offers + view/evaluate/move + assessments/analytics; cannot create/delete offers, edit company, invite, or manage members/subscription.
+29. What can HIRING_MANAGER do? — View + edit offers + view/evaluate/move + analytics; cannot create/delete offers, edit company, invite, or manage members/subscription.
 30. How does SSO link accounts? — Email match links existing users (+profile backfill); new emails get onboarding cookie → candidate-only completion; never creates company roles.
 31. Where is the Bearer token stored? — `localStorage coditent_token` (`lib/constants.ts`); backend ignores that name and reads `Authorization` header or its own `access_token` cookie.
 32. How are errors surfaced? — `HTTPException` codes (400/401/403/404-isolation/409/410/413/422/429/500/502/503/504) + interceptor logout/redirect + toasts on logo/chat/CV actions.

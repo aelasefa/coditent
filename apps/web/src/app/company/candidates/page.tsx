@@ -10,10 +10,11 @@ import { EmptyState } from "@/components/company/EmptyState";
 import { Drawer } from "@/components/company/Drawer";
 import { TableSkeleton } from "@/components/company/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
-import { getApplications, getMe, updateApplicationStatus, getAssessments, getApiBaseUrl, listRecruitmentChats } from "@/lib/api";
+import { getApplications, getMe, updateApplicationStatus, getApiBaseUrl, listRecruitmentChats } from "@/lib/api";
 import { can } from "@/lib/permissions";
-import type { ApplicationItem, AssessmentItem, Offer } from "@/lib/types";
+import type { ApplicationItem, Offer } from "@/lib/types";
 import { HIRING_STAGES, candidateName, hiringStage, jobTitleFor } from "@/components/company/hiring";
 import { AiScore, CandidateCard } from "@/components/company/CandidateCard";
 import { CandidateDetail } from "@/components/company/CandidateDetail";
@@ -31,10 +32,6 @@ function PipelineContent() {
   const appsQ = useQuery({
     queryKey: ["applications"],
     queryFn: async () => (await getApplications()).applications as ApplicationItem[],
-  });
-  const assQ = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => (await getAssessments()).assessments as AssessmentItem[],
   });
   const offersQ = useQuery({
     queryKey: ["company-offers"],
@@ -70,7 +67,17 @@ function PipelineContent() {
   }, [searchParams]);
 
   const stageMut = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => updateApplicationStatus(id, status),
+    mutationFn: ({
+      id,
+      status,
+      expectedVersion,
+      interview,
+    }: {
+      id: string;
+      status: string;
+      expectedVersion: number;
+      interview?: { scheduledAt: string; notes?: string };
+    }) => updateApplicationStatus(id, status, expectedVersion, interview),
     onSuccess: (res, vars) => {
       qc.invalidateQueries({ queryKey: ["applications"] });
       const chatNow = vars.status !== "applied" && vars.status !== "rejected";
@@ -84,14 +91,12 @@ function PipelineContent() {
   });
 
   const apps = appsQ.data ?? [];
-  const assessments = assQ.data ?? [];
   const offersById = useMemo(() => new Map((offersQ.data ?? []).map((o) => [o.id, o.title])), [offersQ.data]);
 
   const filtered = useMemo(() => {
     let list = apps;
     if (statusFilter !== "all") {
-      if (statusFilter === "assessment") list = list.filter((a) => a.status === "assessment_required" || a.status === "assessment_completed");
-      else list = list.filter((a) => a.status === statusFilter);
+      list = list.filter((a) => a.status === statusFilter);
     }
     if (jobFilter !== "all") list = list.filter((a) => a.opportunity_id === jobFilter);
     if (search.trim()) {
@@ -107,10 +112,8 @@ function PipelineContent() {
     return list;
   }, [apps, statusFilter, jobFilter, search, offersById]);
 
+  const activeJob = jobFilter === "all" ? null : (offersQ.data ?? []).find((offer) => offer.id === jobFilter) ?? null;
   const selected = apps.find((a) => a.id === selectedId) ?? null;
-  const selectedAssessment = selected
-    ? assessments.find((x) => x.candidate_id === selected.candidate_id || x.application_id === selected.id) ?? null
-    : null;
   const selectedChat = selected ? chatByApp.get(selected.id) : null;
   const selectedUnlocked = Boolean(selected && (selected.chat_enabled || selectedChat));
 
@@ -118,7 +121,7 @@ function PipelineContent() {
     () =>
       HIRING_STAGES.map((s) => ({
         stage: s,
-        items: filtered.filter((a) => hiringStage(a.status) === s || (s === "Assessment" && hiringStage(a.status) === "Assessment")),
+        items: filtered.filter((a) => hiringStage(a.status) === s),
       })),
     [filtered]
   );
@@ -129,27 +132,24 @@ function PipelineContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeader
-          title="Candidates"
-          subtitle={`${apps.length} applicants across hiring stages. Select a card for detail and stage actions.`}
-          badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{filtered.length} shown</span>}
-          actions={
-            <div role="group" aria-label="View mode" className="flex rounded-lg border border-border p-0.5">
-              {(["list", "board"] as View[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  aria-pressed={view === v}
-                  className={view === v ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground" : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"}
-                >
-                  {v === "list" ? "List" : "Board"}
-                </button>
-              ))}
-            </div>
-          }
+          tone="green"
+          center
+          eyebrow={activeJob ? "Job pipeline" : "Hiring pipeline"}
+          title={activeJob ? `Candidates for ${activeJob.title}.` : "Every candidate, in clear view."}
+          subtitle={activeJob ? `${filtered.length} applicants for this role - review each profile and move the process forward.` : `${apps.length} applicants in one workspace - review each profile and move the process forward.`}
         />
 
-        <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 lg:flex-row lg:items-center">
+        <div className="company-results-toolbar company-candidate-results-toolbar">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex shrink-0 items-center rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-primary">{filtered.length} shown</span>
+            {activeJob ? <span className="truncate text-xs font-medium text-muted-foreground">{activeJob.title}</span> : null}
+          </div>
+          <div role="group" aria-label="View mode" className="company-view-toggle">
+            {(["list", "board"] as View[]).map((v) => <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v} className={view === v ? "company-view-toggle-active" : "company-view-toggle-button"}>{v === "list" ? "List" : "Board"}</button>)}
+          </div>
+        </div>
+
+        <div className="company-candidate-filterbar flex flex-col gap-2 rounded-xl border border-border-subtle bg-surface p-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <label htmlFor="pipeline-search" className="sr-only">Search candidates</label>
             <FiSearch aria-hidden className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -168,7 +168,6 @@ function PipelineContent() {
               <option value="applied">Applied</option>
               <option value="under_review">Screening</option>
               <option value="shortlisted">Shortlisted</option>
-              <option value="assessment">Assessment</option>
               <option value="interview">Interview</option>
               <option value="accepted">Hired</option>
               <option value="rejected">Rejected</option>
@@ -209,9 +208,9 @@ function PipelineContent() {
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="Pipeline board, read-only">
             {boardGroups.map((g) => (
               <section key={g.stage} aria-label={`${g.stage} column`} className="rounded-xl border border-border-subtle bg-surface-secondary/40 p-2.5">
-                <h3 className="flex items-center justify-between px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                <h3 className={`flex items-center justify-between px-1 text-xs font-bold uppercase tracking-wide ${g.stage === "Rejected" ? "text-danger" : "text-muted-foreground"}`}>
                   {g.stage}
-                  <span className="rounded-full bg-surface px-1.5 text-[11px]">{g.items.length}</span>
+                  <span className={g.stage === "Rejected" ? "rounded-full bg-danger-background px-1.5 text-[11px] text-danger" : "rounded-full bg-surface px-1.5 text-[11px]"}>{g.items.length}</span>
                 </h3>
                 <div className="mt-2 space-y-2">
                   {g.items.map((app) => (
@@ -220,11 +219,12 @@ function PipelineContent() {
                       type="button"
                       onClick={() => setSelectedId(app.id)}
                       aria-label={`Open ${candidateName(app)} in ${g.stage}`}
-                      className="block w-full rounded-lg border border-border-subtle bg-surface p-2.5 text-left hover:border-border-strong"
+                      aria-haspopup="dialog"
+                      className="company-board-candidate-card"
                     >
-                      <span className="block truncate text-[13px] font-semibold text-foreground">{candidateName(app)}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">{jobTitleFor(app, offersById)}</span>
-                      <span className="mt-1.5 block"><AiScore app={app} /></span>
+                      <span className="company-board-candidate-name">{candidateName(app)}</span>
+                      <span className="company-board-candidate-role">{jobTitleFor(app, offersById)}</span>
+                      <span className="company-board-candidate-action">View profile</span>
                     </button>
                   ))}
                   {g.items.length === 0 && <p className="px-1 py-2 text-[11px] text-muted-foreground">Empty</p>}
@@ -235,29 +235,38 @@ function PipelineContent() {
         )}
 
         <Drawer
+          panelClassName="company-candidate-panel"
           isOpen={!!selected}
           onClose={() => setSelectedId(null)}
           title={selected ? candidateName(selected) : "Candidate"}
-          subtitle={selected ? `${jobTitleFor(selected, offersById)} · ${selected.status.replace(/_/g, " ")}` : undefined}
+          subtitle={selected ? jobTitleFor(selected, offersById) : undefined}
+          headerLeading={selected ? <Avatar name={candidateName(selected)} size="lg" src={selected.candidate?.avatar_url} /> : undefined}
+          headerMeta={selected ? (
+            <>
+              <StatusBadge status={selected.status} size="sm" />
+              <AiScore app={selected} />
+            </>
+          ) : undefined}
           width="lg"
-          footer={
-            selected ? (
-              <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                Stage <StatusBadge status={selected.status} size="sm" />
-              </span>
-            ) : undefined
-          }
         >
           {selected && (
             <CandidateDetail
               app={selected}
               jobTitle={jobTitleFor(selected, offersById)}
-              assessment={selectedAssessment}
               canMoveStage={canMoveStage}
               stagePending={stageMut.isPending}
               chatUnlocked={selectedUnlocked}
-              onStage={(st) => stageMut.mutate({ id: selected.id, status: st })}
-              onReject={() => stageMut.mutate({ id: selected.id, status: "rejected" })}
+              onStage={(st, interview) => stageMut.mutate({
+                id: selected.id,
+                status: st,
+                expectedVersion: selected.stage_version,
+                interview,
+              })}
+              onReject={() => stageMut.mutate({
+                id: selected.id,
+                status: "rejected",
+                expectedVersion: selected.stage_version,
+              })}
             />
           )}
         </Drawer>
@@ -273,4 +282,3 @@ export default function CompanyCandidatesPage() {
     </Suspense>
   );
 }
-
