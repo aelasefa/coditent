@@ -276,6 +276,24 @@ jobs:
           python -m pip install ansible-core==2.17.14
           ansible-galaxy collection install -r requirements.yml
 
+      - name: Prepare optional encrypted Ansible Vault
+        env:
+          ANSIBLE_VAULT_CONTENT: ${{ secrets.ANSIBLE_VAULT_CONTENT }}
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if { [ -n "$ANSIBLE_VAULT_CONTENT" ] && [ -z "$ANSIBLE_VAULT_PASSWORD" ]; } || \
+             { [ -z "$ANSIBLE_VAULT_CONTENT" ] && [ -n "$ANSIBLE_VAULT_PASSWORD" ]; }; then
+            echo "ANSIBLE_VAULT_CONTENT and ANSIBLE_VAULT_PASSWORD must be configured together" >&2
+            exit 1
+          fi
+          if [ -n "$ANSIBLE_VAULT_CONTENT" ]; then
+            printf '%s\n' "$ANSIBLE_VAULT_CONTENT" > "$RUNNER_TEMP/coditent-vault.yml"
+            printf '%s\n' "$ANSIBLE_VAULT_PASSWORD" > "$RUNNER_TEMP/coditent-vault-password"
+            chmod 600 "$RUNNER_TEMP/coditent-vault.yml" "$RUNNER_TEMP/coditent-vault-password"
+            grep --quiet '^\$ANSIBLE_VAULT;' "$RUNNER_TEMP/coditent-vault.yml"
+          fi
+
       - name: Provision trusted TLS ingress
         env:
           SSH_HOST: ${{ secrets.EC2_HOST }}
@@ -283,13 +301,19 @@ jobs:
         working-directory: ansible
         run: |
           set -euo pipefail
+          VAULT_ARGS=()
+          if [ -s "$RUNNER_TEMP/coditent-vault.yml" ]; then
+            VAULT_ARGS+=(--vault-password-file "$RUNNER_TEMP/coditent-vault-password")
+            VAULT_ARGS+=(--extra-vars "@$RUNNER_TEMP/coditent-vault.yml")
+          fi
           ansible-playbook \
             -i inventory/hosts.ini \
             playbooks/setup.yml \
             --limit production \
             --private-key "$HOME/.ssh/id_rsa" \
             --ssh-extra-args="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
-            --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER"
+            --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER" \
+            "${VAULT_ARGS[@]}"
 
       - name: Run Ansible Deployment Playbook
         env:
@@ -299,13 +323,19 @@ jobs:
         working-directory: ansible
         run: |
           set -euo pipefail
+          VAULT_ARGS=()
+          if [ -s "$RUNNER_TEMP/coditent-vault.yml" ]; then
+            VAULT_ARGS+=(--vault-password-file "$RUNNER_TEMP/coditent-vault-password")
+            VAULT_ARGS+=(--extra-vars "@$RUNNER_TEMP/coditent-vault.yml")
+          fi
           ansible-playbook \
             -i inventory/hosts.ini \
             playbooks/deploy.yml \
             --limit production \
             --private-key "$HOME/.ssh/id_rsa" \
             --ssh-extra-args="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
-            --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER deploy_commit=$TESTED_COMMIT"
+            --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER deploy_commit=$TESTED_COMMIT" \
+            "${VAULT_ARGS[@]}"
 
       - name: Verify Live Public Readiness Endpoint
         env:

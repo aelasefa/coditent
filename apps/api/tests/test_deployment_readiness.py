@@ -109,6 +109,10 @@ def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
     assert "http://34.205.255.37" not in workflow
     assert "Provision trusted TLS ingress" in workflow
     assert "playbooks/setup.yml" in workflow
+    assert "ANSIBLE_VAULT_CONTENT" in workflow
+    assert "ANSIBLE_VAULT_PASSWORD" in workflow
+    assert "--vault-password-file" in workflow
+    assert "grep --quiet '^\\$ANSIBLE_VAULT;'" in workflow
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
@@ -243,6 +247,20 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "key: FRONTEND_URL" in configure_env
     assert "key: CORS_ORIGINS" in configure_env
     assert "key: ACCESS_TOKEN_COOKIE_SECURE" in configure_env
+
+    production = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+    for vault_variable in (
+        "vault_resend_api_key",
+        "vault_google_client_id",
+        "vault_google_client_secret",
+        "vault_linkedin_client_id",
+        "vault_linkedin_client_secret",
+        "vault_backup_s3_uri",
+        "vault_backup_aws_region",
+    ):
+        assert vault_variable in production
 
 
 def test_ansible_declares_collection_and_syntax_check() -> None:
