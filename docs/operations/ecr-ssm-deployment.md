@@ -63,6 +63,7 @@ Grant that role the following deployment policy, replacing the placeholders:
       "Effect": "Allow",
       "Action": [
         "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
         "ecr:CompleteLayerUpload",
         "ecr:DescribeImages",
         "ecr:GetDownloadUrlForLayer",
