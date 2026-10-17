@@ -100,6 +100,13 @@ def test_deploy_rejects_missing_or_untrusted_revision(tmp_path: Path) -> None:
     assert "requires the tested 40-character commit SHA" in result.stderr
 
 
+def test_image_deployment_scopes_git_safe_directory_to_app_dir() -> None:
+    script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+
+    assert 'git -c safe.directory="$APP_DIR" rev-parse HEAD' in script
+    assert "git config --global --add safe.directory" not in script
+
+
 def test_ci_builds_immutable_api_image_and_deploys_without_ssh() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
 

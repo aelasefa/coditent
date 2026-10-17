@@ -29,7 +29,7 @@ fi
 
 cd "$APP_DIR"
 
-DEPLOYED_COMMIT="$(git rev-parse HEAD)"
+DEPLOYED_COMMIT="$(git -c safe.directory="$APP_DIR" rev-parse HEAD)"
 if [[ "$DEPLOYED_COMMIT" != "$EXPECTED_COMMIT" ]]; then
   echo "ERROR: checked-out commit does not match tested commit" >&2
   exit 3
