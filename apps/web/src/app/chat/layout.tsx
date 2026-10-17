@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CandidateShell } from "@/components/shell/candidate-shell";
 import { CompanyTopShell } from "@/components/shell/company-top-shell";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { getMe, logoutSession } from "@/lib/api";
 import { chatWorkspaceIdentity } from "@/lib/chat-workspace-identity";
 
@@ -17,7 +18,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   // Wait for the authenticated role instead of flashing candidate navigation.
   if (meQuery.isPending) {
-    return <div role="status" className="p-6 text-sm text-muted-foreground">Preparing your workspace…</div>;
+    return <LoadingSpinner size="large" placement="page" label="Preparing your workspace" />;
   }
   if (meQuery.isError || !me) {
     return <div role="alert" className="p-6">

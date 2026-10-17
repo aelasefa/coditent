@@ -387,14 +387,46 @@
 .finalTitle { max-width: 720px; margin: 0; font-size: clamp(3.4rem, 5vw, 5.8rem); line-height: 1.07; }
 .finalInner p:not(.eyebrow) { max-width: 50ch; margin: 1.3rem 0 0; color: #5a6c5f; font-size: 1rem; }
 .finalImage {
-  position: relative;
-  width: calc(100% + clamp(3rem, 6vw, 6rem));
-  aspect-ratio: 1.45;
-  margin-right: clamp(-6rem, -6vw, -3rem);
-  margin-left: clamp(-1.5rem, -2vw, -0.5rem);
-  background: transparent;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  place-items: center;
 }
-.finalArtwork { object-fit: contain; object-position: right bottom; transform: scale(1.08); transform-origin: right bottom; }
+
+.finalMedia {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 28rem);
+  max-width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #173c2d;
+}
+
+.finalArtwork {
+  position: absolute;
+  inset: 9%;
+  pointer-events: none;
+}
+
+.finalPoster {
+  object-fit: contain;
+  object-position: center;
+}
+
+.finalAnimation,
+.finalAnimation > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.finalAnimation {
+  position: absolute;
+  inset: 0;
+}
+
+.finalAnimation > svg { display: block; }
 
 .footer { border-top: 1px solid #dce6da; background: #f4f6ee; }
 .footerInner { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding-block: 2rem; }
@@ -554,14 +586,10 @@
   }
   .discoveryArtwork { transform: scale(1.31); }
   .finalImage {
-    width: 100vw;
-    max-width: none;
-    aspect-ratio: 1.45;
-    margin-right: calc(50% - 50vw);
-    margin-bottom: -2.5rem;
-    margin-left: calc(50% - 50vw);
+    width: min(100%, 38rem);
+    margin: 0 auto -1rem;
   }
-  .finalArtwork { transform: scale(1.1); }
+  .finalMedia { width: min(78vw, 28rem); }
   .companyStars { inset: -8% -10% -8% 45%; }
   .companyInner { gap: 2.5rem; }
 }
@@ -604,8 +632,8 @@
   .discoveryArtwork { transform: scale(1.4); }
   .companyStars { inset: 0 -6% 0 48%; }
   .companyTitle, .finalTitle { font-size: clamp(3.25rem, 11vw, 4.2rem); }
-  .finalImage { aspect-ratio: 1.28; margin-bottom: -2rem; }
-  .finalArtwork { transform: scale(1.16); }
+  .finalImage { margin-bottom: -1rem; }
+  .finalMedia { width: min(90vw, 24rem); }
   .finalActions { align-items: flex-start; flex-direction: column; }
 }
 

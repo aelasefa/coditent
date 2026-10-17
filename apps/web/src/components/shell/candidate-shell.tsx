@@ -6,8 +6,8 @@ import { useEffect } from "react";
 import { endPresence, getMe, getPresenceConnectionId, logoutSession } from "@/lib/api";
 import { candidateOnboardingQuery } from "@/lib/candidate-onboarding";
 import { CandidatePresence } from "@/components/candidate/candidate-presence";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { PageContainer } from "./page-container";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CandidateTopShell } from "./candidate-top-shell";
 
 async function logout() {
@@ -87,17 +87,12 @@ function CandidateShellLoading({ me }: { me: Awaited<ReturnType<typeof getMe>> |
         user={{ name: me?.full_name || "Candidate", email: me?.email, avatarUrl: me?.avatar_url }}
         onLogout={logout}
       >
-        <PageContainer>
-          <div role="status" aria-live="polite" className="space-y-5">
-            <span className="text-sm font-medium text-muted-foreground">Preparing your workspace…</span>
-            <Skeleton className="h-12 w-64 max-w-full" />
-            <div className="grid gap-4 md:grid-cols-3">
-              <Skeleton className="h-36" />
-              <Skeleton className="h-36" />
-              <Skeleton className="h-36" />
-            </div>
-          </div>
-        </PageContainer>
+        <LoadingSpinner
+          className="min-h-[calc(100dvh-90px)] max-[900px]:min-h-[calc(100dvh-76px)]"
+          size="large"
+          placement="center"
+          label="Preparing your workspace"
+        />
       </CandidateTopShell>
     </div>
   );

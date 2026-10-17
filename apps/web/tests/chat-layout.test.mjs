@@ -37,6 +37,9 @@ function renderLayout(query) {
     "@/components/shell/company-top-shell": {
       CompanyTopShell: ({ children, user }) => React.createElement("nav", { "data-shell": "company", "data-user": user.name }, children),
     },
+    "@/components/ui/loading-spinner": {
+      LoadingSpinner: ({ label }) => React.createElement("span", { role: "status", "aria-label": label }),
+    },
   });
   return renderToStaticMarkup(React.createElement(Layout, null, "Conversation content"));
 }
@@ -62,6 +65,7 @@ test("candidate chat retains the candidate shell and conversation", () => {
 test("loading does not flash a candidate shell or mount the conversation", () => {
   const html = renderLayout({ isPending: true });
   assert.match(html, /role="status"/);
+  assert.match(html, /aria-label="Preparing your workspace"/);
   assert.doesNotMatch(html, /data-shell|Conversation content/);
 });
 

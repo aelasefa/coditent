@@ -4,11 +4,19 @@ import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, listRecruitmentChats } from "@/lib/api";
 import { ApplicationsWorkspace } from "@/components/candidate/applications-workspace";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { ApplicationItem } from "@/lib/types";
 
 export default function CandidateApplicationsPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-sm text-muted-foreground" role="status">Loading applications</p>}>
+    <Suspense fallback={(
+      <LoadingSpinner
+        className="min-h-[calc(100dvh-90px)] max-[900px]:min-h-[calc(100dvh-76px)]"
+        size="medium"
+        placement="center"
+        label="Loading applications"
+      />
+    )}>
       <ApplicationsContent />
     </Suspense>
   );
