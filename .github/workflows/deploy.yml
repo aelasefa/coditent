@@ -350,7 +350,7 @@ jobs:
             --arg image "$IMAGE_URI" \
             --arg region "$AWS_REGION" \
             '{commands: [
-              "set -euo pipefail",
+              "set -eu",
               "cd /opt/coditent",
               "command -v aws >/dev/null",
               "command -v docker >/dev/null",

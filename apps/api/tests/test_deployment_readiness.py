@@ -111,6 +111,10 @@ def test_ci_builds_immutable_api_image_and_deploys_without_ssh() -> None:
     assert "ECR_REPOSITORY" in workflow
     assert "EC2_INSTANCE_ID" in workflow
     assert "AWS-RunShellScript" in workflow
+    # AWS-RunShellScript starts commands with /bin/sh on Ubuntu. Keep its
+    # command preamble POSIX-compatible; the deployment script launches Bash.
+    assert '"set -eu"' in workflow
+    assert '"set -euo pipefail"' not in workflow
     assert "aws ecr describe-images" in workflow
     assert "steps.image.outputs.exists != 'true'" in workflow
     assert "aws ssm send-command" in workflow
