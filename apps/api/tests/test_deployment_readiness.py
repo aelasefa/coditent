@@ -216,6 +216,8 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
     next_config = (REPO_ROOT / "apps" / "web" / "next.config.mjs").read_text()
     api_client = (REPO_ROOT / "apps" / "web" / "src" / "lib" / "api.ts").read_text()
+    root_vercel = json.loads((REPO_ROOT / "vercel.json").read_text())
+    web_vercel = json.loads((REPO_ROOT / "apps" / "web" / "vercel.json").read_text())
     production = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
     ).read_text()
@@ -225,6 +227,14 @@ def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
     assert 'server_name: "api.coditent.app"' in production
     assert 'frontend_url: "https://coditent.app"' in production
     assert 'cors_origins: "https://coditent.app,https://www.coditent.app"' in production
+    for config in (root_vercel, web_vercel):
+        assert config["env"]["NEXT_PUBLIC_API_URL"] == (
+            "https://api.coditent.app/api-proxy"
+        )
+        assert config["env"]["NEXT_PUBLIC_OAUTH_API_URL"] == (
+            "https://api.coditent.app/api-proxy"
+        )
+    assert '/^http:\\/\\//i.test(envUrl)' in api_client
     assert 'next_public_api_url: "/api-proxy"' in (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()

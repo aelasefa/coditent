@@ -25,9 +25,10 @@ import type {
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const envUrl = process.env.NEXT_PUBLIC_API_URL || "/api-proxy";
-    // Production browser traffic stays on the page's HTTPS origin. Never let a
-    // stale public HTTP setting create mixed-content API or WebSocket requests.
-    if (window.location.protocol === "https:" && !envUrl.startsWith("/")) {
+    // Never let a stale public HTTP setting create mixed-content API requests.
+    // Absolute HTTPS endpoints are allowed so hosted frontends can bypass a
+    // platform rewrite when the API already has explicit CORS protection.
+    if (window.location.protocol === "https:" && /^http:\/\//i.test(envUrl)) {
       return "/api-proxy";
     }
     return envUrl;
