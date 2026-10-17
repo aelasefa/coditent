@@ -235,6 +235,8 @@ def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
             "https://api.coditent.app/api-proxy"
         )
     assert '/^http:\\/\\//i.test(envUrl)' in api_client
+    assert 'return "https://api.coditent.app/api-proxy"' in api_client
+    assert '/^http:\\/\\//i.test(configured)' in api_client
     assert 'next_public_api_url: "/api-proxy"' in (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()
