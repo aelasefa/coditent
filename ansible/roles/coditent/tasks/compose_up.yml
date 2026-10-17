@@ -15,6 +15,18 @@
   changed_when: (compose_build_output.rc | default(1)) == 0
   when: compose_build | default(true)
 
+- name: Pull immutable application images from the registry
+  ansible.builtin.command:
+    cmd: >-
+      docker compose pull
+      {{ compose_pull_services | default(compose_run_services | default([])) | join(' ') }}
+    chdir: "{{ app_dir }}"
+  register: compose_pull_output
+  changed_when: >-
+    'Pulled' in ((compose_pull_output.stderr | default('')) + (compose_pull_output.stdout | default(''))) or
+    'Downloaded' in ((compose_pull_output.stderr | default('')) + (compose_pull_output.stdout | default('')))
+  when: compose_pull | default(false)
+
 - name: Start application containers without rebuilding
   ansible.builtin.command:
     cmd: >-

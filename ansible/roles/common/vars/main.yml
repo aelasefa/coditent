@@ -10,3 +10,6 @@ common_packages:
   - python3-pip
   - python3-apt
   - rsync
+  # Used by the SSM deployment command to obtain a short-lived ECR token from
+  # the EC2 instance role. No long-lived AWS keys are stored on the server.
+  - awscli

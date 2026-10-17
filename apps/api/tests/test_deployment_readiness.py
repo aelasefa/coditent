@@ -100,34 +100,39 @@ def test_deploy_rejects_missing_or_untrusted_revision(tmp_path: Path) -> None:
     assert "requires the tested 40-character commit SHA" in result.stderr
 
 
-def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
+def test_ci_builds_immutable_api_image_and_deploys_without_ssh() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
 
-    assert "EC2_SSH_KNOWN_HOSTS" in workflow
+    assert "aws-actions/configure-aws-credentials@v4" in workflow
+    assert "aws-actions/amazon-ecr-login@v2" in workflow
+    assert "docker/build-push-action@v6" in workflow
+    assert "id-token: write" in workflow
+    assert "AWS_DEPLOY_ROLE_ARN" in workflow
+    assert "ECR_REPOSITORY" in workflow
+    assert "EC2_INSTANCE_ID" in workflow
+    assert "AWS-RunShellScript" in workflow
+    assert "aws ecr describe-images" in workflow
+    assert "steps.image.outputs.exists != 'true'" in workflow
+    assert "aws ssm send-command" in workflow
+    assert "for attempt in {1..90}" in workflow
+    assert "Success|Cancelled|Failed|TimedOut" in workflow
+    assert "scripts/deploy-production-image.sh" in workflow
+    assert "${{ github.sha }}" in workflow
+    assert "docker compose build" not in workflow
+    assert "EC2_SSH_KEY" not in workflow
+    assert "EC2_SSH_KNOWN_HOSTS" not in workflow
     assert "ssh-keyscan" not in workflow
 
 
-def test_ci_waits_for_a_usable_ec2_ssh_session() -> None:
+def test_ci_requires_online_ssm_and_verifies_public_https() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
 
-    readiness_step = workflow.split(
-        "- name: Wait for EC2 SSH and passwordless sudo", 1
-    )[1].split("- name: Provision trusted TLS ingress", 1)[0]
-    assert "StrictHostKeyChecking=yes" in readiness_step
-    assert "UserKnownHostsFile=" in readiness_step
-    assert "ConnectTimeout=20" in readiness_step
-    assert "ConnectionAttempts=1" in readiness_step
-    assert "sudo -n /usr/bin/python3" in readiness_step
-    assert "os.geteuid()" in readiness_step
-    assert "ControlPersist=10m" in readiness_step
-    assert "ControlPath=" in readiness_step
-    assert "attempt in {1..10}" in readiness_step
-    assert workflow.count("--timeout 120") == 2
-    assert workflow.count("-o ConnectionAttempts=3") == 2
+    assert "describe-instance-information" in workflow
+    assert 'test "$STATUS" = "Online"' in workflow
+    assert "get-command-invocation" in workflow
+    assert 'test "$STATUS" = "Success"' in workflow
     assert "group: coditent-deploy-${{ github.ref }}" in workflow
     assert "cancel-in-progress: false" in workflow
-    assert "StrictHostKeyChecking=no" not in workflow
-    assert "StrictHostKeyChecking=yes" in workflow
     assert "TESTED_COMMIT: ${{ github.sha }}" in workflow
     assert "PUBLIC_BASE_URL must use HTTPS" in workflow
     assert "--proto '=https'" in workflow
@@ -135,12 +140,11 @@ def test_ci_waits_for_a_usable_ec2_ssh_session() -> None:
     assert 'test "$HTTP_STATUS" = "308"' in workflow
     assert "REDIRECT_TARGET" in workflow
     assert "http://34.205.255.37" not in workflow
-    assert "Provision trusted TLS ingress" in workflow
-    assert "playbooks/setup.yml" in workflow
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     compose = (REPO_ROOT / "docker-compose.yml").read_text()
+    production_compose = (REPO_ROOT / "docker-compose.production.yml").read_text()
     main = (REPO_ROOT / "apps" / "api" / "app" / "main.py").read_text()
 
     assert "urlopen('http://localhost:8001/ready'" in compose
@@ -152,6 +156,9 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert compose.count("image: coditent-api:local") == 3
     assert compose.count("context: ./apps/api") == 1
     assert compose.count("- ./.env") == 3
+    assert production_compose.count("CODITENT_API_IMAGE") == 3
+    assert "volumes: !reset []" in production_compose
+    assert production_compose.count("restart: unless-stopped") == 4
     assert "fetch('http://127.0.0.1:3000/')" in compose
     assert "web:\n        condition: service_healthy" in compose
     assert "app.include_router(health_router" in main
@@ -304,7 +311,7 @@ def test_git_sync_repairs_deployment_tree_ownership() -> None:
     assert "delay: 15" in sync_tasks
 
 
-def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
+def test_ansible_fallback_keeps_builds_serial_but_production_disables_them() -> None:
     compose_tasks = (
         REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "compose_up.yml"
     ).read_text()
@@ -321,36 +328,36 @@ def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
     assert "ServerAliveInterval=30" in ansible_config
     assert "ServerAliveCountMax=20" in ansible_config
 
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+    assert "compose_build: false" in production_vars
+    assert "compose_pull: true" in production_vars
 
-def test_production_builds_only_services_hosted_on_ec2() -> None:
+
+def test_production_runs_only_backend_services_from_ecr() -> None:
     production_vars = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
     ).read_text()
 
-    build_services = production_vars.split("compose_build_services:", 1)[1].split(
-        "compose_run_services:", 1
-    )[0]
     run_services = production_vars.split("compose_run_services:", 1)[1].split(
         "# The EC2 host", 1
     )[0]
 
-    assert "- api" in build_services
-    assert "- web" not in build_services
-    assert "- proxy" not in build_services
+    assert "compose_build: false" in production_vars
+    assert "compose_pull: true" in production_vars
     for service in ("redis", "api", "worker", "ai-dispatcher"):
         assert f"- {service}" in run_services
     assert "- web" not in run_services
     assert "- proxy" not in run_services
 
-    deploy_helper = (
-        REPO_ROOT / "ansible" / "roles" / "coditent" / "templates" / "deploy.sh.j2"
-    ).read_text()
-    rollback = (REPO_ROOT / "ansible" / "playbooks" / "rollback.yml").read_text()
-    restart = (REPO_ROOT / "ansible" / "playbooks" / "restart.yml").read_text()
-    for deployment_path in (deploy_helper, rollback, restart):
-        assert "compose_run_services" in deployment_path
-    assert "compose_build_services" in deploy_helper
-    assert "compose_build_services" in rollback
+    deploy_script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+    assert "aws ecr get-login-password" in deploy_script
+    assert 'docker compose pull "${IMAGE_SERVICES[@]}"' in deploy_script
+    assert 'docker compose up -d --no-build' in deploy_script
+    assert "docker compose build" not in deploy_script
+    assert "EXPECTED_COMMIT" in deploy_script
+    assert "PREVIOUS_IMAGE_FILE" in deploy_script
 
 
 def test_application_images_run_as_unprivileged_users() -> None:

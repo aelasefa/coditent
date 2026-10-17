@@ -7,19 +7,6 @@
   overflow-y: auto;
 }
 
-.backgroundVideo {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  display: block;
-  width: 100vw;
-  height: 100svh;
-  object-fit: cover;
-  object-position: center;
-  filter: saturate(1.04) contrast(1.025);
-  pointer-events: none;
-}
-
 .signupContent {
   position: relative;
   z-index: 2;
@@ -126,8 +113,4 @@
   .fieldGrid { grid-template-columns: 1fr; }
   .passwordRequirements { grid-template-columns: 1fr; }
   .artwork { object-position: center 64%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .backgroundVideo { display: none; }
 }
