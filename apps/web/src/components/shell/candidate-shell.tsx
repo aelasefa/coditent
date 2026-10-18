@@ -10,14 +10,6 @@ import { PageContainer } from "./page-container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CandidateTopShell } from "./candidate-top-shell";
 
-async function logout() {
-  if (typeof window !== "undefined") {
-    await endPresence(getPresenceConnectionId()).catch(() => undefined);
-    await logoutSession().catch(() => undefined);
-    window.location.href = "/login";
-  }
-}
-
 export function CandidateShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
@@ -27,6 +19,11 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
     enabled: me?.role === "CANDIDATE",
   });
   const onboarding = onboardingQuery.data;
+  const logout = async () => {
+    await endPresence(getPresenceConnectionId()).catch(() => undefined);
+    await logoutSession().catch(() => undefined);
+    router.replace("/login");
+  };
 
   useEffect(() => {
     if (onboarding && !onboarding.onboarding_completed) router.replace("/get-started");
@@ -38,7 +35,7 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
     onboarding?.onboarding_completed === false;
 
   if (isCheckingCandidate) {
-    return <CandidateShellLoading me={me} />;
+    return <CandidateShellLoading me={me} onLogout={logout} />;
   }
 
   if (meQuery.isError || (me?.role === "CANDIDATE" && onboardingQuery.isError)) {
@@ -80,12 +77,18 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CandidateShellLoading({ me }: { me: Awaited<ReturnType<typeof getMe>> | undefined }) {
+function CandidateShellLoading({
+  me,
+  onLogout,
+}: {
+  me: Awaited<ReturnType<typeof getMe>> | undefined;
+  onLogout: () => Promise<void>;
+}) {
   return (
     <div className="candidate-theme">
       <CandidateTopShell
         user={{ name: me?.full_name || "Candidate", email: me?.email, avatarUrl: me?.avatar_url }}
-        onLogout={logout}
+        onLogout={onLogout}
       >
         <PageContainer>
           <div role="status" aria-live="polite" className="space-y-5">

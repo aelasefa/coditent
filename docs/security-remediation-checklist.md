@@ -4,7 +4,7 @@ Branch: `codex/security-review-remediation`
 
 Audit baseline: `3880510632fba213331e2bc10411870dde2a6b09`
 
-Current migration head: `y1a2b3c4d5e6`
+Current migration head: `ag1b2c3d4e5f`
 
 ## Status legend
 
@@ -13,7 +13,7 @@ Current migration head: `y1a2b3c4d5e6`
 - `PARTIAL`: repository work remains; it is not counted as resolved.
 - `BLOCKED`: authoritative input or permission is missing and no safe substitute can prove completion.
 
-The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PROGRAM.md` were not present in the attachment, working tree, or locally available history. This checklist maps the complete S01–S18/B01–B14 text supplied by the user. The exact school point calculation remains blocked on the missing subject/program files; implemented product requirements are recorded independently below.
+This checklist records the repository remediation work. The selected school modules, owners, qualification evidence, and demonstration sequence are maintained in `audit-reports/MODULE_POINTS.md`, validated against the supplied subject PDF.
 
 ## Security findings
 
@@ -70,7 +70,7 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 | Institution membership/licensing | FIXED_VERIFIED | Institution/admin/student/advisor memberships, locked seats, expiry/status/plan controls, admin UI; `test_institutions.py` | No contract or payment claimed |
 | Friends/presence/avatar | FIXED_VERIFIED | Symmetric add/remove/list, bounded presence, secure private avatar upload/progress; social/avatar tests | None |
 | Admin user/org lifecycle | FIXED_VERIFIED | Candidate-only creation, edit/deactivate, archive organization preserving history, session invalidation; admin tests | None |
-| School module plan (minimum 14 points) | BLOCKED | Product capabilities above are implemented, but an authoritative point selection cannot be calculated without the referenced subject/program files | Attach `en.subject.md` and `CODITENT PROGRAM.md` |
+| School module plan | FIXED_VERIFIED | `audit-reports/MODULE_POINTS.md` documents all 16 selected modules, owners, qualification evidence, and demos: **22 raw, 19/19 counted** | Rehearse the live provider-dependent steps listed in that report |
 
 ## Validation log
 
@@ -82,8 +82,8 @@ The referenced review Markdown, evidence ZIP, `en.subject.md`, and `CODITENT PRO
 - Recruitment access/message/read subset after Redis loop isolation fix: `4 passed`.
 - Interview feedback: `2 passed`; account privacy + interview: `5 passed`; institutions: `2 passed`.
 - Practice mission authoring/review: `3 passed`; durable expiring email delivery/route set: `6 passed`.
-- Frontend: repeated `npx tsc --noEmit` passed; ESLint reports `0 errors, 21 pre-existing warnings`.
-- Migrations applied through `z1a2b3c4d5e6 (head)` on the configured development database.
+- Frontend: `pnpm --filter web lint`, the 22-test unit suite, and `pnpm --filter web build` pass with no lint warnings or errors.
+- Migrations applied through `ag1b2c3d4e5f (head)` on the configured development database.
 - Disposable PostgreSQL 18 backup/restore drill: `Backup and restore drill passed` with checksum validation.
 - `python -m compileall` and `git diff --check` pass after each workstream.
 

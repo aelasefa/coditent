@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import axios from "axios";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -162,7 +162,7 @@ export default function ProfileBuilderPage() {
     setSkills(profileQuery.data.skills?.split(",").map((s) => s.trim()).filter(Boolean) ?? []);
   }, [profileQuery.data, form]);
 
-  const values = form.watch();
+  const values = useWatch({ control: form.control });
   const completion = getProfileCompletion(profileQuery.data, userQuery.data?.avatar_url);
   const hasCv = Boolean(cvMeta?.filename || profileQuery.data?.cv_url);
   const doneCount = completion.done;

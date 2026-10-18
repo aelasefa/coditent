@@ -35,7 +35,7 @@ export default function AdminCompanyInvitationsPage() {
   const [formError, setFormError] = useState<string | undefined>(undefined);
   const [issuedUrls, setIssuedUrls] = useState<Record<string, string>>({});
 
-  const invites = invitesQ.data?.invitations ?? [];
+  const invites = useMemo(() => invitesQ.data?.invitations ?? [], [invitesQ.data]);
   const filtered = useMemo(() => {
     let list = invites;
     if (statusFilter !== "all") list = list.filter((i) => i.status === statusFilter);

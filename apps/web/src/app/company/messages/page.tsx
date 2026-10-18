@@ -48,7 +48,7 @@ function InboxContent() {
     if (a) setSelectedId(a);
   }, [searchParams]);
 
-  const chats = chatsQ.data ?? [];
+  const chats = useMemo(() => chatsQ.data ?? [], [chatsQ.data]);
   const filtered = useMemo(() => {
     if (!search.trim()) return chats;
     const q = search.toLowerCase();

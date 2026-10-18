@@ -87,7 +87,7 @@ export default function AdminUsersPage() {
     onError: (error) => toast(apiMessage(error, "Impersonation failed"), { variant: "error" }),
   });
 
-  const users = usersQ.data ?? [];
+  const users = useMemo(() => usersQ.data ?? [], [usersQ.data]);
   const filtered = useMemo(() => {
     let list = users;
     if (roleFilter !== "all") list = list.filter((user) => user.role === roleFilter);

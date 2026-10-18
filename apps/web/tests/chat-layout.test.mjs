@@ -29,6 +29,7 @@ function loadSource(relativePath, mocks = {}) {
 function renderLayout(query) {
   const { default: Layout } = loadSource("src/app/chat/layout.tsx", {
     "@tanstack/react-query": { useQuery: () => query },
+    "next/navigation": { useRouter: () => ({ replace: () => {} }) },
     "@/lib/api": { getMe: () => {}, logoutSession: () => {} },
     "@/lib/chat-workspace-identity": loadSource("src/lib/chat-workspace-identity.ts"),
     "@/components/shell/candidate-shell": {

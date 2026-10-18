@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/company/StatusBadge";
-import { aiState, candidateInitials, candidateName, hiringStage, jobTitleFor } from "@/components/company/hiring";
+import { aiState, candidateInitials, candidateName, hiringStage } from "@/components/company/hiring";
 import type { ApplicationItem } from "@/lib/types";
 
 function dateLabel(iso?: string | null): string {
