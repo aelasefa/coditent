@@ -175,6 +175,22 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "app.include_router(health_router" in main
 
 
+def test_production_deployment_reconciles_ai_user_quota() -> None:
+    defaults = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "defaults" / "main.yml"
+    ).read_text()
+    root_env = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "templates" / "root.env.j2"
+    ).read_text()
+    configure_env = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "configure_env.yml"
+    ).read_text()
+
+    assert "ai_user_daily_quota_units: 200" in defaults
+    assert "AI_USER_DAILY_QUOTA_UNITS={{ ai_user_daily_quota_units }}" in root_env
+    assert "key: AI_USER_DAILY_QUOTA_UNITS" in configure_env
+
+
 def test_readiness_clients_allow_dependency_probe_to_finish() -> None:
     services = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())["services"]
     api = services["api"]
@@ -283,6 +299,10 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "proxy_set_header Upgrade $http_upgrade" in template
     assert "Include /etc/modsecurity/crs/crs-setup.conf" in modsecurity_template
     assert "Include /usr/share/modsecurity-crs/rules/*.conf" in modsecurity_template
+    assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in modsecurity_template
+    assert modsecurity_template.index("Include /etc/modsecurity/crs/crs-setup.conf") < (
+        modsecurity_template.index("tx.allowed_methods=")
+    ) < modsecurity_template.index("Include /usr/share/modsecurity-crs/rules/*.conf")
     assert "IncludeOptional" not in modsecurity_template
     assert "Activate and verify the final Nginx configuration" in tasks
     assert "Locate the installed ModSecurity base configuration" in tasks

@@ -41,6 +41,8 @@
       value: "{{ cors_origins }}"
     - key: ACCESS_TOKEN_COOKIE_SECURE
       value: "{{ 'true' if env_name in ['production', 'staging'] else 'false' }}"
+    - key: AI_USER_DAILY_QUOTA_UNITS
+      value: "{{ ai_user_daily_quota_units }}"
     - key: GOOGLE_REDIRECT_URI
       value: "{{ google_redirect_uri }}"
     - key: LINKEDIN_REDIRECT_URI

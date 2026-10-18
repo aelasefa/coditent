@@ -65,7 +65,10 @@ class Settings(BaseSettings):
     # AI admission control is shared through Redis so every API and worker
     # process observes the same limits.  "Units" are a small, deterministic
     # cost assigned by operation rather than provider-specific token counts.
-    ai_user_daily_quota_units: int = Field(default=60, ge=1, le=100_000)
+    # A Discover session can score many offers (2 units each) in addition to
+    # profile/CV operations. Keep enough headroom for normal candidate use;
+    # the global budget remains the platform-wide cost safety boundary.
+    ai_user_daily_quota_units: int = Field(default=200, ge=1, le=100_000)
     ai_company_daily_quota_units: int = Field(default=500, ge=1, le=1_000_000)
     ai_global_daily_budget_units: int = Field(default=5_000, ge=1, le=10_000_000)
     ai_global_concurrency: int = Field(default=8, ge=1, le=100)
