@@ -75,14 +75,13 @@
 
 .companyNav {
   justify-content: center;
-  gap: 0.25rem;
+  gap: clamp(0.2rem, 0.6vw, 0.5rem);
 }
 
 .companyNav .navLink,
 .companyNav .navLinkActive {
   box-sizing: border-box;
-  min-width: 5.25rem;
-  padding-inline: 0.75rem;
+  padding-inline: 0.85rem;
   text-align: center;
 }
 
@@ -93,14 +92,26 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 0.78rem;
+  padding: 0.5rem 0.85rem;
   border-radius: 999px;
-  color: #52675a;
+  color: #244735;
   font-size: 0.81rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  transition: background-color 180ms ease, color 180ms ease;
+  transition: color 220ms ease, background-color 220ms ease;
+}
+
+.navLink:hover {
+  background: rgb(25 77 56 / 7%);
+  color: #123e2d;
+}
+
+.navLinkActive {
+  background: rgb(25 77 56 / 10%);
+  color: #123e2d;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgb(25 77 56 / 12%);
 }
 
 .moreMenu {
@@ -257,7 +268,75 @@
   color: #194d38;
 }
 
-.accountPanel button { color: var(--danger); }
+.accountHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.4rem;
+}
+
+.accountInfo {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.accountInfo strong {
+  overflow: hidden;
+  color: #173d2c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountInfo small {
+  overflow: hidden;
+  color: #617266;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountDivider {
+  height: 1px;
+  margin: 0.35rem 0;
+  background: #e3e9df;
+}
+
+.mobileActiveLink {
+  background: #edf1e9 !important;
+  color: #194d38 !important;
+  font-weight: 700 !important;
+}
+
+.mobileDivider {
+  height: 1px;
+  margin: 0.5rem 0;
+  background: #e3e9df;
+}
+
+.mobileLogoutButton {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  color: #dc2626;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.mobileLogoutButton:hover {
+  background: #fee2e2;
+}
 
 .mobileToggle,
 .mobilePanel { display: none; }
