@@ -107,6 +107,15 @@ def test_image_deployment_scopes_git_safe_directory_to_app_dir() -> None:
     assert "git config --global --add safe.directory" not in script
 
 
+def test_image_deployment_reconciles_and_safely_reloads_host_waf() -> None:
+    script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+
+    assert "ansible/roles/nginx/templates/modsecurity-coditent.conf.j2" in script
+    assert 'cmp --silent "$WAF_SOURCE" "$WAF_DESTINATION"' in script
+    assert "nginx -t && systemctl reload nginx" in script
+    assert "restoring previous configuration" in script
+
+
 def test_ci_builds_immutable_api_image_and_deploys_without_ssh() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
 
@@ -151,6 +160,10 @@ def test_ci_requires_online_ssm_and_verifies_public_https() -> None:
     assert 'test "$HTTP_STATUS" = "308"' in workflow
     assert "REDIRECT_TARGET" in workflow
     assert "http://34.205.255.37" not in workflow
+    assert "--request PATCH" in workflow
+    assert "--request DELETE" in workflow
+    assert 'test "$PATCH_STATUS" = "401"' in workflow
+    assert 'test "$DELETE_STATUS" = "401"' in workflow
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
