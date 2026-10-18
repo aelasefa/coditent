@@ -11,6 +11,8 @@ COMPOSE_SERVICES=(redis api worker ai-dispatcher)
 IMAGE_SERVICES=(api worker ai-dispatcher)
 ENV_FILE="$APP_DIR/.env"
 PREVIOUS_IMAGE_FILE="$APP_DIR/.previous-api-image"
+WAF_SOURCE="$APP_DIR/ansible/roles/nginx/templates/modsecurity-coditent.conf.j2"
+WAF_DESTINATION="/etc/nginx/modsecurity-coditent.conf"
 
 if [[ ! "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   echo "ERROR: deployment requires the tested 40-character commit SHA" >&2
@@ -39,6 +41,47 @@ if [[ ! -s "$ENV_FILE" ]]; then
   echo "ERROR: $ENV_FILE is missing; production secrets must already exist" >&2
   exit 4
 fi
+
+reconcile_nginx_waf() {
+  local backup=""
+  local candidate=""
+  local had_existing=false
+
+  if [[ ! -s "$WAF_SOURCE" ]]; then
+    echo "ERROR: tested ModSecurity configuration is missing: $WAF_SOURCE" >&2
+    return 1
+  fi
+  if cmp --silent "$WAF_SOURCE" "$WAF_DESTINATION"; then
+    return 0
+  fi
+
+  candidate="$(mktemp /etc/nginx/modsecurity-coditent.conf.XXXXXX)"
+  backup="$(mktemp /tmp/coditent-modsecurity-backup.XXXXXX)"
+  if [[ -e "$WAF_DESTINATION" ]]; then
+    cp --preserve=mode,ownership,timestamps "$WAF_DESTINATION" "$backup"
+    had_existing=true
+  fi
+  install -o root -g root -m 0644 "$WAF_SOURCE" "$candidate"
+  mv -f "$candidate" "$WAF_DESTINATION"
+
+  if nginx -t && systemctl reload nginx; then
+    rm -f "$backup"
+    echo "Reconciled and reloaded the production ModSecurity configuration"
+    return 0
+  fi
+
+  echo "ERROR: new ModSecurity configuration failed validation or reload; restoring previous configuration" >&2
+  if [[ "$had_existing" == true ]]; then
+    mv -f "$backup" "$WAF_DESTINATION"
+  else
+    rm -f "$WAF_DESTINATION" "$backup"
+  fi
+  nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+  return 1
+}
+
+echo "=== Reconciling host Nginx WAF configuration ==="
+reconcile_nginx_waf
 
 REGISTRY="${IMAGE_URI%%/*}"
 echo "=== Authenticating the EC2 instance role to ECR ==="

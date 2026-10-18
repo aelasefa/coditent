@@ -410,4 +410,12 @@ jobs:
           echo "Verifying public readiness endpoint ..."
           curl --proto '=https' --tlsv1.2 --silent --show-error --fail \
             --retry 5 --retry-delay 3 "${PUBLIC_BASE_URL%/}/ready"
+          PATCH_STATUS="$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --request PATCH --output /dev/null --write-out '%{http_code}' \
+            "${PUBLIC_BASE_URL%/}/api-proxy/offers/00000000-0000-0000-0000-000000000000/toggle")"
+          DELETE_STATUS="$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --request DELETE --output /dev/null --write-out '%{http_code}' \
+            "${PUBLIC_BASE_URL%/}/api-proxy/candidates/cv")"
+          test "$PATCH_STATUS" = "401"
+          test "$DELETE_STATUS" = "401"
           echo "Readiness check passed!"
