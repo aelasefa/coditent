@@ -8,6 +8,7 @@ import { FiChevronDown } from "react-icons/fi";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
 import { LegalLinks } from "@/components/legal/legal-links";
+import { FloatingNavSurface } from "@/components/navigation/floating-nav-surface";
 import { companyNavItems, isNavActive } from "./nav-config";
 import styles from "./candidate-top-shell.module.css";
 import homeStyles from "@/components/landing/landing-page.module.css";
@@ -75,6 +76,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
       <a className={styles.skipLink} href="#company-content">Skip to content</a>
       <header className={`${homeStyles.homeHeader} ${scrolled ? homeStyles.homeHeaderScrolled : ""}`}>
         <div className={homeStyles.homeNav}>
+          <FloatingNavSurface scrolled={scrolled} />
           <Link href="/company" aria-label="Coditent home" className={homeStyles.homeBrand}>
             <Logo size="md" />
           </Link>

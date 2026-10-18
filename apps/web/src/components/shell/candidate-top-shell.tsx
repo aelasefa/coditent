@@ -8,6 +8,7 @@ import { FiChevronDown, FiMenu, FiMoreHorizontal, FiX } from "react-icons/fi";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
 import { LegalLinks } from "@/components/legal/legal-links";
+import { FloatingNavSurface } from "@/components/navigation/floating-nav-surface";
 import { candidateNavItems, isNavActive, type NavItem } from "./nav-config";
 import styles from "./candidate-top-shell.module.css";
 
@@ -35,6 +36,7 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
   const [mobileOpen, setMobileOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,26 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
     setMoreOpen(false);
     setAccountOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = (event?: Event) => {
+      const target = event?.target;
+      const nestedScroll = target instanceof HTMLElement ? target.scrollTop : 0;
+      const pageScroll = Math.max(window.scrollY, document.documentElement.scrollTop, document.body.scrollTop);
+      setScrolled(!reducedMotion.matches && Math.max(pageScroll, nestedScroll) > 48);
+    };
+    const onMotionChange = () => update();
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    document.addEventListener("scroll", update, { passive: true, capture: true });
+    reducedMotion.addEventListener("change", onMotionChange);
+    return () => {
+      window.removeEventListener("scroll", update);
+      document.removeEventListener("scroll", update, { capture: true });
+      reducedMotion.removeEventListener("change", onMotionChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!mobileOpen && !moreOpen && !accountOpen) return;
@@ -88,8 +110,9 @@ export function CandidateTopShell({ user, onLogout, children }: CandidateTopShel
   return (
     <div className={styles.shell}>
       <a className={styles.skipLink} href="#candidate-content">Skip to content</a>
-      <header ref={headerRef} className={styles.header}>
+      <header ref={headerRef} className={`${styles.header} ${scrolled ? styles.headerScrolled : ""}`}>
         <div className={styles.headerInner}>
+          <FloatingNavSurface scrolled={scrolled} />
           <Link href="/dashboard" aria-label="Coditent home" className={styles.brand}>
             <Logo size="md" />
           </Link>

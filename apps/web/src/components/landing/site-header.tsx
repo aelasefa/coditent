@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
 import { Sheet } from "@/components/ui/sheet";
+import { FloatingNavSurface } from "@/components/navigation/floating-nav-surface";
 import { getMe } from "@/lib/api";
 import { isLoggedIn } from "@/lib/auth";
 import { getAuthenticatedDestination } from "@/lib/auth-redirect";
@@ -103,6 +104,7 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
         Skip to content
       </a>
       <div className={floating ? styles.homeNav : "mx-auto flex h-[4.5rem] w-[min(100%-2rem,1280px)] items-center justify-between gap-3 lg:grid lg:w-[min(100%-3rem,1280px)] lg:grid-cols-[1fr_auto_1fr]"}>
+        {floating ? <FloatingNavSurface scrolled={scrolled} /> : null}
         <Link href="/" aria-label="Coditent home" className={floating ? styles.homeBrand : undefined}>
           <Logo size="md" />
         </Link>
