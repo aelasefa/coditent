@@ -106,3 +106,4 @@ def test_production_compose_and_ingress_are_private_tls_and_waf_bounded() -> Non
     assert "modsecurity on" in nginx
     assert "ctl:requestBodyProcessor=JSON" in waf
     assert "SecRequestBodyLimitAction Reject" in waf
+    assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in waf

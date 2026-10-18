@@ -7,6 +7,12 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# Never overlap production releases. The image is built on GitHub's runner;
+# EC2 only pulls and starts the already-tested artifact.
+concurrency:
+  group: coditent-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ========================================================
   # STAGE 1: CI (Lint & Test Web + API)
@@ -238,74 +244,152 @@ jobs:
         run: bash deploy.sh check
 
   # ========================================================
-  # STAGE 2: CD (Deploy to AWS EC2 via Ansible - On push to main)
+  # STAGE 2: Build one immutable backend image outside EC2.
   # ========================================================
-  deploy:
-    name: CD - Deploy to AWS EC2 (Ansible)
+  build-api-image:
+    name: CD - Build and Push API Image
     needs: [secret-scan, ci-web, ci-api, ci-ansible]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Configure SSH Private Key
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
-          SSH_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          test -n "$SSH_KNOWN_HOSTS"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-          ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Configure short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          python-version: "3.12"
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: coditent-${{ github.run_id }}
 
-      - name: Install Ansible and Galaxy collections
-        working-directory: ansible
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install ansible-core==2.17.14
-          ansible-galaxy collection install -r requirements.yml
+      - name: Sign in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Provision trusted TLS ingress
+      - name: Check whether this immutable image already exists
+        id: image
         env:
-          SSH_HOST: ${{ secrets.EC2_HOST }}
-          SSH_USER: ${{ secrets.EC2_USER }}
-        working-directory: ansible
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          if aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push the tested API image
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          file: apps/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ========================================================
+  # STAGE 3: Tell the managed instance to pull and run that image.
+  # ========================================================
+  deploy:
+    name: CD - Deploy API through AWS Systems Manager
+    needs: [build-api-image]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Configure short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: coditent-${{ github.run_id }}
+
+      - name: Resolve the ECR registry
+        id: account
+        run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Require an online SSM-managed EC2 instance
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
         run: |
           set -euo pipefail
-          ansible-playbook \
-            -i inventory/hosts.ini \
-            playbooks/setup.yml \
-            --limit production \
-            --private-key "$HOME/.ssh/id_rsa" \
-            --ssh-extra-args="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
-            --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER"
+          test -n "$INSTANCE_ID"
+          STATUS="$(aws ssm describe-instance-information \
+            --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+            --query 'InstanceInformationList[0].PingStatus' \
+            --output text)"
+          test "$STATUS" = "Online"
 
-      - name: Run Ansible Deployment Playbook
+      - name: Deploy the immutable image with SSM
         env:
-          SSH_HOST: ${{ secrets.EC2_HOST }}
-          SSH_USER: ${{ secrets.EC2_USER }}
+          AWS_ACCOUNT_ID: ${{ steps.account.outputs.id }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
           TESTED_COMMIT: ${{ github.sha }}
-        working-directory: ansible
         run: |
           set -euo pipefail
-          ansible-playbook \
-            -i inventory/hosts.ini \
-            playbooks/deploy.yml \
-            --limit production \
-            --private-key "$HOME/.ssh/id_rsa" \
-            --ssh-extra-args="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" \
-            --extra-vars "ansible_host=$SSH_HOST ansible_user=$SSH_USER deploy_commit=$TESTED_COMMIT"
+          IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$TESTED_COMMIT"
+          jq -n \
+            --arg commit "$TESTED_COMMIT" \
+            --arg image "$IMAGE_URI" \
+            --arg region "$AWS_REGION" \
+            '{commands: [
+              "set -eu",
+              "cd /opt/coditent",
+              "command -v aws >/dev/null",
+              "command -v docker >/dev/null",
+              "chown -R ubuntu:ubuntu /opt/coditent",
+              "fetch_ok=false; for attempt in 1 2 3 4; do if sudo -u ubuntu git -c http.version=HTTP/1.1 fetch --prune origin main; then fetch_ok=true; break; fi; sleep 15; done; $fetch_ok",
+              ("sudo -u ubuntu git cat-file -e " + $commit + "^{commit}"),
+              ("sudo -u ubuntu git merge-base --is-ancestor " + $commit + " origin/main"),
+              ("sudo -u ubuntu git checkout --force --detach " + $commit),
+              ("bash scripts/deploy-production-image.sh " + $image + " " + $commit + " " + $region)
+            ]}' > "$RUNNER_TEMP/ssm-commands.json"
+
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "Deploy Coditent $TESTED_COMMIT" \
+            --timeout-seconds 900 \
+            --parameters "file://$RUNNER_TEMP/ssm-commands.json" \
+            --query 'Command.CommandId' \
+            --output text)"
+
+          STATUS="Pending"
+          for attempt in {1..90}; do
+            STATUS="$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query Status \
+              --output text 2>/dev/null || true)"
+            case "$STATUS" in
+              Success|Cancelled|Failed|TimedOut) break ;;
+              *) echo "Deployment is $STATUS (poll $attempt/90)"; sleep 10 ;;
+            esac
+          done
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}'
+
+          test "$STATUS" = "Success"
 
       - name: Verify Live Public Readiness Endpoint
         env:
@@ -326,4 +410,12 @@ jobs:
           echo "Verifying public readiness endpoint ..."
           curl --proto '=https' --tlsv1.2 --silent --show-error --fail \
             --retry 5 --retry-delay 3 "${PUBLIC_BASE_URL%/}/ready"
+          PATCH_STATUS="$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --request PATCH --output /dev/null --write-out '%{http_code}' \
+            "${PUBLIC_BASE_URL%/}/api-proxy/offers/00000000-0000-0000-0000-000000000000/toggle")"
+          DELETE_STATUS="$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --request DELETE --output /dev/null --write-out '%{http_code}' \
+            "${PUBLIC_BASE_URL%/}/api-proxy/candidates/cv")"
+          test "$PATCH_STATUS" = "401"
+          test "$DELETE_STATUS" = "401"
           echo "Readiness check passed!"

@@ -23,6 +23,15 @@
     mode: '0755'
   when: nginx_tls_enabled | default(false)
 
+- name: Create the ACME HTTP-01 challenge directory
+  ansible.builtin.file:
+    path: "{{ letsencrypt_webroot }}/.well-known/acme-challenge"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  when: nginx_tls_enabled | default(false)
+
 - name: Check whether the trusted certificate already exists
   ansible.builtin.stat:
     path: "{{ tls_certificate_path }}"
@@ -35,8 +44,10 @@
     dest: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
     mode: '0644'
   vars:
-    nginx_tls_enabled: false
-    nginx_waf_enabled: false
+    # Use render-only variables so the task's `when` conditions still see the
+    # production TLS settings instead of being shadowed by task-local values.
+    nginx_render_tls_enabled: false
+    nginx_render_waf_enabled: false
   when:
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
@@ -65,18 +76,178 @@
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
-- name: Start or reload Nginx for the first ACME challenge
-  ansible.builtin.systemd:
-    name: nginx
-    state: restarted
-    enabled: yes
+- name: Find Compose proxy containers before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - label=com.docker.compose.service=proxy
+  register: nginx_compose_proxy_containers
+  changed_when: false
   when:
     - nginx_tls_enabled | default(false)
     - not nginx_tls_certificate_before.stat.exists
 
+- name: Find the explicitly named legacy Coditent proxy before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - name=^/coditent-proxy$
+  register: nginx_named_legacy_proxy_containers
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Find Docker containers publishing the public HTTP port
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - publish=80
+  register: nginx_public_http_containers
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Find Docker containers publishing the public HTTPS port
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - publish=443
+  register: nginx_public_https_containers
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+- name: Collect containers that can conflict with host Nginx
+  ansible.builtin.set_fact:
+    nginx_ingress_container_ids: >-
+      {{
+        (
+          (nginx_compose_proxy_containers.stdout_lines | default([]))
+          + (nginx_named_legacy_proxy_containers.stdout_lines | default([]))
+          + (nginx_public_http_containers.stdout_lines | default([]))
+          + (nginx_public_https_containers.stdout_lines | default([]))
+        ) | reject('equalto', '') | unique | list
+      }}
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+
+# Older deployments exposed the Compose proxy directly on ports 80/443 and
+# did not always carry today's Compose project label. Stop the union of the
+# proxy service, its historical explicit name, and containers publishing port
+# 80 or 443. The deploy playbook recreates Coditent's proxy afterward on
+# loopback.
+- name: Stop containers conflicting with host Nginx before TLS bootstrap
+  ansible.builtin.command:
+    argv:
+      - docker
+      - stop
+      - "{{ item }}"
+  loop: "{{ nginx_ingress_container_ids | default([]) }}"
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+    - item | length > 0
+
+- name: Start Nginx for the first ACME challenge
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+  block:
+    - name: Restart host Nginx with the temporary HTTP virtual host
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+        enabled: yes
+  rescue:
+    - name: Capture Nginx service status after bootstrap failure
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - status
+          - nginx.service
+          - --no-pager
+          - --full
+      register: nginx_bootstrap_systemctl_status
+      changed_when: false
+      failed_when: false
+
+    - name: Capture recent Nginx service journal after bootstrap failure
+      ansible.builtin.command:
+        argv:
+          - journalctl
+          - --unit
+          - nginx.service
+          - --no-pager
+          - --lines
+          - '80'
+      register: nginx_bootstrap_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Report Nginx bootstrap diagnostics
+      ansible.builtin.debug:
+        msg:
+          - "{{ nginx_bootstrap_systemctl_status.stdout | default('systemctl status unavailable') }}"
+          - "{{ nginx_bootstrap_journal.stdout | default('nginx journal unavailable') }}"
+
+    - name: Fail after reporting Nginx bootstrap diagnostics
+      ansible.builtin.fail:
+        msg: "Host Nginx could not claim the public ingress ports; review the service diagnostics above"
+
+- name: Verify the public ACME HTTP-01 route before requesting a certificate
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_tls_certificate_before.stat.exists
+  block:
+    - name: Publish a temporary ACME HTTP-01 probe
+      ansible.builtin.copy:
+        dest: "{{ letsencrypt_webroot }}/.well-known/acme-challenge/coditent-{{ ansible_date_time.epoch }}"
+        content: "coditent-acme-{{ ansible_date_time.epoch }}\n"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Fetch the ACME HTTP-01 probe through the public hostname
+      ansible.builtin.uri:
+        url: "http://{{ server_name }}/.well-known/acme-challenge/coditent-{{ ansible_date_time.epoch }}"
+        method: GET
+        return_content: true
+        status_code: 200
+        follow_redirects: none
+      delegate_to: localhost
+      become: false
+      register: nginx_acme_http_probe
+
+    - name: Require the public ACME HTTP-01 probe content
+      ansible.builtin.assert:
+        that:
+          - nginx_acme_http_probe.content | trim == 'coditent-acme-' ~ ansible_date_time.epoch
+        fail_msg: "The public ACME path is not served by this host; verify DNS, port 80, and competing reverse proxies"
+  always:
+    - name: Remove the temporary ACME HTTP-01 probe
+      ansible.builtin.file:
+        path: "{{ letsencrypt_webroot }}/.well-known/acme-challenge/coditent-{{ ansible_date_time.epoch }}"
+        state: absent
+
 - name: Request a trusted Let's Encrypt certificate
   ansible.builtin.command:
-    argv: "{{ ['certbot', 'certonly', '--webroot', '--webroot-path', letsencrypt_webroot, '--non-interactive', '--agree-tos', '--keep-until-expiring', '--email', letsencrypt_email, '--domain', server_name] + (['--staging'] if letsencrypt_staging | default(false) else []) }}"
+    argv: "{{ ['certbot', 'certonly', '--webroot', '--webroot-path', letsencrypt_webroot, '--preferred-challenges', 'http', '--non-interactive', '--agree-tos', '--no-eff-email', '--keep-until-expiring', '--cert-name', server_name, '--email', letsencrypt_email, '--domain', server_name] + (['--staging'] if letsencrypt_staging | default(false) else []) }}"
     creates: "{{ tls_certificate_path }}"
   when: nginx_tls_enabled | default(false)
 
@@ -124,10 +295,78 @@
     fail_msg: "Let's Encrypt did not issue the configured certificate; verify DNS A/AAAA records and inbound ports 80/443"
   when: nginx_tls_enabled | default(false)
 
-- name: Initialize ModSecurity base configuration
+- name: Locate the installed ModSecurity base configuration
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/modsecurity.conf
+    - /etc/modsecurity/modsecurity.conf-recommended
+    - /usr/share/nginx/docs/modsecurity/modsecurity.conf
+  register: nginx_modsecurity_base_candidates
+  when: nginx_waf_enabled | default(false)
+
+- name: Select the installed ModSecurity base configuration
+  ansible.builtin.set_fact:
+    nginx_modsecurity_base_source: >-
+      {{
+        nginx_modsecurity_base_candidates.results
+        | selectattr('stat.exists')
+        | map(attribute='item')
+        | first
+        | default('')
+      }}
+  when: nginx_waf_enabled | default(false)
+
+- name: Require an installed ModSecurity base configuration
+  ansible.builtin.assert:
+    that:
+      - nginx_modsecurity_base_source | length > 0
+    fail_msg: "The ModSecurity package installed without a supported base configuration file"
+  when: nginx_waf_enabled | default(false)
+
+- name: Locate the installed ModSecurity Unicode mapping
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/unicode.mapping
+    - /usr/share/nginx/docs/modsecurity/unicode.mapping
+    - /usr/share/libmodsecurity3/unicode.mapping
+  register: nginx_modsecurity_unicode_candidates
+  when: nginx_waf_enabled | default(false)
+
+- name: Select the installed ModSecurity Unicode mapping
+  ansible.builtin.set_fact:
+    nginx_modsecurity_unicode_source: >-
+      {{
+        nginx_modsecurity_unicode_candidates.results
+        | selectattr('stat.exists')
+        | map(attribute='item')
+        | first
+        | default('')
+      }}
+  when: nginx_waf_enabled | default(false)
+
+- name: Require an installed ModSecurity Unicode mapping
+  ansible.builtin.assert:
+    that:
+      - nginx_modsecurity_unicode_source | length > 0
+    fail_msg: "The ModSecurity package installed without a supported Unicode mapping file"
+  when: nginx_waf_enabled | default(false)
+
+- name: Initialize the stable ModSecurity base configuration
   ansible.builtin.copy:
-    src: /etc/modsecurity/modsecurity.conf-recommended
+    src: "{{ nginx_modsecurity_base_source }}"
     dest: /etc/modsecurity/modsecurity.conf
+    remote_src: true
+    force: false
+    mode: '0644'
+  when: nginx_waf_enabled | default(false)
+  notify: Reload nginx
+
+- name: Install the stable ModSecurity Unicode mapping
+  ansible.builtin.copy:
+    src: "{{ nginx_modsecurity_unicode_source }}"
+    dest: /etc/modsecurity/unicode.mapping
     remote_src: true
     force: false
     mode: '0644'
@@ -165,6 +404,9 @@
 - name: Test Nginx configuration
   ansible.builtin.command: nginx -t
   changed_when: false
+
+- name: Activate and verify the final Nginx configuration
+  ansible.builtin.meta: flush_handlers
 
 - name: Ensure Nginx is enabled and started
   ansible.builtin.systemd:

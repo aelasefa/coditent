@@ -28,7 +28,8 @@ if [ "$DEPLOYED_COMMIT" != "$EXPECTED_COMMIT" ]; then
 fi
 
 echo "=== Building and restarting Docker containers ==="
-docker compose up -d --build --remove-orphans
+COMPOSE_PARALLEL_LIMIT=1 docker compose build {{ compose_build_services | default([]) | join(' ') }}
+docker compose up -d --no-build --remove-orphans {{ compose_run_services | default([]) | join(' ') }}
 
 echo "=== Waiting for application readiness ==="
 readiness_verified=false

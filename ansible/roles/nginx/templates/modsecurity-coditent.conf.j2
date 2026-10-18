@@ -11,4 +11,15 @@ SecRequestBodyLimitAction Reject
 SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)" \
     "id:1000001,phase:1,pass,nolog,ctl:requestBodyProcessor=JSON"
 
-Include /usr/share/modsecurity-crs/owasp-crs.load
+# Debian's owasp-crs.load is an Apache-oriented loader and uses
+# an optional-include directive that ModSecurity-nginx does not support. Load
+# the same required CRS configuration and rules directly.
+Include /etc/modsecurity/crs/crs-setup.conf
+
+# CRS defaults to read-oriented methods and rejects PUT, PATCH, and DELETE via
+# rule 911100 before the request can reach FastAPI. Coditent exposes all three
+# methods, so keep the allowlist explicit and limited to the API's verbs.
+SecAction \
+    "id:1000002,phase:1,pass,nolog,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE'"
+
+Include /usr/share/modsecurity-crs/rules/*.conf

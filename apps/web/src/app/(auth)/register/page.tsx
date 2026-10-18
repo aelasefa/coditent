@@ -70,22 +70,6 @@ function RegisterInner() {
   const password = form.watch("password");
   return (
     <main className={`${authStyles.page} ${styles.page}`}>
-      <video
-        className={styles.backgroundVideo}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        poster="/images/auth/sign-in-background.png"
-        aria-hidden="true"
-        tabIndex={-1}
-      >
-        <source
-          src="/images/auth/login-background-hd.mp4?v=2"
-          type="video/mp4"
-        />
-      </video>
-
       <div className={styles.signupContent}>
       <a href="#auth-form" className={authStyles.skipLink}>Skip to registration form</a>
       <header className={authStyles.header}>
