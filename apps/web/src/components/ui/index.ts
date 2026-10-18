@@ -9,6 +9,8 @@ export { Badge } from "./badge";
 export { Avatar } from "./avatar";
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./card";
 export { Skeleton, SkeletonText } from "./skeleton";
+export { LoadingSpinner } from "./loading-spinner";
+export type { LoadingSpinnerPlacement, LoadingSpinnerSize, LoadingSpinnerTone } from "./loading-spinner";
 export { EmptyState } from "./empty-state";
 export { Dialog } from "./dialog";
 export { Sheet } from "./sheet";

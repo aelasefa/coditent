@@ -6,9 +6,9 @@ import { FiBriefcase, FiSearch, FiX } from "react-icons/fi";
 import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ApplicationCard, ApplicationDetail, applicationName } from "./application-card";
 import type { ApplicationItem, RecruitmentChatListItem } from "@/lib/types";
 import styles from "./applications.module.css";
@@ -150,7 +150,7 @@ export function ApplicationsWorkspace({
       {error && applications.length > 0 ? <div role="alert" className={styles.staleNotice}><span>Could not refresh applications. Showing your last loaded results.</span><button type="button" onClick={onRetry}>Retry</button></div> : null}
 
       {loading ? (
-        <div className={styles.loadingLayout} role="status" aria-label="Loading applications"><div><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div><Skeleton className="h-[34rem]" /></div>
+        <LoadingSpinner className={styles.applicationsLoading} size="medium" placement="center" label="Loading applications" />
       ) : fatalError ? (
         <div role="alert" className={styles.errorState}><h2>Could not load applications</h2><p>Check your connection and try again.</p><button type="button" onClick={onRetry}>Retry loading</button></div>
       ) : applications.length === 0 ? (

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "coditent-v1";
+const CACHE_VERSION = "coditent-v3";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
