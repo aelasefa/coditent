@@ -167,7 +167,9 @@ def test_ci_requires_online_ssm_and_verifies_public_https() -> None:
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
-    compose = (REPO_ROOT / "docker-compose.yml").read_text()
+    compose_path = REPO_ROOT / "docker-compose.yml"
+    compose = compose_path.read_text()
+    services = yaml.safe_load(compose)["services"]
     production_compose = (REPO_ROOT / "docker-compose.production.yml").read_text()
     main = (REPO_ROOT / "apps" / "api" / "app" / "main.py").read_text()
 
@@ -186,6 +188,11 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert "fetch('http://127.0.0.1:3000/')" in compose
     assert "web:\n        condition: service_healthy" in compose
     assert "app.include_router(health_router" in main
+    # A durable AI job keeps its domain transaction open while the lease
+    # heartbeat and stale-source verifier use an independent session. A pool
+    # of one deterministically ends every otherwise-successful job with
+    # sqlalchemy.exc.TimeoutError.
+    assert int(services["worker"]["environment"]["DB_POOL_SIZE"]) >= 2
 
 
 def test_production_deployment_reconciles_ai_user_quota() -> None:
