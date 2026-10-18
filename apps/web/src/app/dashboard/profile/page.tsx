@@ -85,6 +85,20 @@ function toProfileValues(profile: Partial<import("@/lib/types").Profile>): Profi
   };
 }
 
+function cvFilenameFromStoragePath(cvUrl: string): string {
+  const storageName = cvUrl.split(/[?#]/, 1)[0]?.split("/").pop();
+  if (!storageName) return "CV uploaded";
+
+  let decodedName = storageName;
+  try {
+    decodedName = decodeURIComponent(storageName);
+  } catch {
+    // Keep the valid part returned by storage when the path contains malformed encoding.
+  }
+
+  return decodedName.replace(/^[a-f0-9]{32}_/i, "") || "CV uploaded";
+}
+
 export default function ProfileBuilderPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -147,7 +161,7 @@ export default function ProfileBuilderPage() {
   useEffect(() => {
     if (cvMetaQuery.data) setCvMeta(cvMetaQuery.data);
     if (profileQuery.data?.cv_url && !cvMetaQuery.data) {
-      setCvMeta({ filename: profileQuery.data.cv_url.split("/").pop() });
+      setCvMeta({ filename: cvFilenameFromStoragePath(profileQuery.data.cv_url) });
     }
   }, [cvMetaQuery.data, profileQuery.data]);
 
