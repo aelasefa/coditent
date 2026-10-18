@@ -199,6 +199,9 @@ async def execute_ai_job(
                     worker_id=worker_id,
                     error_code=_safe_error_code(exc),
                     retryable=True,
+                    retry_after_seconds=(
+                        exc.retry_after if isinstance(exc, AIAdmissionError) else None
+                    ),
                 )
                 return outcome
             except AIJobLeaseLostError:

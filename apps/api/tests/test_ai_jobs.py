@@ -25,6 +25,7 @@ from app.services.ai_jobs import (
     content_fingerprint,
     dispatch_due_jobs,
     enqueue_ai_job,
+    fail_ai_job,
 )
 
 
@@ -131,6 +132,43 @@ async def test_expired_processing_lease_is_recovered(sessions):
         refreshed = (await db.execute(select(AIJob).where(AIJob.id == job.id))).scalar_one()
         assert refreshed.status == "queued"
         assert refreshed.lease_owner == "dispatcher-two"
+
+
+@pytest.mark.asyncio
+async def test_admission_retry_respects_provider_retry_window(sessions):
+    async with sessions() as db:
+        job = await enqueue_ai_job(
+            db,
+            kind="match_score",
+            actor_id=uuid.uuid4(),
+            company_id=None,
+            resource_id=uuid.uuid4(),
+            payload={"offer_id": "test"},
+            source_fingerprint=content_fingerprint({"version": 1}),
+        )
+        await db.commit()
+        await dispatch_due_jobs(db, dispatcher_id="dispatcher")
+        claimed = await claim_ai_job(db, job.id, worker_id="worker")
+        assert claimed is not None
+
+        before = datetime.utcnow()
+        outcome = await fail_ai_job(
+            db,
+            job.id,
+            worker_id="worker",
+            error_code="USER_QUOTA_EXCEEDED",
+            retryable=True,
+            retry_after_seconds=3600,
+        )
+
+        stored = (
+            await db.execute(select(AIJob).where(AIJob.id == job.id))
+        ).scalar_one()
+        assert outcome == "pending"
+        assert stored.status == "pending"
+        assert stored.attempts == 1
+        assert stored.last_error_code == "USER_QUOTA_EXCEEDED"
+        assert stored.available_at >= before + timedelta(seconds=3599)
 
 
 @pytest.mark.asyncio

@@ -15,4 +15,11 @@ SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?
 # an optional-include directive that ModSecurity-nginx does not support. Load
 # the same required CRS configuration and rules directly.
 Include /etc/modsecurity/crs/crs-setup.conf
+
+# CRS defaults to read-oriented methods and rejects PUT, PATCH, and DELETE via
+# rule 911100 before the request can reach FastAPI. Coditent exposes all three
+# methods, so keep the allowlist explicit and limited to the API's verbs.
+SecAction \
+    "id:1000002,phase:1,pass,nolog,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE'"
+
 Include /usr/share/modsecurity-crs/rules/*.conf
