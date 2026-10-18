@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
 import { LegalLinks } from "@/components/legal/legal-links";
+import { FloatingNavSurface } from "@/components/navigation/floating-nav-surface";
 import { companyNavItems, isNavActive } from "./nav-config";
 import styles from "./candidate-top-shell.module.css";
 import homeStyles from "@/components/landing/landing-page.module.css";
@@ -94,6 +95,7 @@ export function CompanyTopShell({ user, onLogout, children }: CompanyTopShellPro
         }}
       >
         <div className={homeStyles.homeNav}>
+          <FloatingNavSurface scrolled={scrolled} />
           <Link href="/company" aria-label="Coditent home" className={homeStyles.homeBrand}>
             <Logo size="md" />
           </Link>

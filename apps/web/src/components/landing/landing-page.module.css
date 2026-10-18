@@ -475,21 +475,7 @@
   padding-inline: 24px;
   transition: transform 280ms var(--nav-ease);
 }
-/* Only the glass surface scales: labels keep their size and the page keeps its space. */
-.homeNav::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border: 1px solid rgb(255 255 255 / 85%);
-  border-radius: 999px;
-  background: #fffefa;
-  box-shadow: 0 8px 30px rgb(25 55 38 / 8%), 0 1px 4px rgb(25 55 38 / 5%), inset 0 -1px 0 rgb(58 89 65 / 9%);
-  pointer-events: none;
-  transition: transform 280ms var(--nav-ease), background-color 280ms ease, box-shadow 280ms ease;
-}
 .homeHeaderScrolled .homeNav { transform: translateY(-4px); }
-.homeHeaderScrolled .homeNav::before { transform: scale(0.96, 0.92); box-shadow: 0 12px 34px rgb(25 55 38 / 12%), 0 1px 4px rgb(25 55 38 / 5%), inset 0 -1px 0 rgb(58 89 65 / 9%); }
 .homeBrand { display: inline-flex; flex-shrink: 0; align-items: center; min-height: 44px; border-radius: 999px; transition: transform 280ms var(--nav-ease); }
 .homeHeaderScrolled .homeBrand { transform: translateX(20px); }
 .homeNavLinks { display: flex; align-items: center; gap: clamp(0.25rem, 1vw, 0.8rem); }
@@ -536,9 +522,7 @@
 .homeMobileAuthPlaceholder { display: block; width: 44px; height: 44px; flex-shrink: 0; }
 
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .homeNav::before, .homeMobilePanel { -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%); }
-  .homeNav::before { background: rgb(255 254 250 / 60%); }
-  .homeHeaderScrolled .homeNav::before { background: rgb(255 254 250 / 72%); }
+  .homeMobilePanel { -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%); }
   .homeMobilePanel { background: rgb(255 254 250 / 94%); }
 }
 
@@ -564,7 +548,6 @@
   .homeNav { height: 64px; gap: 0.5rem; padding-inline: 14px 10px; }
   .homeNavLinks, .homeActions { display: none; }
   .homeMobile { display: flex; }
-  .homeHeaderScrolled .homeNav::before { transform: scaleY(0.96); }
   .homeHeaderScrolled .homeBrand { transform: none; }
   .homeMobile .homeCta { padding-inline: 0.8rem; font-size: 0.75rem; }
 }
@@ -643,13 +626,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .landingRoot *, .homeNav::before { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  .homeHeaderScrolled .homeNav, .homeHeaderScrolled .homeNav::before, .homeHeaderScrolled .homeBrand, .homeHeaderScrolled .homeActions,
+  .landingRoot * { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .homeHeaderScrolled .homeNav, .homeHeaderScrolled .homeBrand, .homeHeaderScrolled .homeActions,
   .homeCta:hover, .primaryButton:hover, .lightButton:hover, .textButton:hover, .inlineLink:hover { transform: none; }
   .homeMobilePanel:not([hidden]) { animation: none; }
   .landingRoot[data-reveal-ready="true"] [data-scroll-reveal] { opacity: 1; transform: none; transition: none; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .homeNav::before, .homeHeaderScrolled .homeNav::before, .homeMobilePanel { background: #fffefa; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .homeMobilePanel { background: #fffefa; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
