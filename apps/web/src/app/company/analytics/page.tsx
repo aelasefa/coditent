@@ -45,8 +45,8 @@ export default function AnalyticsPage() {
     enabled: !!me,
   });
 
-  const offers = offersQ.data ?? [];
-  const apps = appsQ.data ?? [];
+  const offers = useMemo(() => offersQ.data ?? [], [offersQ.data]);
+  const apps = useMemo(() => appsQ.data ?? [], [appsQ.data]);
   const byStatus = (s: string) => apps.filter((a) => a.status === s).length;
 
   const distribution = useMemo(

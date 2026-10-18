@@ -6,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import { Suspense, useState } from "react";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
@@ -67,7 +67,7 @@ function RegisterInner() {
   });
 
   const isSubmitting = registerMutation.isPending;
-  const password = form.watch("password");
+  const password = useWatch({ control: form.control, name: "password" });
   return (
     <main className={`${authStyles.page} ${styles.page}`}>
       <div className={styles.signupContent}>

@@ -1,20 +1,21 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { CandidateShell } from "@/components/shell/candidate-shell";
 import { CompanyTopShell } from "@/components/shell/company-top-shell";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { getMe, logoutSession } from "@/lib/api";
 import { chatWorkspaceIdentity } from "@/lib/chat-workspace-identity";
 
-async function logout() {
-  await logoutSession().catch(() => undefined);
-  window.location.href = "/login";
-}
-
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
   const me = meQuery.data;
+  const logout = async () => {
+    await logoutSession().catch(() => undefined);
+    router.replace("/login");
+  };
 
   // Wait for the authenticated role instead of flashing candidate navigation.
   if (meQuery.isPending) {
