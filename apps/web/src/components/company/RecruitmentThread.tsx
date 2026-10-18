@@ -138,23 +138,27 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
     );
   }
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <p className="border-b border-border-subtle px-4 py-2 text-[11px] text-muted-foreground">
-        {recruitmentLive ? "Live" : "Auto-refresh"} · private recruitment conversation
-      </p>
+    <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2 bg-surface-secondary/40 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 font-medium">
+          <span className={`h-2 w-2 rounded-full ${recruitmentLive ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/60"}`} />
+          {recruitmentLive ? "Live updates" : "Auto-refresh active"}
+        </span>
+        <span className="text-[11px] font-medium">Private candidate discussion</span>
+      </div>
       {ctx.has_more ? (
-        <div className="border-b border-border-subtle px-4 py-2 text-center">
+        <div className="border-b border-border-subtle px-4 py-2 text-center bg-surface-secondary/20">
           <button
             type="button"
-            className="text-xs font-semibold text-primary underline disabled:opacity-60"
+            className="text-xs font-semibold text-primary hover:underline disabled:opacity-60"
             disabled={olderMessagesMut.isPending}
             onClick={() => olderMessagesMut.mutate()}
           >
-            {olderMessagesMut.isPending ? "Loading…" : "Load earlier messages"}
+            {olderMessagesMut.isPending ? "Loading older messages…" : "↑ Load earlier messages"}
           </button>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <MessageList
           messages={ctx.messages}
           myId={me?.id}
