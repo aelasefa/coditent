@@ -13,7 +13,6 @@
 .successIcon,
 .errorIcon { display: grid; width: 46px; height: 46px; place-items: center; margin-bottom: 1.4rem; border-radius: 50%; font-size: 1.25rem; font-weight: 800; }
 .loadingIcon { border: 1px solid #b8cbb9; background: #edf1e9; }
-.loadingIcon span { width: 20px; height: 20px; border: 2px solid #9bb3a0; border-top-color: #194d38; border-radius: 50%; animation: spin 800ms linear infinite; }
 .successIcon { border: 1px solid #90b29c; background: #e5efe7; color: #194d38; }
 .errorIcon { border: 1px solid #e3b8a8; background: #fff4ed; color: #8e3f28; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.6rem; padding-top: 1.4rem; border-top: 1px solid #e3e9df; }
@@ -24,14 +23,8 @@
 .secondaryButton { border: 1px solid #cfdbcf; background: #fffefa; color: #194d38; }
 .secondaryButton:hover { border-color: #9bb3a0; background: #edf1e9; }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
 @media (max-width: 760px) {
   .card { padding: 1.35rem; }
   .title { font-size: clamp(2.2rem, 10vw, 3.2rem); }
   .actions { display: grid; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .loadingIcon span { animation: none; border-color: #194d38; }
 }

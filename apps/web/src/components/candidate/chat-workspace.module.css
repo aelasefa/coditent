@@ -1,9 +1,17 @@
-.page { padding-top: clamp(1.5rem, 3vw, 2.6rem); }
+.page {
+  --chat-shell-height: 90px;
+  display: flex;
+  height: calc(100dvh - var(--chat-shell-height));
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: clamp(0.55rem, 1.2vh, 0.8rem);
+  padding-bottom: clamp(0.65rem, 1.4vh, 0.9rem);
+}
 .eyebrow { color: var(--accent); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; }
-.pageHeading { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.55rem; }
-.pageHeading h1 { margin: 0.2rem 0 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.5rem, 4vw, 3.65rem); font-weight: 400; letter-spacing: -0.055em; line-height: 1; }
-.pageHeading p { margin: 0.65rem 0 0; color: var(--muted-foreground); font-size: 0.9rem; }
-.workspace { --profile-panel-width: 300px; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.7fr) 0px; height: clamp(580px, calc(100dvh - 190px), 760px); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 40px rgb(25 77 56 / 5%); transition: grid-template-columns 280ms ease-out; }
+.pageHeading { display: flex; flex: none; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: clamp(0.55rem, 1.2vh, 0.8rem); }
+.pageHeading h1 { margin: 0.2rem 0 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.2rem, 3.35vw, 3.1rem); font-weight: 400; letter-spacing: -0.05em; line-height: 1; }
+.workspace { --profile-panel-width: 300px; position: relative; isolation: isolate; display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.7fr) 0px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 40px rgb(25 77 56 / 5%); transition: grid-template-columns 280ms ease-out; }
 .workspaceWithProfile { grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.7fr) var(--profile-panel-width); }
 .inbox { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-right: 1px solid var(--border-subtle); background: var(--surface); }
 .inboxHeader { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.4rem 1.35rem 1rem; }
@@ -23,7 +31,6 @@
 .filters button:hover { background: var(--surface-secondary); color: var(--primary); }
 .filters button[aria-pressed="true"] { background: var(--surface-secondary); color: var(--primary); }
 .inboxBody { min-height: 0; flex: 1; overflow-y: auto; }
-.skeletonList { display: grid; gap: 0.6rem; padding: 1rem; }
 .conversationList { margin: 0; padding: 0; list-style: none; }
 .conversationList li + li { border-top: 1px solid var(--border-subtle); }
 .conversationRow { display: flex; min-width: 0; gap: 0.8rem; padding: 1rem 1.2rem; border-left: 3px solid transparent; transition: background-color var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard); }
@@ -44,7 +51,7 @@
 .inboxNotice a, .inboxNotice button { display: inline-flex; align-items: center; gap: 0.3rem; margin-top: 0.45rem; color: var(--primary); font-size: 0.78rem; font-weight: 750; }
 .inboxNotice a:hover, .inboxNotice button:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
 .thread { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: var(--surface); }
-.thread :global([role="log"]) { flex: 1; min-height: 230px; background: var(--background); }
+.thread :global([role="log"]) { flex: 1; min-height: 0; background: var(--background); }
 .chatHeader { padding: 1rem 1.45rem 1.15rem; border-bottom: 1px solid var(--border-subtle); }
 .chatBack { display: none; width: fit-content; margin-bottom: 0.8rem; color: var(--primary); font-size: 0.75rem; font-weight: 750; }
 .chatBack:hover { text-decoration: underline; text-underline-offset: 0.2rem; }
@@ -91,25 +98,46 @@
   .workspaceWithProfile .profileBackdrop { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
 }
 
+@media (max-width: 1023px) {
+  .page { --chat-shell-height: 76px; }
+}
+
+/* Keep the fixed Support control clear of the composer until the page has a wide outer gutter. */
+@media (max-width: 1335px) {
+  .thread :global(form) { padding-right: 4.25rem; }
+}
+
 @media (max-width: 899px) {
-  .workspace { display: block; height: auto; min-height: 0; }
-  .inbox { min-height: 430px; border-right: 0; }
+  .workspace { display: block; height: 100%; min-height: 0; }
+  .inbox { height: 100%; min-height: 0; border-right: 0; }
   .thread { display: none; }
   .workspaceWithThread .inbox { display: none; }
-  .workspaceWithThread .thread { display: flex; height: max(560px, calc(100dvh - 215px)); }
+  .workspaceWithThread .thread { display: flex; height: 100%; min-height: 0; }
   .chatBack { display: block; }
-  .pageHeading { margin-bottom: 1.2rem; }
+  .pageHeading { margin-bottom: 0.65rem; }
 }
 
 @media (max-width: 599px) {
-  .page { padding: 1.1rem 0.8rem 2rem; }
+  .page { padding: 0.7rem 0.8rem 0.65rem; }
   .pageHeading { align-items: start; padding: 0 0.3rem; }
-  .pageHeading h1 { font-size: 2.45rem; }
-  .pageHeading p { max-width: 29ch; font-size: 0.77rem; }
+  .pageHeading h1 { font-size: 2.15rem; }
   .workspace { border-radius: 10px; }
-  .workspaceWithThread .thread { height: max(560px, calc(100dvh - 190px)); }
   .chatHeader { padding: 0.85rem 1rem 1rem; }
   .profileIconButton { width: 44px; height: 44px; }
+}
+
+/* Preserve access to the full chat at high zoom or unusually short viewports. */
+@media (max-height: 540px) {
+  .page {
+    height: auto;
+    min-height: calc(100dvh - var(--chat-shell-height));
+    overflow: visible;
+  }
+
+  .workspace {
+    min-height: 420px;
+    flex: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

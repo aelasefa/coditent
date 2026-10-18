@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Logo } from "@/components/ui/logo";
 import { exchangeOAuthHandoff, getMe, verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
@@ -253,8 +254,14 @@ export default function SsoCallbackPage() {
         <div className={authStyles.shell}>
           <section className={authStyles.formColumn} aria-live="polite">
             <div className={`${authStyles.formInner} ${styles.card}`}>
-              <div className={state === "error" ? styles.errorIcon : state === "success" ? styles.successIcon : styles.loadingIcon} aria-hidden>
-                {state === "error" ? "!" : state === "success" ? "✓" : <span />}
+              <div className={state === "error" ? styles.errorIcon : state === "success" ? styles.successIcon : styles.loadingIcon}>
+                {state === "error" ? (
+                  <span aria-hidden="true">!</span>
+                ) : state === "success" ? (
+                  <span aria-hidden="true">✓</span>
+                ) : (
+                  <LoadingSpinner size="medium" label="Signing you in" />
+                )}
               </div>
               <p className={authStyles.eyebrow}>Secure authentication</p>
               <h1 className={styles.title}>

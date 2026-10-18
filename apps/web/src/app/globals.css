@@ -257,7 +257,7 @@ body:has(.company-theme) {
   outline-offset: 3px;
 }
 
-.candidate-theme :where(aside, header, nav[aria-label="Primary mobile"]) {
+.candidate-theme :where(aside, nav[aria-label="Primary mobile"]) {
   backdrop-filter: blur(16px);
 }
 
