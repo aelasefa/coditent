@@ -245,7 +245,10 @@ export async function disableTwoFactor(password: string, code: string): Promise<
 }
 
 export async function exchangeOAuthHandoff(code: string): Promise<OAuthHandoffResult> {
-  const { data } = await api.post<OAuthHandoffResult>("/auth/oauth/handoff/exchange", { code });
+  const { data } = await api.post<OAuthHandoffResult>("/auth/oauth/handoff/exchange", {
+    code,
+    trusted_device_token: getTrustedDevice(),
+  });
   return data;
 }
 
