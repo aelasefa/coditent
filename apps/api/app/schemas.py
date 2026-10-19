@@ -93,6 +93,7 @@ class TokenResponse(APIModel):
 
 class OAuthHandoffExchangeRequest(APIModel):
     code: str = Field(min_length=20, max_length=200)
+    trusted_device_token: str | None = Field(default=None, max_length=2048)
 
 
 class OAuthHandoffExchangeResponse(TokenResponse):
