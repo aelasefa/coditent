@@ -332,6 +332,12 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "Include /etc/modsecurity/crs/crs-setup.conf" in modsecurity_template
     assert "Include /usr/share/modsecurity-crs/rules/*.conf" in modsecurity_template
     assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in modsecurity_template
+    assert 'SecRule REQUEST_METHOD "@streq GET"' in modsecurity_template
+    assert (
+        'SecRule REQUEST_FILENAME "@streq /api-proxy/auth/sso/google/callback"'
+        in modsecurity_template
+    )
+    assert '"ctl:ruleEngine=Off"' in modsecurity_template
     assert modsecurity_template.index("Include /etc/modsecurity/crs/crs-setup.conf") < (
         modsecurity_template.index("tx.allowed_methods=")
     ) < modsecurity_template.index("Include /usr/share/modsecurity-crs/rules/*.conf")
