@@ -11,6 +11,15 @@ SecRequestBodyLimitAction Reject
 SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)" \
     "id:1000001,phase:1,pass,nolog,ctl:requestBodyProcessor=JSON"
 
+# Google returns high-entropy, signed state and authorization-code values that
+# trigger CRS false positives. Exempt only the exact GET callback transaction;
+# FastAPI still verifies the browser-bound, single-use state and exchanges the
+# one-time code directly with Google.
+SecRule REQUEST_METHOD "@streq GET" \
+    "id:1000003,phase:1,pass,nolog,chain"
+    SecRule REQUEST_FILENAME "@streq /api-proxy/auth/sso/google/callback" \
+        "ctl:ruleEngine=Off"
+
 # Debian's owasp-crs.load is an Apache-oriented loader and uses
 # an optional-include directive that ModSecurity-nginx does not support. Load
 # the same required CRS configuration and rules directly.
