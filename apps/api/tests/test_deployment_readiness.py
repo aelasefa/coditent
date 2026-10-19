@@ -238,6 +238,9 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     ansible_vars = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
 
     oauth_origin = (
         "NEXT_PUBLIC_OAUTH_API_URL: "
@@ -247,6 +250,10 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     assert "ARG NEXT_PUBLIC_OAUTH_API_URL=" in web_dockerfile
     assert "getOAuthBaseUrl()" in social_buttons
     assert 'next_public_oauth_api_url: "{{ next_public_api_url }}"' in ansible_vars
+    assert (
+        'google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
+        in production_vars
+    )
 
 
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
