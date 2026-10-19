@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
+from starlette.responses import Response
 
 from app.models import CandidateProfile, User, UserRole
 from app.routers.auth import (
@@ -17,7 +18,7 @@ from app.routers.auth import (
     exchange_oauth_handoff,
 )
 from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
-from app.services import authentication, oauth_service
+from app.services import auth_cookies, authentication, oauth_service
 from app.services.authentication import complete_authentication
 from app.services.oauth_service import OAuthIdentity
 from app.services.two_factor import encrypt_totp_secret
@@ -91,6 +92,22 @@ def test_popup_origin_accepts_configured_local_alias_and_rejects_external(monkey
     with pytest.raises(HTTPException) as exc:
         oauth_service.validate_popup_origin("https://evil.example")
     assert exc.value.status_code == 400
+
+
+def test_oauth_browser_cookie_uses_configured_public_path(monkeypatch):
+    monkeypatch.setattr(
+        auth_cookies.settings,
+        "oauth_browser_cookie_path",
+        "/api-proxy/auth/sso",
+    )
+
+    response = Response()
+    auth_cookies.set_oauth_browser_cookie(response, "browser-id")
+    assert "Path=/api-proxy/auth/sso" in response.headers["set-cookie"]
+
+    response = Response()
+    auth_cookies.clear_oauth_browser_cookie(response)
+    assert "Path=/api-proxy/auth/sso" in response.headers["set-cookie"]
 
 
 def test_oauth_state_binds_origin_and_attempt(monkeypatch):

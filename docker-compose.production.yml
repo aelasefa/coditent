@@ -15,6 +15,7 @@ services:
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
       CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
       ACCESS_TOKEN_COOKIE_SECURE: "true"
+      OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"
       # This public callback must stay on the same origin as OAuth start so
       # the host-bound state cookie survives the Google round trip.
       GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"

@@ -259,6 +259,7 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
         'GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
     )
     assert production_compose.count(expected_google_callback) == 2
+    assert 'OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"' in production_compose
 
 
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
