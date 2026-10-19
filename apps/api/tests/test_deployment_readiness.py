@@ -241,6 +241,7 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     production_vars = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
     ).read_text()
+    production_compose = (REPO_ROOT / "docker-compose.production.yml").read_text()
 
     oauth_origin = (
         "NEXT_PUBLIC_OAUTH_API_URL: "
@@ -254,6 +255,10 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
         'google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
         in production_vars
     )
+    expected_google_callback = (
+        'GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
+    )
+    assert production_compose.count(expected_google_callback) == 2
 
 
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
