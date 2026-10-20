@@ -5,8 +5,12 @@ from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
 from pydantic import AliasChoices, Field, model_validator
-from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
-from pydantic_settings.main import BaseSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    BaseSettingsSource,
+    EnvSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class VaultSettingsSource(EnvSettingsSource):
