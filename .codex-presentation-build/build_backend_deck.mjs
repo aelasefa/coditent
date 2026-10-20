@@ -6,7 +6,7 @@ import { Presentation, PresentationFile } from "@oai/artifact-tool";
 const workspaceDir = "/home/maelmahf/Desktop/coditent";
 const buildDir = path.join(workspaceDir, ".codex-presentation-build");
 const outputDir = path.join(workspaceDir, "outputs");
-const FINAL_PPTX = path.join(outputDir, "coditent-backend-presentation-maintainability-updated.pptx");
+const FINAL_PPTX = path.join(outputDir, "coditent-backend-presentation-polished-final.pptx");
 const SKILL_DIR = "/home/maelmahf/.codex/plugins/cache/openai-primary-runtime/presentations/26.1015.12040/skills/presentations";
 const RUNTIME_PYTHON = "/home/maelmahf/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3";
 const BODY_FONT = "Noto Sans";
@@ -84,7 +84,7 @@ function addHeader(slide, title, section, index) {
   addLine(slide, 64, 128, 1152, 0, C.line, 1);
 }
 
-function addFooter(slide, text = "CODITENT  •  BACKEND") {
+function addFooter(slide, text = "CODITENT  /  BACKEND") {
   addText(slide, text, 64, 684, 500, 18, { size: 11, bold: true, color: "#7B8D82" });
 }
 
@@ -132,7 +132,7 @@ async function readImageBlob(imagePath) {
   addText(s, "Backend architecture\nand engineering", 76, 252, 520, 102, { size: 33, color: C.muted, font: TITLE_FONT });
   addText(s, "FastAPI  /  PostgreSQL  /  Redis\nCelery  /  WebSockets", 76, 390, 480, 64, { size: 17, bold: true, color: C.purple });
   addText(s, "Presented by: [Your Name]", 76, 578, 500, 34, { size: 22, bold: true, color: C.cyan });
-  addText(s, "Backend Developer  •  CODITENT Team", 76, 620, 540, 28, { size: 17, color: C.muted });
+  addText(s, "Backend Developer  /  CODITENT Team", 76, 620, 540, 28, { size: 17, color: C.muted });
   addNotes(s, "Introduce yourself and state that you were responsible for the backend part of CODITENT. Explain that the presentation focuses on the system behind the user interface: APIs, data, permissions, asynchronous work, real-time communication, privacy, and deployment. Replace [Your Name] before presenting.");
 }
 
@@ -159,7 +159,7 @@ async function readImageBlob(imagePath) {
   addText(s, "53 test files", 90, 512, 210, 34, { size: 25, bold: true, color: C.cyan });
   addText(s, "365 test functions", 330, 512, 250, 34, { size: 25, bold: true, color: C.purple });
   addText(s, "Runtime services", 646, 466, 230, 30, { size: 21, bold: true, color: C.amber });
-  addText(s, "API  •  worker  •  AI dispatcher  •  Redis  •  web  •  proxy", 646, 510, 500, 46, { size: 18, color: C.muted });
+  addText(s, "API, worker, AI dispatcher, Redis, web, proxy", 646, 510, 500, 46, { size: 18, color: C.muted });
   addText(s, "Counts are a point-in-time snapshot of the submitted repository.", 64, 610, 760, 26, { size: 14, color: C.muted });
   addFooter(s);
   addNotes(s, "Use these numbers as evidence of scope, not as vanity metrics. The repository contains 18 domain routers, 163 route decorators, 29 SQLAlchemy models, 46 Alembic migrations, 53 test files, and 365 test functions at the time this deck was generated. Explain that the important point is the variety of responsibilities: identity, hiring workflows, real-time communication, background jobs, data privacy, and production operations.");
@@ -168,7 +168,7 @@ async function readImageBlob(imagePath) {
 // 3. Product and scope
 {
   const s = presentation.slides.add();
-  addHeader(s, "The backend connects every recruitment role", "Project scope", 3);
+  addHeader(s, "Backend scope across recruitment roles", "Project scope", 3);
   addText(s, "CODITENT supports three groups with different data and permissions.", 64, 148, 900, 34, { size: 22, color: C.muted });
   labelBox(s, "Candidates", "Profiles, CVs, offers, applications, interviews, recommendations and recruiter chat", 64, 208, 350, 178, C.cyan);
   labelBox(s, "Company teams", "Offers, candidate review, hiring stages, team invitations, interviews and recruitment chat", 465, 208, 350, 178, C.purple);
@@ -310,7 +310,7 @@ async function readImageBlob(imagePath) {
   addText(s, "Cookie security", 84, 540, 190, 28, { size: 18, bold: true, color: C.red });
   addText(s, "Mutating cookie requests require an approved Origin plus a matching CSRF cookie and X-CSRF-Token header.", 274, 534, 878, 40, { size: 17, color: C.muted });
   addText(s, "Safe failures", 84, 584, 190, 28, { size: 18, bold: true, color: C.amber });
-  addText(s, "Expected errors stay explicit; unexpected failures return a safe message and a traceable error ID.", 274, 578, 878, 40, { size: 17, color: C.muted });
+  addText(s, "Expected errors stay explicit. Unexpected failures return a safe message and a traceable error ID.", 274, 578, 878, 40, { size: 17, color: C.muted });
   addFooter(s);
   addNotes(s, "Use one real endpoint as an example. A request first reaches a router, then Pydantic validates its body. Authentication accepts a bearer token or secure access cookie, verifies the JWT, checks session revocation, and loads the current user. Mutating cookie requests also require Origin and double-submit CSRF validation. Authorization checks role, tenant, and ownership. The service applies business rules inside a transaction, and response models prevent accidental data exposure.");
 }
@@ -319,38 +319,50 @@ async function readImageBlob(imagePath) {
 {
   const s = presentation.slides.add();
   addHeader(s, "Recruitment data model", "Database design", 8);
-  addText(s, "The application record connects the candidate, offer, workflow, and conversation.", 64, 145, 1120, 34, { size: 22, color: C.muted });
-  labelBox(s, "User", "Identity, role, security state", 76, 228, 210, 106, C.cyan);
-  labelBox(s, "Candidate profile", "Skills, experience, CV assets", 76, 402, 210, 106, C.cyan);
-  labelBox(s, "Company", "Organization and memberships", 368, 184, 224, 106, C.purple);
-  labelBox(s, "Offer", "Requirements and recruiter", 368, 358, 224, 106, C.purple);
-  labelBox(s, "Application", "Candidate, offer, CV snapshot, stage", 680, 270, 246, 134, C.amber);
-  labelBox(s, "Interview", "Schedule and feedback", 1004, 184, 212, 106, C.green);
-  labelBox(s, "Chat messages", "Ordered recruitment history", 1004, 358, 212, 106, C.green);
-  addLine(s, 181, 334, 0, 68, C.cyan, 2);
-  addLine(s, 286, 281, 82, 0, C.line, 2);
-  addLine(s, 480, 290, 0, 68, C.purple, 2);
-  addLine(s, 592, 410, 44, 0, C.line, 2);
-  addLine(s, 636, 338, 0, 72, C.line, 2);
-  addLine(s, 636, 338, 44, 0, C.line, 2);
-  addLine(s, 286, 455, 196, 0, C.line, 2);
-  addLine(s, 482, 381, 0, 74, C.line, 2);
-  addLine(s, 482, 381, 198, 0, C.line, 2);
-  addLine(s, 926, 316, 39, 0, C.line, 2);
-  addLine(s, 965, 237, 0, 79, C.line, 2);
-  addLine(s, 965, 237, 39, 0, C.line, 2);
-  addLine(s, 926, 358, 78, 53, C.line, 2);
-  addText(s, "Integrity rules", 76, 558, 180, 28, { size: 20, bold: true, color: C.amber });
-  addText(s, "Foreign keys protect relationships. Unique constraints prevent duplicates. Transactions keep multi-step updates consistent. Alembic versions each schema change.", 258, 548, 930, 60, { size: 19, color: C.muted });
+  addText(s, "Application is the central record for one candidate applying to one offer.", 64, 145, 1120, 34, { size: 22, color: C.muted });
+
+  addBox(s, 64, 202, 734, 330, { fill: C.bg2, line: C.line });
+  addText(s, "Application record", 92, 222, 300, 34, { size: 27, font: TITLE_FONT, color: C.cyan });
+  addText(s, "The record keeps the hiring workflow stable even when profiles or offers change later.", 92, 258, 650, 36, { size: 17, color: C.muted });
+  const fields = [
+    ["Relationships", "candidate_id, opportunity_id, company_id, cv_asset_id", C.cyan],
+    ["Workflow", "status, stage_version, status_changed_at", C.purple],
+    ["AI screening", "ai_status, ai_score, ai_report", C.amber],
+    ["Interview", "interview_scheduled_at, interview_notes", C.green],
+  ];
+  fields.forEach((it, i) => {
+    const y = 310 + i * 52;
+    addText(s, it[0], 92, y, 150, 28, { size: 17, bold: true, color: it[2] });
+    addText(s, it[1], 248, y - 2, 512, 34, { size: 16, color: C.ink });
+    if (i < fields.length - 1) addLine(s, 92, y + 38, 668, 0, C.line, 1);
+  });
+
+  addText(s, "Related records", 842, 202, 330, 34, { size: 25, bold: true, color: C.purple });
+  labelBox(s, "InterviewFeedback", "One review per application and reviewer. Rating: 1 to 5.", 842, 250, 374, 82, C.green);
+  labelBox(s, "ChatMessage", "One application conversation with ordered messages.", 842, 350, 374, 82, C.cyan);
+  labelBox(s, "CVAsset", "Composite key proves the CV belongs to the candidate.", 842, 450, 374, 82, C.amber);
+
+  addText(s, "Database rules", 64, 568, 180, 30, { size: 21, bold: true, color: C.amber });
+  const rules = [
+    ["No duplicate application", "Unique candidate and offer pair"],
+    ["Valid workflow state", "Status limited to known stages"],
+    ["Valid AI score", "Null or between 0 and 100"],
+    ["Owned CV only", "Composite foreign key checks owner"],
+  ];
+  rules.forEach((it, i) => {
+    const x = 246 + i * 242;
+    addText(s, it[0], x, 560, 214, 28, { size: 16, bold: true, color: i % 2 ? C.purple : C.cyan });
+    addText(s, it[1], x, 592, 214, 38, { size: 14, color: C.muted, valign: "top" });
+  });
   addFooter(s);
-  addNotes(s, "Center the explanation on the application entity. It connects one candidate to one offer and carries the recruitment stage and CV snapshot. Interviews, chat, screening results, and notifications relate to that workflow. Foreign keys and unique constraints provide a second layer of protection beyond Python code. Alembic makes schema changes explicit and repeatable.");
+  addNotes(s, "Center the explanation on the Application model. It links the candidate, offer, company, and selected CV asset. It also stores the current status, stage version, AI screening state, interview schedule, and timestamps. Related InterviewFeedback rows allow one review per reviewer, while ChatMessage rows form an ordered conversation for the application. Emphasize the database protections: one candidate cannot apply twice to the same offer, status values are constrained, AI scores remain between zero and one hundred, and the composite CV foreign key proves that the selected CV belongs to the candidate.");
 }
 
 // 9. Integrity and concurrency
 {
   const s = presentation.slides.add();
   addHeader(s, "Database integrity under concurrency", "Data correctness", 9);
-  addText(s, "Correctness must survive two users—or two workers—acting at the same time.", 64, 144, 1050, 34, { size: 22, color: C.muted });
+  addText(s, "Correctness must survive two users or two workers acting at the same time.", 64, 144, 1050, 34, { size: 22, color: C.muted });
   addBox(s, 64, 204, 522, 356, { fill: C.bg2, line: C.line });
   addText(s, "Durable invariants", 92, 226, 420, 34, { size: 25, bold: true, color: C.cyan });
   const invariants = [
@@ -420,7 +432,8 @@ async function readImageBlob(imagePath) {
     addText(s, r[1], 280, 272 + i * 58, 292, 38, { size: 15, color: C.muted });
     if (i < roles.length - 1) addLine(s, 92, 322 + i * 58, 480, 0, C.line, 1);
   });
-  addText(s, "+", 628, 342, 50, 60, { size: 48, bold: true, color: C.amber, align: "center" });
+  addBox(s, 628, 350, 50, 34, { geometry: "roundRect", fill: C.panel, line: C.amber, lineWidth: 1.5, shadow: false });
+  addText(s, "AND", 628, 350, 50, 34, { size: 13, bold: true, color: C.amber, align: "center" });
   addBox(s, 704, 198, 512, 404, { fill: C.bg2, line: C.line });
   addText(s, "Resource scope", 734, 220, 430, 34, { size: 25, bold: true });
   labelBox(s, "Same company", "A member cannot access another organization's candidates or offers", 734, 278, 452, 112, C.purple);
@@ -518,24 +531,51 @@ async function readImageBlob(imagePath) {
 // 15. Realtime
 {
   const s = presentation.slides.add();
-  addHeader(s, "Real-time chat and notifications", "Communication", 15);
-  addText(s, "Real-time delivery stays connected to durable history and recruitment permissions.", 64, 144, 1100, 34, { size: 22, color: C.muted });
-  labelBox(s, "Candidate", "Opens a protected conversation", 64, 262, 220, 126, C.cyan);
-  addLine(s, 284, 325, 70, 0, C.cyan, 3);
-  labelBox(s, "Socket ticket", "Short-lived WebSocket credential", 354, 262, 220, 126, C.blue);
-  addLine(s, 574, 325, 70, 0, C.blue, 3);
-  labelBox(s, "FastAPI WebSocket", "Checks application access and stage", 644, 238, 260, 174, C.purple);
-  addLine(s, 904, 284, 70, 0, C.purple, 3);
-  addLine(s, 904, 368, 70, 0, C.purple, 3);
-  labelBox(s, "PostgreSQL", "Ordered message history", 974, 218, 242, 126, C.green);
-  labelBox(s, "Redis", "Presence and cross-process fan-out", 974, 368, 242, 126, C.red);
-  addBox(s, 64, 514, 840, 94, { fill: C.bg2, line: C.line });
-  addText(s, "Access rule", 86, 536, 150, 28, { size: 20, bold: true, color: C.amber });
-  addText(s, "A valid login alone is insufficient. The user must belong to the application conversation and the current stage must allow chat.", 236, 526, 644, 54, { size: 18, color: C.muted });
-  addText(s, "Notifications", 974, 536, 210, 28, { size: 20, bold: true, color: C.cyan, align: "center" });
-  addText(s, "Workflow events create in-app alerts and durable email work.", 974, 566, 210, 44, { size: 15, color: C.muted, align: "center" });
+  addHeader(s, "Secure real-time communication", "Communication", 15);
+  addText(s, "WebSockets deliver messages quickly while the backend keeps authorization and history durable.", 64, 144, 1120, 34, { size: 22, color: C.muted });
+  const socketFlow = [
+    ["01", "Request ticket", "Authenticated HTTP request", C.cyan],
+    ["02", "Open socket", "Short-lived ticket", C.blue],
+    ["03", "Authorize", "Application and stage checks", C.purple],
+    ["04", "Persist", "Ordered PostgreSQL history", C.green],
+    ["05", "Distribute", "Redis presence and fan-out", C.red],
+  ];
+  socketFlow.forEach((it, i) => {
+    const x = 64 + i * 230;
+    addBox(s, x, 210, 196, 150, { fill: C.panel, line: it[3], lineWidth: 1.8 });
+    addText(s, it[0], x + 20, 226, 42, 24, { size: 14, bold: true, color: it[3] });
+    addText(s, it[1], x + 20, 266, 156, 30, { size: 19, bold: true });
+    addText(s, it[2], x + 20, 306, 156, 38, { size: 14, color: C.muted, valign: "top" });
+    if (i < socketFlow.length - 1) addLine(s, x + 196, 285, 34, 0, C.line, 2);
+  });
+
+  addBox(s, 64, 414, 546, 196, { fill: C.bg2, line: C.line });
+  addText(s, "Connection security", 92, 434, 440, 32, { size: 24, bold: true, color: C.purple });
+  const security = [
+    ["Current session", "Ticket keeps session identity and authorization version"],
+    ["Conversation access", "Caller must belong to the application or company"],
+    ["Workflow stage", "Current stage must allow recruitment chat"],
+  ];
+  security.forEach((it, i) => {
+    addText(s, String(i + 1).padStart(2, "0"), 92, 482 + i * 42, 38, 24, { size: 14, bold: true, color: C.cyan });
+    addText(s, it[0], 138, 478 + i * 42, 150, 28, { size: 16, bold: true });
+    addText(s, it[1], 292, 476 + i * 42, 282, 34, { size: 14, color: C.muted });
+  });
+
+  addBox(s, 638, 414, 578, 196, { fill: C.bg2, line: C.line });
+  addText(s, "Durability and delivery", 666, 434, 470, 32, { size: 24, bold: true, color: C.cyan });
+  const delivery = [
+    ["PostgreSQL", "Stores ordered messages and read state"],
+    ["Redis", "Shares presence and messages across API processes"],
+    ["Notifications", "Creates in-app alerts and durable email work"],
+  ];
+  delivery.forEach((it, i) => {
+    addText(s, String(i + 1).padStart(2, "0"), 666, 482 + i * 42, 38, 24, { size: 14, bold: true, color: C.amber });
+    addText(s, it[0], 712, 478 + i * 42, 142, 28, { size: 16, bold: true });
+    addText(s, it[1], 858, 476 + i * 42, 322, 34, { size: 14, color: C.muted });
+  });
   addFooter(s);
-  addNotes(s, "Explain that a real-time connection still needs authorization. The client obtains a short-lived socket ticket, then the WebSocket endpoint checks the user and application. PostgreSQL remains the durable source of message history. Redis helps multiple API processes share presence and broadcast messages. Notifications connect stage changes, interviews, and invitations to in-app and email delivery.");
+  addNotes(s, "Walk through the connection from left to right. The authenticated client first requests a short-lived socket ticket. The WebSocket endpoint checks the session identity, authorization version, application access, and current recruitment stage. Each accepted message goes to PostgreSQL so history and read state remain durable. Redis distributes presence and messages across API processes. Workflow events also create in-app notifications and durable email work.");
 }
 
 // 16. Files and privacy
@@ -550,8 +590,9 @@ async function readImageBlob(imagePath) {
   stepBox(s, 1, "Export", "JSON, CSV, and XML account data", 64, 450, 348, C.blue);
   stepBox(s, 2, "Schedule deletion", "Reauthentication and seven-day cancellation window", 466, 450, 348, C.red);
   stepBox(s, 3, "Remove and anonymize", "Delete private files and protect workflow integrity", 868, 450, 348, C.green);
-  addText(s, "Privacy rule", 64, 600, 150, 28, { size: 18, bold: true, color: C.cyan });
-  addText(s, "The backend exposes only the minimum data required for the current user and action.", 214, 594, 980, 38, { size: 19, color: C.muted });
+  addBox(s, 64, 586, 1152, 54, { fill: C.bg2, line: C.line, shadow: false });
+  addText(s, "Privacy rule", 86, 598, 150, 28, { size: 18, bold: true, color: C.cyan });
+  addText(s, "The backend exposes only the minimum data required for the current user and action.", 236, 592, 950, 38, { size: 19, color: C.muted });
   addFooter(s);
   addNotes(s, "CVs, avatars, and logos do not belong in a public bucket. The backend validates uploads and stores assets privately. Downloads pass through authorization rules. Account controls support export, validated import, scheduled deletion, a cancellation period, file removal, and anonymization of records that must remain for recruitment integrity.");
 }
@@ -639,7 +680,7 @@ async function readImageBlob(imagePath) {
     addText(s, t, 752, 270 + i * 52, 420, 38, { size: 19, color: C.muted });
   });
   addText(s, "Questions?", 700, 574, 430, 54, { size: 38, bold: true, color: C.ink });
-  addFooter(s, "CODITENT  •  THANK YOU");
+  addFooter(s, "CODITENT  /  THANK YOU");
   addNotes(s, "Close with the engineering lessons rather than a feature list. Current database state must drive authorization. Database constraints support application security. Durable queues protect slow external work. Then mention the improvements honestly. Invite questions and be ready to open the code for any component discussed in the deck.");
 }
 
@@ -682,7 +723,7 @@ const result = await finalizePresentation({
   ],
   fontPolicy: { basis: "design", families: [BODY_FONT, TITLE_FONT] },
   verifyArtifactToolImport: true,
-  receiptPath: path.join(stagingDir, "coditent-backend-presentation-maintainability-updated.validation.json"),
+  receiptPath: path.join(stagingDir, "coditent-backend-presentation-polished-final.validation.json"),
 });
 
 console.log(JSON.stringify({ final: FINAL_PPTX, slides: presentation.slides.items.length, result }, null, 2));
