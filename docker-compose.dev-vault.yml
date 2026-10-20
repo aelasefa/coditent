@@ -2,6 +2,11 @@
 # Compose invocation. The required interpolation prevents an implicit root
 # credential from being created or committed.
 services:
+  api:
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: "${VAULT_DEV_ROOT_TOKEN_ID:?Set a unique local-only Vault development token}"
+
   vault:
     image: hashicorp/vault:1.15.0
     container_name: coditent-vault-dev
