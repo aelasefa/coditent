@@ -255,10 +255,18 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
         'google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
         in production_vars
     )
+    assert (
+        'linkedin_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+        in production_vars
+    )
     expected_google_callback = (
         'GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
     )
     assert production_compose.count(expected_google_callback) == 2
+    expected_linkedin_callback = (
+        'LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+    )
+    assert production_compose.count(expected_linkedin_callback) == 2
     assert 'OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"' in production_compose
 
 
@@ -335,7 +343,8 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in modsecurity_template
     assert 'SecRule REQUEST_METHOD "@streq GET"' in modsecurity_template
     assert (
-        'SecRule REQUEST_FILENAME "@streq /api-proxy/auth/sso/google/callback"'
+        'SecRule REQUEST_FILENAME "@rx '
+        '^/api-proxy/auth/sso/(?:google|linkedin)/callback$"'
         in modsecurity_template
     )
     assert '"ctl:ruleEngine=Off"' in modsecurity_template
