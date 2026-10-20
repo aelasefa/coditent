@@ -98,10 +98,19 @@ app.include_router(support.router, tags=["Support"])
 @app.on_event("startup")
 async def on_startup():
     from app.core.vault import vault_client
-    if vault_client.health_check():
-        logger.info("hashicorp_vault_connected")
+
+    # Eagerly preload all secrets so every request is served from the
+    # in-process cache rather than making per-request Vault HTTP calls.
+    vault_client.preload()
+
+    if vault_client.enabled and vault_client.health_check():
+        secret_count = len(vault_client.read_secrets())
+        logger.info("hashicorp_vault_connected", extra={"secrets_loaded": secret_count})
     else:
-        logger.info("hashicorp_vault_offline_using_env_fallback")
+        logger.info(
+            "hashicorp_vault_offline_using_env_fallback",
+            extra={"vault_addr": vault_client.vault_addr or "(not set)"},
+        )
 
 @app.get("/metrics")
 async def metrics() -> Response:
