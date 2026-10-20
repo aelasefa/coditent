@@ -1,9 +1,54 @@
-from typing import Literal
+from __future__ import annotations
+
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
 from pydantic import AliasChoices, Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
+from pydantic_settings.main import BaseSettingsSource
+
+
+class VaultSettingsSource(EnvSettingsSource):
+    """Pydantic settings source that pulls secrets from HashiCorp Vault KV v2.
+
+    Priority chain per field:
+      1. Vault KV store  (preloaded cache via ``vault_client.read_secrets()``)
+      2. Process environment variable / ``.env`` file  (parent EnvSettingsSource)
+      3. Field default / default_factory
+    """
+
+    def __call__(self) -> dict[str, Any]:
+        # Lazy import avoids circular dependency at module load time.
+        from app.core.vault import vault_client  # noqa: PLC0415
+
+        vault_secrets = vault_client.read_secrets()
+
+        # Let the parent handle the env-file and process-env layer first.
+        data: dict[str, Any] = super().__call__()
+
+        # For every Settings field, check if Vault has a value under the
+        # field name or any of its declared env-var aliases.
+        for field_name, field_info in self.settings_cls.model_fields.items():
+            candidates: list[str] = [field_name.upper()]
+            validation_alias = field_info.validation_alias
+            if validation_alias is not None:
+                if hasattr(validation_alias, "choices"):
+                    candidates += [
+                        str(c).upper()
+                        for c in validation_alias.choices
+                        if isinstance(c, str)
+                    ]
+                elif isinstance(validation_alias, str):
+                    candidates.append(validation_alias.upper())
+
+            for candidate in candidates:
+                if candidate in vault_secrets:
+                    # Vault wins — override whatever env/default gave us.
+                    data[field_name] = vault_secrets[candidate]
+                    break
+
+        return data
 
 
 class Settings(BaseSettings):
@@ -182,7 +227,29 @@ class Settings(BaseSettings):
                 origins.append(origin)
         return origins
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: BaseSettingsSource,
+        env_settings: BaseSettingsSource,
+        dotenv_settings: BaseSettingsSource,
+        secrets_dir_settings: BaseSettingsSource,
+    ) -> tuple[BaseSettingsSource, ...]:
+        """Put Vault ahead of env and dotenv so Vault always wins for secrets."""
+        return (
+            init_settings,
+            VaultSettingsSource(settings_cls),
+            env_settings,
+            dotenv_settings,
+            secrets_dir_settings,
+        )
 
 
 settings = Settings()

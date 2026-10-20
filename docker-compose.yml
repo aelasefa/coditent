@@ -1,4 +1,28 @@
 services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # HashiCorp Vault — Secret Store
+  # All application secrets live here at secret/data/coditent.
+  # Bootstrap once with: python scripts/vault_init_secrets.py
+  # ──────────────────────────────────────────────────────────────────────────
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: coditent-vault
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8200:8200"
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-coditent-vault-token-secret}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    command: vault server -dev
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   api:
     image: coditent-api:local
     build:
@@ -12,22 +36,19 @@ services:
     env_file:
       - ./.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      # ── Vault bootstrap (unlocks all other secrets) ─────────────────────
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-coditent-vault-token-secret}
+      # ── Non-secret infrastructure config ────────────────────────────────
+      REDIS_URL: redis://redis:6379/0
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      JWT_SECRET: ${JWT_SECRET}
-      # Optional locally until an authenticator is enrolled. Production
-      # validation still requires a real Fernet key.
-      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
-      EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
-      REDIS_URL: redis://redis:6379/0
       ACCESS_TOKEN_COOKIE_SECURE: "${ACCESS_TOKEN_COOKIE_SECURE:-true}"
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      GOOGLE_REDIRECT_URI: http://localhost:8001/auth/sso/google/callback
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8001/auth/sso/google/callback}
+      LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI:-http://localhost:8001/auth/sso/linkedin/callback}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      RESEND_FROM_NAME: ${RESEND_FROM_NAME:-CODITENT}
+      # ── DB pool bounds (service-specific) ───────────────────────────────
       # Supabase session mode on the development plan allows only 15 clients.
       # Keep API capacity bounded and leave room for workers and admin tools.
       DB_POOL_SIZE: "2"
@@ -42,6 +63,8 @@ services:
       sh -c "alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port 8001 --no-access-log"
     depends_on:
+      vault:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -65,18 +88,15 @@ services:
     env_file:
       - ./.env
     depends_on:
+      vault:
+        condition: service_healthy
       api:
         condition: service_started
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      JWT_SECRET: ${JWT_SECRET}
-      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
-      EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-coditent-vault-token-secret}
       REDIS_URL: redis://redis:6379/0
       # Each prefork process runs one AI job at a time, but a running job
       # needs a second connection for lease heartbeats and the final
@@ -109,18 +129,15 @@ services:
     env_file:
       - ./.env
     depends_on:
+      vault:
+        condition: service_healthy
       api:
         condition: service_started
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      JWT_SECRET: ${JWT_SECRET}
-      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
-      EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-coditent-vault-token-secret}
       REDIS_URL: redis://redis:6379/0
       DB_POOL_SIZE: "1"
       DB_MAX_OVERFLOW: "0"
@@ -176,7 +193,6 @@ services:
       BACKEND_PROXY_URL: http://api:8001
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
     expose:
       - "3000"
     healthcheck:
