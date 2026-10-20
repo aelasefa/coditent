@@ -111,19 +111,6 @@ function VerifyInner() {
 
   return (
     <main className={authStyles.page}>
-      <video
-        className={authStyles.backgroundVideo}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        poster="/images/auth/sign-in-background.png"
-        aria-hidden="true"
-        tabIndex={-1}
-      >
-        <source src="/images/auth/login-background-full-hd.mp4" type="video/mp4" />
-      </video>
-
       <div className={authStyles.loginContent}>
         <a href="#auth-form" className={authStyles.skipLink}>Skip to verification form</a>
         <header className={authStyles.header}>

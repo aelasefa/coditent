@@ -41,29 +41,19 @@
   width: 100%;
   height: 72px;
   padding-inline: 24px;
-}
-
-.headerInner::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border: 1px solid rgb(255 255 255 / 88%);
-  border-radius: 999px;
-  background: rgb(255 254 250 / 92%);
-  box-shadow:
-    0 12px 34px rgb(25 55 38 / 9%),
-    0 1px 4px rgb(25 55 38 / 5%),
-    inset 0 -1px 0 rgb(58 89 65 / 9%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  backdrop-filter: blur(22px) saturate(140%);
-  content: "";
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .brand {
   display: inline-flex;
   width: max-content;
   align-items: center;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+.headerScrolled .headerInner { transform: translateY(-4px); }
+.headerScrolled .brand { transform: translateX(20px); }
+.headerScrolled .account { transform: translateX(-20px); }
 
 .desktopNav {
   display: flex;
@@ -75,14 +65,13 @@
 
 .companyNav {
   justify-content: center;
-  gap: 0.25rem;
+  gap: clamp(0.2rem, 0.6vw, 0.5rem);
 }
 
 .companyNav .navLink,
 .companyNav .navLinkActive {
   box-sizing: border-box;
-  min-width: 5.25rem;
-  padding-inline: 0.75rem;
+  padding-inline: 0.85rem;
   text-align: center;
 }
 
@@ -93,14 +82,26 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 0.78rem;
+  padding: 0.5rem 0.85rem;
   border-radius: 999px;
-  color: #52675a;
+  color: #244735;
   font-size: 0.81rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  transition: background-color 180ms ease, color 180ms ease;
+  transition: color 220ms ease, background-color 220ms ease;
+}
+
+.navLink:hover {
+  background: rgb(25 77 56 / 7%);
+  color: #123e2d;
+}
+
+.navLinkActive {
+  background: rgb(25 77 56 / 10%);
+  color: #123e2d;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgb(25 77 56 / 12%);
 }
 
 .moreMenu {
@@ -174,6 +175,7 @@
 .account {
   position: relative;
   justify-self: end;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .account.companyAccount {
@@ -257,7 +259,75 @@
   color: #194d38;
 }
 
-.accountPanel button { color: var(--danger); }
+.accountHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.4rem;
+}
+
+.accountInfo {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.accountInfo strong {
+  overflow: hidden;
+  color: #173d2c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountInfo small {
+  overflow: hidden;
+  color: #617266;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountDivider {
+  height: 1px;
+  margin: 0.35rem 0;
+  background: #e3e9df;
+}
+
+.mobileActiveLink {
+  background: #edf1e9 !important;
+  color: #194d38 !important;
+  font-weight: 700 !important;
+}
+
+.mobileDivider {
+  height: 1px;
+  margin: 0.5rem 0;
+  background: #e3e9df;
+}
+
+.mobileLogoutButton {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  color: #dc2626;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.mobileLogoutButton:hover {
+  background: #fee2e2;
+}
 
 .mobileToggle,
 .mobilePanel { display: none; }
@@ -284,6 +354,9 @@
     justify-content: space-between;
     padding-inline: 14px 10px;
   }
+
+  .headerScrolled .brand,
+  .headerScrolled .account { transform: none; }
 
   .desktopNav,
   .account { display: none; }
@@ -419,13 +492,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .headerInner,
+  .brand,
+  .account,
   .navLink,
   .navLinkActive,
   .accountButton { transition: none; }
+
+  .headerScrolled .headerInner,
+  .headerScrolled .brand,
+  .headerScrolled .account { transform: none; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .headerInner::before,
   .mobilePanel {
     background: #fffefa;
     -webkit-backdrop-filter: none;

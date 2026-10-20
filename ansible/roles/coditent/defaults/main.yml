@@ -19,6 +19,7 @@ healthcheck_retries: 15
 healthcheck_delay: 5
 readiness_check_timeout_seconds: 2
 worker_heartbeat_ttl_seconds: 30
+ai_user_daily_quota_units: 200
 
 # Prune options
 docker_prune_images: true

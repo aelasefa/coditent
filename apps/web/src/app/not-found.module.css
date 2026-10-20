@@ -1,0 +1,243 @@
+.page {
+  position: relative;
+  display: flex;
+  min-height: 100dvh;
+  overflow: hidden;
+  flex-direction: column;
+  background:
+    linear-gradient(110deg, rgb(248 248 243 / 98%) 0 42%, rgb(237 241 233 / 74%) 100%),
+    var(--background);
+  color: var(--foreground);
+}
+
+.page::before {
+  position: absolute;
+  inset: auto auto -14rem -12rem;
+  width: 34rem;
+  height: 34rem;
+  border: 1px solid rgb(25 77 56 / 8%);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2.75rem rgb(25 77 56 / 3%),
+    0 0 0 5.5rem rgb(25 77 56 / 2%);
+  content: "";
+  pointer-events: none;
+}
+
+.header {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 88rem);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 2.7vw, 2.4rem) clamp(1.25rem, 5vw, 4.5rem);
+}
+
+.logoLink {
+  display: inline-flex;
+  border-radius: 0.5rem;
+}
+
+.logoLink:focus-visible,
+.primaryAction:focus-visible,
+.secondaryAction:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(100%, 88rem);
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(20rem, 0.82fr) minmax(28rem, 1.18fr);
+  align-items: center;
+  gap: clamp(1rem, 3vw, 4rem);
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 5vw, 4.5rem) clamp(2rem, 5vw, 4.5rem);
+}
+
+.copy {
+  max-width: 34rem;
+  padding-block: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 1.1rem;
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(3.35rem, 6.2vw, 6.75rem);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  line-height: 0.93;
+  text-wrap: balance;
+}
+
+.title span {
+  display: block;
+  color: var(--primary);
+}
+
+.description {
+  max-width: 31rem;
+  margin: 1.55rem 0 0;
+  color: var(--foreground-secondary);
+  font-size: clamp(0.95rem, 1.3vw, 1.08rem);
+  line-height: 1.72;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.primaryAction,
+.secondaryAction {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.72rem 1.15rem;
+  border-radius: 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 750;
+  transition:
+    background-color var(--duration-normal) var(--ease-standard),
+    border-color var(--duration-normal) var(--ease-standard),
+    color var(--duration-normal) var(--ease-standard),
+    transform var(--duration-normal) var(--ease-standard);
+}
+
+.primaryAction {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.secondaryAction {
+  border: 1px solid var(--border-strong);
+  background: rgb(255 254 250 / 68%);
+  color: var(--foreground);
+}
+
+.primaryAction:hover,
+.secondaryAction:hover {
+  transform: translateY(-2px);
+}
+
+.primaryAction:hover {
+  background: var(--primary-hover);
+}
+
+.secondaryAction:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.artwork {
+  display: grid;
+  min-width: 0;
+  align-self: stretch;
+  place-items: center;
+  margin-right: clamp(-4.5rem, -5vw, -1.25rem);
+}
+
+.picture {
+  display: block;
+  width: 100%;
+}
+
+.image {
+  display: block;
+  width: min(100%, 48rem);
+  height: auto;
+  max-height: min(72dvh, 48rem);
+  margin-inline: auto 0;
+  object-fit: contain;
+}
+
+@media (max-width: 840px) {
+  .page {
+    overflow: visible;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .copy {
+    max-width: 38rem;
+    padding-block: 1.5rem 0;
+  }
+
+  .title {
+    font-size: clamp(3.25rem, 12vw, 5.4rem);
+  }
+
+  .artwork {
+    width: min(100%, 39rem);
+    margin: 0 auto;
+  }
+
+  .image {
+    max-height: 28rem;
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding-bottom: 0.5rem;
+  }
+
+  .layout {
+    padding-inline: 1.1rem;
+  }
+
+  .copy {
+    padding-top: 1rem;
+  }
+
+  .title {
+    font-size: clamp(3rem, 15vw, 4.35rem);
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primaryAction,
+  .secondaryAction {
+    width: 100%;
+  }
+
+  .image {
+    max-height: 22rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryAction,
+  .secondaryAction {
+    transition: none;
+  }
+
+  .primaryAction:hover,
+  .secondaryAction:hover {
+    transform: none;
+  }
+}

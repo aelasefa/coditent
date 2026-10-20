@@ -25,9 +25,14 @@ import type {
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const envUrl = process.env.NEXT_PUBLIC_API_URL || "/api-proxy";
-    // Production browser traffic stays on the page's HTTPS origin. Never let a
-    // stale public HTTP setting create mixed-content API or WebSocket requests.
-    if (window.location.protocol === "https:" && !envUrl.startsWith("/")) {
+    // Never let a stale public HTTP setting create mixed-content API requests.
+    // Vercel may still have a legacy project-level IP override, so the
+    // production domains recover to the canonical HTTPS API instead of the
+    // platform rewrite that cannot reach the current backend hostname.
+    if (window.location.protocol === "https:" && /^http:\/\//i.test(envUrl)) {
+      if (["coditent.app", "www.coditent.app"].includes(window.location.hostname)) {
+        return "https://api.coditent.app/api-proxy";
+      }
       return "/api-proxy";
     }
     return envUrl;
@@ -43,7 +48,13 @@ export function getApiBaseUrl(): string {
  */
 export function getOAuthBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_OAUTH_API_URL?.trim();
-  return configured || getApiBaseUrl();
+  if (
+    configured &&
+    !(typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(configured))
+  ) {
+    return configured;
+  }
+  return getApiBaseUrl();
 }
 
 export const api = axios.create({
@@ -234,7 +245,10 @@ export async function disableTwoFactor(password: string, code: string): Promise<
 }
 
 export async function exchangeOAuthHandoff(code: string): Promise<OAuthHandoffResult> {
-  const { data } = await api.post<OAuthHandoffResult>("/auth/oauth/handoff/exchange", { code });
+  const { data } = await api.post<OAuthHandoffResult>("/auth/oauth/handoff/exchange", {
+    code,
+    trusted_device_token: getTrustedDevice(),
+  });
   return data;
 }
 

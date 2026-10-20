@@ -1,134 +1,142 @@
-*This project has been created as part of the 42 curriculum by aelasefa, mohammedelmahf, VYMNN47.*
+*This project was created as part of the 42 curriculum by the CODITENT team.*
 
-# CODITENT — Talent Workflow Platform for Morocco
+# CODITENT
 
-## Description
-CODITENT connects candidates and company recruiters in one workspace. Candidates build recruiter-ready profiles (headline, bio, skills, experience, education, links, avatar, CV), discover offers through an AI recommendation engine, and apply. Company users (OWNER / ADMIN / HR / RECRUITER / HIRING_MANAGER) publish offers, review AI-screened applications, move candidates through a recruitment pipeline, and chat with shortlisted candidates. Platform admins invite companies, moderate content, impersonate users for support, and audit activity.
+CODITENT is a recruitment workflow for candidates, company teams, and platform administrators. Candidates build profiles, upload CVs, discover opportunities, apply, and communicate with recruiters. Company teams publish offers, review applications, coordinate interviews, move candidates through hiring stages, and manage their organization with role-based permissions.
 
-## Project goals
+## Submission score
 
-- One workspace for the Moroccan job/internship market (French + English UI strings in AI prompts and fallbacks).
-- Candidate side: onboarding, profile builder, CV upload + AI extraction, recommendations with transparent scores, applications, stage tracking, stage-gated chat.
-- Company side: invitation-only membership, role-based permissions, offer lifecycle, AI application screening, pipeline management, company branding via logo, recruiter↔candidate chat.
-- Platform side: admin moderation, audit log, health/metrics observability, reproducible Supabase-backed deployments.
+- **Raw implemented score:** 22 points
+- **Official counted score:** **19 / 19**
+- **Buffer above the counted cap:** 3 points
+- **Claimed modules:** 16
 
-## Key features
+The subject requires 14 points and counts at most five bonus points. OAuth is implemented but remains unclaimed until a real configured-provider login is demonstrated. Accessibility, extra-browser, monitoring, advanced notification, game, blockchain, and custom modules are not included in the score.
 
-- Custom JWT auth (candidate-only registration + email OTP, login, Google/LinkedIn SSO), TOTP 2FA with 30-day trusted-device cookies, role routing, edge middleware protection.
-- Invitation-only company system (platform→company invites, owner→employee invites, token hashing, expiry, resend rotation).
-- Offer CRUD + responsible-HR assignment + activation toggle.
-- Recommendations: Celery + Gemini ranking with deterministic heuristic fallback; per-offer match scoring with `pending → processing → completed | failed` lifecycle.
-- Application AI screening (auto on apply + manual retry), scores shown to recruiters.
-- Recruitment chat: stage-gated candidate↔responsible-HR conversations over REST + WebSocket, with polling fallback.
-- Company logos: upload/replace/remove with validation, served via scoped stream, initials fallback everywhere.
-- CV pipeline: upload, download, delete, AI parse (suggest-don't-overwrite).
-- Admin: stats, users, offers, pending approvals, activity log, impersonation.
-- Observability: structured logs, Prometheus `/metrics`, health checks, rate limits on auth paths.
+The authoritative module ownership, justification, evidence, and live demonstration steps are in [audit-reports/MODULE_POINTS.md](audit-reports/MODULE_POINTS.md).
 
----
+## Current architecture
 
-## Table of contents
+```mermaid
+flowchart LR
+    Browser[Browser] --> Ingress[nginx TLS ingress]
+    Ingress --> Web[Next.js 16 / React 19]
+    Ingress --> API[FastAPI]
+    Web -->|same-origin /api-proxy| API
+    API --> PG[(Supabase PostgreSQL)]
+    API --> Storage[(Supabase private storage)]
+    API --> Redis[(Redis)]
+    API --> Outbox[(PostgreSQL AI/email outboxes)]
+    Dispatcher[AI dispatcher] --> Outbox
+    Dispatcher --> Redis
+    Worker[Celery worker] --> Redis
+    Worker --> PG
+    Worker --> Gemini[Google Gemini]
+    API --> Resend[Resend]
+    API <-->|Redis fan-out + socket tickets| Browser
+```
 
-1. [Instructions](#instructions)
-2. [Environment configuration](#environment-configuration)
-3. [Technical stack](#technical-stack)
-4. [Technical-choice justification](#technical-choice-justification)
-5. [Architecture](#architecture)
-6. [Project structure](#project-structure)
-7. [Frontend architecture](#frontend-architecture)
-8. [Backend architecture](#backend-architecture)
-9. [How frontend and backend communicate](#how-frontend-and-backend-communicate)
-10. [Database architecture](#database-architecture)
-11. [ER diagram](#er-diagram)
-12. [API documentation](#api-documentation)
-13. [Authentication flow](#authentication-flow)
-14. [Roles and permissions](#roles-and-permissions)
-15. [Company + employee invitation flow](#company--employee-invitation-flow)
-16. [Recruitment workflow](#recruitment-workflow)
-17. [Chat system](#chat-system)
-18. [AI architecture](#ai-architecture)
-19. [Recommendation system](#recommendation-system)
-20. [Practice missions](#practice-missions)
-21. [Company logo](#company-logo)
-22. [Running CODITENT](#running-coditent)
-23. [Complete user flows](#complete-user-flows)
-24. [Implemented features](#implemented-features)
-25. [Planned / incomplete features](#planned--incomplete-features)
-26. [42 Modules](#42-modules)
-27. [Security architecture](#security-architecture)
-28. [Testing](#testing)
-29. [Common problems](#common-problems)
-30. [Team information](#team-information)
-31. [Individual contributions](#individual-contributions)
-32. [Project management](#project-management)
-33. [Resources](#resources)
-34. [Explanation of AI usage](#explanation-of-ai-usage)
-35. [Known limitations](#known-limitations)
-36. [Developer learning guide](#developer-learning-guide)
-37. [Questions I should be able to answer](#questions-i-should-be-able-to-answer)
+The backend is a modular FastAPI application backed by SQLAlchemy and Alembic. Supabase PostgreSQL is the persistent database, and Supabase private buckets store candidate CVs, avatars, and company logos. Redis supplies Celery transport, shared rate/admission state, presence, and cross-process realtime fan-out. Durable PostgreSQL outboxes protect AI dispatch and transactional email delivery from process restarts.
 
----
+Docker Compose starts six required services:
 
-## Instructions
+| Service | Responsibility |
+|---|---|
+| `api` | HTTP API, authentication, authorization, migrations, health/readiness |
+| `web` | Next.js application and server-rendered public opportunity pages |
+| `worker` | Celery jobs and worker heartbeat |
+| `ai-dispatcher` | Claims durable AI outbox rows and enqueues work |
+| `redis` | Broker, shared cache/admission state, presence, realtime fan-out |
+| `proxy` | Local reverse proxy, WAF, HTTPS test endpoint, public route mapping |
+
+Production uses an Ansible-managed host nginx ingress with a trusted certificate, HTTP-to-HTTPS redirect, HSTS, same-origin API/WebSocket routing, and private upstream ports. The container proxy provides loopback-only HTTP on `localhost:3001` for local development and self-signed HTTPS on `localhost:8443` for TLS checks.
+
+## Roles and account creation
+
+Public registration always creates a **candidate** account after email OTP verification. Company accounts are invitation-only. Platform administrator accounts are managed internally.
+
+Company members have one of these roles:
+
+- `OWNER`: organization, membership, subscription, offers, candidates, and hiring workflow
+- `ADMIN`: organization, membership, offers, candidates, and hiring workflow
+- `HR`: offers, applications, interviews, stage changes, and recruitment chat
+- `RECRUITER`: offers, applications, evaluation, and recruitment chat
+- `HIRING_MANAGER`: application review, evaluation, analytics, and stage changes
+
+Authorization is checked from the current database row on every protected request. Password, email, two-factor, membership, and administrative security changes increment durable account authorization state and revoke existing HTTP sessions, socket tickets, and open sockets.
+
+## Main workflows
+
+### Candidate
+
+1. Register and verify the email OTP, or sign in through a configured OAuth provider.
+2. Complete the profile and optionally upload an avatar and CV.
+3. Browse server-rendered public offers or authenticated recommendations.
+4. Filter, sort, and paginate opportunities; request AI-supported match context.
+5. Apply using a versioned CV snapshot.
+6. Follow application stages, interviews, notifications, and recruitment chat.
+7. Manage friends, direct messages, two-factor authentication, data export/import, and account deletion.
+
+### Company
+
+1. A platform administrator creates or invites the company owner.
+2. The owner or company administrator invites team members and assigns scoped roles.
+3. Authorized members create offers and assign a responsible recruiter.
+4. Candidates apply; the durable AI job workflow generates screening context.
+5. Authorized members move the application through the guarded stage machine.
+6. Candidate and recruiter exchange ordered realtime messages at eligible stages.
+7. Owners can archive the company while preserving anonymized recruitment integrity records.
+
+### Platform administration
+
+Platform administrators manage users, companies, invitations, offers, missions, institutions, support requests, and audit activity. Administrative actions use explicit permission gates and are recorded in the audit log.
+
+## Privacy and legal behavior
+
+The public [Privacy Policy](apps/web/src/app/privacy/page.tsx) (`/privacy`) and [Terms of Service](apps/web/src/app/terms/page.tsx) (`/terms`) are linked from the landing page, authentication pages, and each other. They describe the implemented account types, Supabase storage/database processing, Gemini AI processing, Resend email delivery, OAuth providers, seven-day deletion grace period, anonymized retained workflow records, and the deployed `coditent.app` contact.
+
+Authenticated account controls provide:
+
+- JSON, CSV, and XML data export;
+- validated JSON profile import;
+- reauthenticated account-deletion scheduling;
+- a seven-day cancellation window;
+- private-file deletion followed by direct-field removal and integrity-record anonymization; and
+- durable confirmation email delivery.
+
+## One-command local deployment
 
 ### Prerequisites
 
-- Docker + Docker Compose (recommended path).
-- Node 22 or newer + npm (frontend local dev / CI uses `npm ci`, `npm run lint`, `npm run build`).
-- Python 3.12 (backend local dev / CI).
-- An active **Supabase project** (sole persistent database — there is no local Postgres container, no SQLite).
-- A Google Gemini API key (`GEMINI_API_KEY`).
-- A Resend API key (required for OTP/invitation emails; invites still create without it but email is logged as warning).
+- Docker Engine and Docker Compose
+- a Supabase project and database connection
+- Supabase service credentials for private storage
+- generated JWT, TOTP, and email-outbox encryption keys
+- a Google Gemini API key
+- Resend credentials when exercising real email delivery
 
-### Environment configuration
-
-Copy examples and fill real values. Never commit `.env` files (gitignored).
+Create the root environment file:
 
 ```bash
-cp .env.example .env                    # root: Supabase + secrets (see table below)
-cp apps/api/.env.example apps/api/.env  # backend: same DATABASE_URL + backend-only secrets
-cp apps/web/.env.example apps/web/.env.local  # frontend: public vars only
-```
-
-| Variable | Used by | Purpose | Required | Secret? | Example |
-| -------- | ------- | ------- | -------- | ------- | ------- |
-| `DATABASE_URL` | API (`apps/api/app/database.py`, `alembic/env.py`) | Supabase Postgres connection (direct 5432 for migrations/dev; pooled 6543 for prod). `postgresql://` auto-upgraded to `postgresql+asyncpg://` | Yes | Yes | `postgresql+asyncpg://postgres.YOUR_PROJECT_REF:YOUR_DB_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres` |
-| `SUPABASE_URL` | API (`apps/api/app/db.py`) | Supabase project URL for Storage admin client | Yes (storage) | No | `https://YOUR_PROJECT_REF.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | API only (`apps/api/app/db.py`, `services/cv_storage.py`, `services/company_logo.py`) | `sb_secret_...` service-role key for private buckets. Never `NEXT_PUBLIC_*` | Yes (uploads) | Yes | `sb_secret_YOUR_SERVICE_ROLE_KEY` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Web | Public Supabase URL (SSR cookie refresh only, `apps/web/src/utils/supabase/`) | Yes | No | `https://YOUR_PROJECT_REF.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Web | Publishable key for SSR session refresh. App users are NOT Supabase Auth users | Yes | No | `sb_publishable_YOUR_PUBLISHABLE_KEY` |
-| `NEXT_PUBLIC_API_URL` | Web (`apps/web/src/lib/api.ts`, `next.config.mjs`, Docker build arg) | Browser API base. Production uses the same-origin HTTPS proxy path; `BACKEND_PROXY_URL` is the container-only upstream. | Yes | No | `/api-proxy` |
-| `JWT_SECRET` | API (`apps/api/app/utils/jwt.py`, `app/config.py`) | HS256 signing secret, 60-min tokens | Yes | Yes | `change-me-to-a-random-32-char-secret` |
-| `TOTP_ENCRYPTION_KEY` | API MFA service and migrations | Fernet key for encrypted authenticator secrets; generate once and keep in the secret manager | Yes when MFA exists | Yes | *(generate with `Fernet.generate_key()`)* |
-| `EMAIL_OUTBOX_ENCRYPTION_KEY` | API and AI/email dispatcher | Independent Fernet key encrypting recipients, OTPs, and invitation URLs in the durable email outbox | Yes when email is enabled | Yes | *(generate independently with `Fernet.generate_key()`)* |
-| `GEMINI_API_KEY` | API (`services/ai.py`, `services/screening.py`, `services/cv_extraction.py`); Web bio route (`apps/web/src/app/api/ai/generate-bio/route.ts`) | Google Gemini key, model `gemini-3-flash-preview` | Yes (AI) | Yes | `YOUR_GEMINI_API_KEY` |
-| `REDIS_URL` | API + worker (`apps/api/app/cache.py`, `app/tasks.py`) | Redis for Celery broker/backend, rec cache, job keys | Yes | No | `redis://redis:6379/0` |
-| `FRONTEND_URL` | API (`docker-compose.yml`, invite emails) | Builds invitation links `${FRONTEND_URL}/invite/...` | Yes | No | `http://localhost:3000` |
-| `INVITATION_EXPIRATION_HOURS` | API (employee invites) | Employee invitation TTL (company invites use fixed 7 days in code) | No | No | `72` |
-| `RESEND_API_KEY` | API (`apps/api/app/services/email.py`) | Resend key for OTP + invitation emails | For email | Yes | *(empty allowed; email logged as warning)* |
-| `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME` | API | Sender identity | For email | No | `coditent@yourdomain.com` / `CODITENT` |
-| `OTP_EXPIRE_MINUTES` / `OTP_MAX_ATTEMPTS` / `OTP_RESEND_COOLDOWN_SECONDS` | API (auth OTP) | `5` / `5` / `60` defaults | No | No | `5` / `5` / `60` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | API (SSO) | Google OAuth; both-or-neither enforced in `app/config.py` | For SSO | Secret mixed | `https://coditent.app/auth/sso/google/callback` |
-| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | API (SSO) | LinkedIn OAuth; both-or-neither enforced | For SSO | Secret mixed | `https://coditent.app/auth/sso/linkedin/callback` |
-
-### Run with Docker (single command)
-
-```bash
-git clone <repo> && cd coditent
 cp .env.example .env
-# fill .env with real Supabase DATABASE_URL + keys (see table above)
-docker compose up --build
-# web: http://localhost:3001  api: http://localhost:8001  docs: http://localhost:8001/docs
-# `alembic upgrade head` runs automatically on api start against Supabase
 ```
 
-The Docker development site uses **http://localhost:3001** (also
-http://127.0.0.1:3001) without redirecting to HTTPS. Port 8443 remains available
-for optional HTTPS testing with a self-signed certificate, which browsers do
-not trust automatically. Production uses the separate Ansible ingress with a
-trusted certificate and HTTP-to-HTTPS redirects.
+Fill every required value, then start the complete stack:
 
-### Local dev without Docker
+```bash
+docker compose up --build
+```
+
+Local endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `http://localhost:3001` | local browser UI through the loopback proxy |
+| `https://localhost:8443` | self-signed local TLS endpoint |
+| `http://localhost:8001/docs` | loopback-only OpenAPI documentation |
+| `http://localhost:8001/ready` | direct component readiness |
+
+Verify the deployment:
 
 ```bash
 # API — requires Supabase DATABASE_URL, no local DB needed

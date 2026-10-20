@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:friends": "node --test --experimental-strip-types tests/friend-ui.test.mts"
+    "test:unit": "node --import ./tests/register-typescript.mjs --test tests/*.test.mts tests/*.test.mjs",
+    "test:friends": "node --import ./tests/register-typescript.mjs --test tests/friend-ui.test.mts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -20,6 +21,7 @@
     "@tanstack/react-query": "^5.96.2",
     "axios": "1.20.0",
     "gsap": "^3.15.0",
+    "lottie-web": "5.13.0",
     "next": "16.3.8",
     "ogl": "^1.0.11",
     "react": "19.3.0",

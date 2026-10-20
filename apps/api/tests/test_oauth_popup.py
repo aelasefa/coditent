@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+from datetime import timedelta
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
@@ -8,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
+from starlette.responses import Response
 
 from app.models import CandidateProfile, User, UserRole
 from app.routers.auth import (
@@ -17,10 +19,11 @@ from app.routers.auth import (
     exchange_oauth_handoff,
 )
 from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
-from app.services import authentication, oauth_service
-from app.services.authentication import complete_authentication
+from app.services import auth_cookies, authentication, oauth_service
+from app.services.authentication import complete_authentication, factor_fingerprint
 from app.services.oauth_service import OAuthIdentity
 from app.services.two_factor import encrypt_totp_secret
+from app.utils.jwt import create_trusted_device_token
 
 
 class FakeRedis:
@@ -91,6 +94,22 @@ def test_popup_origin_accepts_configured_local_alias_and_rejects_external(monkey
     with pytest.raises(HTTPException) as exc:
         oauth_service.validate_popup_origin("https://evil.example")
     assert exc.value.status_code == 400
+
+
+def test_oauth_browser_cookie_uses_configured_public_path(monkeypatch):
+    monkeypatch.setattr(
+        auth_cookies.settings,
+        "oauth_browser_cookie_path",
+        "/api-proxy/auth/sso",
+    )
+
+    response = Response()
+    auth_cookies.set_oauth_browser_cookie(response, "browser-id")
+    assert "Path=/api-proxy/auth/sso" in response.headers["set-cookie"]
+
+    response = Response()
+    auth_cookies.clear_oauth_browser_cookie(response)
+    assert "Path=/api-proxy/auth/sso" in response.headers["set-cookie"]
 
 
 def test_oauth_state_binds_origin_and_attempt(monkeypatch):
@@ -309,6 +328,60 @@ def test_oauth_handoff_exchange_cannot_bypass_existing_local_mfa(monkeypatch):
     assert body["mfa_token"] == completion.token
     assert "token" not in body
     assert "set-cookie" not in response.headers
+
+
+def test_oauth_handoff_accepts_matching_saved_trusted_device(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(authentication, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+
+    async def not_revoked(_token_id):
+        return False
+
+    monkeypatch.setattr(authentication, "_durable_trusted_device_revoked", not_revoked)
+    monkeypatch.setattr(authentication, "_durable_session_revoked", not_revoked)
+    user = User(
+        id=uuid.uuid4(),
+        email="trusted-oauth@example.com",
+        password_hash="unused",
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        is_active=True,
+        full_name="Trusted OAuth",
+        is_2fa_enabled=True,
+        totp_secret_encrypted=encrypt_totp_secret("JBSWY3DPEHPK3PXP"),
+        auth_version=0,
+    )
+    trusted_device = create_trusted_device_token(
+        str(user.id),
+        factor=factor_fingerprint(user),
+        auth_version=0,
+        expires_delta=timedelta(days=30),
+    )
+    completion = asyncio.run(complete_authentication(user))
+    code = asyncio.run(
+        oauth_service.create_oauth_handoff(
+            completion.token,
+            str(user.id),
+            False,
+            requires_2fa=True,
+        )
+    )
+
+    response = asyncio.run(
+        exchange_oauth_handoff(
+            OAuthHandoffExchangeRequest(
+                code=code,
+                trusted_device_token=trusted_device,
+            ),
+            ExistingUserDb(user),
+        )
+    )
+
+    body = json.loads(response.body)
+    assert body["token"]
+    assert "require_2fa" not in body
+    assert "access_token=" in response.headers["set-cookie"]
 
 
 def test_public_registration_role_is_candidate_only_and_optional():

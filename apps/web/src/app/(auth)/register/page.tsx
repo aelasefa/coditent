@@ -6,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import { Suspense, useState } from "react";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { Button } from "@/components/ui/button";
@@ -67,25 +67,9 @@ function RegisterInner() {
   });
 
   const isSubmitting = registerMutation.isPending;
-  const password = form.watch("password");
+  const password = useWatch({ control: form.control, name: "password" });
   return (
     <main className={`${authStyles.page} ${styles.page}`}>
-      <video
-        className={styles.backgroundVideo}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        poster="/images/auth/sign-in-background.png"
-        aria-hidden="true"
-        tabIndex={-1}
-      >
-        <source
-          src="/images/auth/login-background-hd.mp4?v=2"
-          type="video/mp4"
-        />
-      </video>
-
       <div className={styles.signupContent}>
       <a href="#auth-form" className={authStyles.skipLink}>Skip to registration form</a>
       <header className={authStyles.header}>

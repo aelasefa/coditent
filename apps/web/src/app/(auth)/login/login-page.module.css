@@ -38,19 +38,6 @@
   background-position: center center;
 }
 
-.backgroundVideo {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  filter: saturate(1.04) contrast(1.025);
-  pointer-events: none;
-}
-
 .page::after {
   content: "";
   position: absolute;
@@ -217,7 +204,7 @@
 .form { display: grid; gap: 1rem; margin-top: 1.25rem; }
 
 .socialLogin { margin-bottom: -0.1rem; }
-.socialLogin :global(a) { height: 46px; border-radius: 7px; transition-duration: 220ms; }
+.socialLogin :global(button) { height: 46px; border-radius: 7px; transition-duration: 220ms; }
 .socialLogin :global(a:first-child) { border-color: var(--border); background: var(--surface); color: var(--foreground); }
 .socialLogin :global(a:first-child:hover) { border-color: var(--border-strong); }
 .socialLogin :global(a:last-child) { background: #194d38; }
@@ -288,6 +275,26 @@
   }
 }
 
+/* Keep the complete authentication flow inside a laptop/desktop viewport.
+   Mobile remains scrollable so the on-screen keyboard cannot hide controls. */
+@media (min-width: 761px) {
+  .page,
+  .loginContent {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow-y: hidden;
+  }
+
+  .shell {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .formArea > :global(.mt-6) {
+    margin-top: 0.65rem;
+  }
+}
+
 @media (max-height: 850px) and (min-width: 761px) {
   .header {
     height: 58px;
@@ -327,7 +334,7 @@
     min-height: 38px;
   }
 
-  .socialLogin :global(a) {
+  .socialLogin :global(button) {
     height: 40px;
   }
 
@@ -343,12 +350,12 @@
 
 @media (max-height: 780px) and (min-width: 761px) {
   .header {
-    height: 50px;
-    min-height: 50px;
+    height: 46px;
+    min-height: 46px;
   }
 
   .shell {
-    padding-block: 0.25rem 0.5rem;
+    padding-block: 0.15rem 0.35rem;
   }
 
   .eyebrow {
@@ -357,7 +364,7 @@
   }
 
   .title {
-    font-size: clamp(2.2rem, 3.5vw, 3.5rem);
+    font-size: clamp(2.1rem, 3.25vw, 3.25rem);
   }
 
   .subtitle {
@@ -367,13 +374,13 @@
   }
 
   .formArea {
-    margin-top: 0.6rem;
-    padding-top: 0.6rem;
+    margin-top: 0.45rem;
+    padding-top: 0.45rem;
   }
 
   .form {
-    gap: 0.4rem;
-    margin-top: 0.5rem;
+    gap: 0.32rem;
+    margin-top: 0.4rem;
   }
 
   .roleTab,
@@ -381,7 +388,7 @@
     min-height: 34px;
   }
 
-  .socialLogin :global(a) {
+  .socialLogin :global(button) {
     height: 36px;
   }
 
@@ -398,22 +405,38 @@
   }
 
   .registerPrompt {
-    margin-top: 0.1rem;
-    margin-bottom: 0.75rem;
+    margin-top: 0;
+    margin-bottom: 0;
     font-size: 0.76rem;
   }
 
 }
 
+@media (max-height: 700px) and (min-width: 761px) {
+  .header {
+    height: 42px;
+    min-height: 42px;
+  }
+
+  .shell { padding-block: 0.1rem 0.2rem; }
+  .eyebrow { margin-bottom: 0.2rem; }
+  .title { font-size: clamp(1.9rem, 2.8vw, 2.8rem); }
+  .subtitle { margin-top: 0.25rem; font-size: 0.8rem; line-height: 1.2; }
+  .formArea { margin-top: 0.3rem; padding-top: 0.3rem; }
+  .form { gap: 0.25rem; margin-top: 0.3rem; }
+  .roleTab,
+  .roleTabActive { min-height: 30px; }
+  .socialLogin > :global(.grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .socialLogin :global(button) { height: 34px; min-height: 34px; }
+  .socialLogin :global(.my-5) { margin-block: 0.3rem; }
+  .input { height: 36px; }
+  .submitButton { min-height: 36px; }
+  .formArea > :global(.mt-6) { margin-top: 0.35rem; }
+}
+
 @media (max-width: 760px) {
   .page {
     background-position: 68% center;
-  }
-
-  .backgroundVideo {
-    opacity: 0.22;
-    object-position: 68% center;
-    transform: none;
   }
 
   .page::after {
@@ -478,7 +501,7 @@
     min-height: 44px;
   }
 
-  .socialLogin :global(a) {
+  .socialLogin :global(button) {
     height: 44px;
   }
 
@@ -534,7 +557,7 @@
     min-height: 44px;
   }
 
-  .socialLogin :global(a) {
+  .socialLogin :global(button) {
     height: 44px;
   }
 
@@ -556,6 +579,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .backgroundVideo { display: none; }
   .page * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }

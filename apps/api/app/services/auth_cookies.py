@@ -51,14 +51,14 @@ def set_oauth_browser_cookie(response: Response, browser_id: str) -> None:
         secure=settings.access_token_cookie_secure,
         samesite="lax",
         max_age=10 * 60,
-        path="/auth/sso",
+        path=settings.oauth_browser_cookie_path,
     )
 
 
 def clear_oauth_browser_cookie(response: Response) -> None:
     response.delete_cookie(
         key=settings.oauth_browser_cookie_name,
-        path="/auth/sso",
+        path=settings.oauth_browser_cookie_path,
         secure=settings.access_token_cookie_secure,
         httponly=True,
         samesite="lax",

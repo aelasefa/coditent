@@ -110,22 +110,6 @@ function LoginInner() {
 
   return (
     <main className={styles.page}>
-      <video
-        className={styles.backgroundVideo}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        poster="/images/auth/sign-in-background.png"
-        aria-hidden="true"
-        tabIndex={-1}
-      >
-        <source
-          src="/images/auth/login-background-hd.mp4?v=2"
-          type="video/mp4"
-        />
-      </video>
-
       <div className={styles.loginContent}>
         <a href="#auth-form" className={styles.skipLink}>Skip to sign-in form</a>
         <header className={styles.header}>

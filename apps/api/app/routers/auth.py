@@ -78,6 +78,7 @@ from app.services.authentication import (
     AuthenticationRejected,
     AuthenticationStoreUnavailable,
     complete_authentication,
+    consume_mfa_challenge,
     ensure_access_session_active,
     ensure_account_can_authenticate,
     ensure_login_account_type,
@@ -86,6 +87,7 @@ from app.services.authentication import (
     issue_access_token,
     revoke_access_session,
     revoke_trusted_device,
+    trusted_device_is_valid,
 )
 from app.utils.jwt import verify_access_token, verify_mfa_token
 from app.services.auth_cookies import (
@@ -727,6 +729,26 @@ async def exchange_oauth_handoff(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account_not_active") from exc
     token = str(handoff["token"])
     requires_2fa = bool(handoff.get("requires_2fa"))
+    if requires_2fa and data.trusted_device_token:
+        try:
+            trusted = await trusted_device_is_valid(user, data.trusted_device_token)
+            if trusted:
+                pending_mfa = verify_mfa_token(token)
+                await ensure_mfa_challenge_active(pending_mfa)
+                ensure_credential_matches_account(pending_mfa, user)
+                await consume_mfa_challenge(pending_mfa)
+                token = issue_access_token(user)
+                requires_2fa = False
+        except AuthenticationStoreUnavailable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="authentication_service_unavailable",
+            ) from exc
+        except (AuthenticationRejected, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid_sso_handoff",
+            ) from exc
     try:
         if requires_2fa:
             payload = verify_mfa_token(token)

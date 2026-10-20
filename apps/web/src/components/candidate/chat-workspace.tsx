@@ -10,7 +10,7 @@ import { filterInbox, mapCombinedInbox, type InboxFilter as Filter, type InboxIt
 import { stageLabel } from "@/components/candidate/application-stage";
 import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChatParticipantProfileContent, type ChatParticipantProfile } from "./chat-participant-profile";
 import styles from "./chat-workspace.module.css";
 
@@ -73,9 +73,7 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
       </div>
       <div className={styles.inboxBody}>
         {loading ? (
-          <div className={styles.skeletonList} role="status" aria-label="Loading conversations">
-            {[1, 2, 3].map((index) => <Skeleton key={index} className="h-24" />)}
-          </div>
+          <LoadingSpinner size="medium" placement="center" label="Loading conversations" />
         ) : error ? (
           <div className={styles.inboxNotice} role="alert">
             <strong>Could not load conversations.</strong>
@@ -180,7 +178,7 @@ export function ChatWorkspace({ activeHref, profile, children }: { activeHref?: 
     <ChatProfileContext.Provider value={profileControl}>
     <PageContainer variant="wide" className={styles.page}>
       <div className={styles.pageHeading}>
-        <div><span className={styles.eyebrow}>{identity.isCompany ? "Recruitment conversations" : "Career conversations"}</span><h1>Messages</h1><p>{identity.conversationDescription}</p></div>
+        <div><span className={styles.eyebrow}>{identity.isCompany ? "Recruitment conversations" : "Career conversations"}</span><h1>Messages</h1></div>
       </div>
       <div className={`${styles.workspace} ${activeHref ? styles.workspaceWithThread : ""} ${profileOpen ? styles.workspaceWithProfile : ""}`}>
         <ChatInbox activeHref={activeHref} />

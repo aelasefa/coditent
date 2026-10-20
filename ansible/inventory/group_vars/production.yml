@@ -8,14 +8,33 @@ repo_branch: main
 nginx_tls_enabled: true
 nginx_waf_enabled: true
 compose_file_list: "docker-compose.yml:docker-compose.production.yml"
+compose_build: false
+compose_pull: true
+
+# The frontend is deployed by Vercel and host Nginx terminates TLS. Building
+# the web and container-proxy images on the small EC2 host wastes memory and
+# previously exhausted the 30-minute Compose build timeout.
+compose_build_services:
+  - api
+compose_pull_services:
+  - api
+  - worker
+  - ai-dispatcher
+compose_run_services:
+  - redis
+  - api
+  - worker
+  - ai-dispatcher
 
 # The EC2 host serves only the API. The public application is hosted by
 # Vercel, so keep the TLS hostname and browser-facing origin separate.
 server_name: "api.coditent.app"
 frontend_url: "https://coditent.app"
 cors_origins: "https://coditent.app,https://www.coditent.app"
-google_redirect_uri: "https://coditent.app/auth/sso/google/callback"
-linkedin_redirect_uri: "https://coditent.app/auth/sso/linkedin/callback"
+# OAuth starts through the public API proxy, which sets a host-bound browser
+# cookie used to validate the callback. Keep the callback on that same origin.
+google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"
+linkedin_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"
 resend_from_email: "notifications@coditent.app"
 letsencrypt_email: "notifications@coditent.app"
 

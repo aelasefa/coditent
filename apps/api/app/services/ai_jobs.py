@@ -406,6 +406,7 @@ async def fail_ai_job(
     worker_id: str,
     error_code: str,
     retryable: bool,
+    retry_after_seconds: int | None = None,
 ) -> str:
     job = (
         await db.execute(
@@ -421,7 +422,14 @@ async def fail_ai_job(
     now = datetime.utcnow()
     if retryable and job.attempts < job.max_attempts:
         job.status = "pending"
-        job.available_at = now + timedelta(seconds=min(300, 5 * (2 ** (job.attempts - 1))))
+        if retry_after_seconds is None:
+            delay_seconds = min(300, 5 * (2 ** (job.attempts - 1)))
+        else:
+            # Admission controls know when their capacity becomes available.
+            # Respect that time instead of exhausting every durable-job retry
+            # while a daily quota is still guaranteed to reject the request.
+            delay_seconds = max(1, min(7 * 24 * 60 * 60, int(retry_after_seconds)))
+        job.available_at = now + timedelta(seconds=delay_seconds)
         final_status = "pending"
     else:
         job.status = "failed"

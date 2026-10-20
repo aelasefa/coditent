@@ -19,7 +19,7 @@ import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers,
 import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
-import { FiArrowRight, FiBriefcase, FiPlus, FiSearch, FiTrash2, FiUsers } from "react-icons/fi";
+import { FiArrowRight, FiBriefcase, FiEdit2, FiPause, FiPlay, FiPlus, FiSearch, FiTrash2, FiUsers } from "react-icons/fi";
 
 function getErrorMessage(err: unknown): string {
   const d = (err as { response?: { data?: { detail?: unknown } }; message?: string })?.response?.data?.detail;
@@ -95,7 +95,10 @@ export default function CompanyJobsPage() {
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
   const [responsibleHrId, setResponsibleHrId] = useState("");
 
-  const apps = (appsQ.data ?? []) as unknown as Array<{ opportunity_id: string; status: string }>;
+  const apps = useMemo(
+    () => (appsQ.data ?? []) as unknown as Array<{ opportunity_id: string; status: string }>,
+    [appsQ.data],
+  );
   const appsByOffer = useMemo(() => {
     const m = new Map<string, number>();
     apps.forEach((a) => m.set(a.opportunity_id, (m.get(a.opportunity_id) ?? 0) + 1));
@@ -273,9 +276,9 @@ export default function CompanyJobsPage() {
               }}
               disabled={meLoading}
               title={!canCreate && !meLoading ? "Only owners, admins, HR, and recruiters can create jobs" : undefined}
-              className="h-9 shrink-0 gap-1.5 px-3.5 text-xs font-semibold"
+              className="h-9 shrink-0 gap-1.5 rounded-lg bg-[#194d38] px-4 text-xs font-semibold text-[#fffefa] shadow-sm transition-all duration-150 hover:bg-[#123e2d] hover:shadow active:scale-[0.98] cursor-pointer"
             >
-              <FiPlus className="h-3.5 w-3.5" aria-hidden />
+              <FiPlus className="h-4 w-4" aria-hidden />
               <span>Create job</span>
             </Button>
           </div>
@@ -320,52 +323,77 @@ export default function CompanyJobsPage() {
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
                   <Link
                     href={`/company/candidates?job=${o.id}`}
-                    className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-[background-color,box-shadow,transform] duration-150 hover:bg-primary-hover hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+                    className="group inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#194d38] px-4 text-xs font-semibold text-[#fffefa] shadow-sm transition-all duration-150 hover:bg-[#123e2d] hover:shadow active:scale-[0.98]"
                   >
-                    <FiUsers aria-hidden className="h-4 w-4" />
+                    <FiUsers aria-hidden className="h-3.5 w-3.5" />
                     <span>View candidates</span>
-                    <FiArrowRight aria-hidden className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+                    <FiArrowRight aria-hidden className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-0.5" />
                   </Link>
+
                   {canEdit && (
-                    <button type="button" onClick={() => openEdit(o)} className="inline-flex min-h-11 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2">
-                      Edit
+                    <button
+                      type="button"
+                      onClick={() => openEdit(o)}
+                      className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 text-xs font-medium text-foreground transition-all duration-150 hover:border-border-strong hover:bg-surface-secondary active:scale-[0.98]"
+                    >
+                      <FiEdit2 aria-hidden className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>Edit</span>
                     </button>
                   )}
+
                   {canEdit && (
                     <button
                       type="button"
                       onClick={() => toggleMut.mutate(o.id)}
                       disabled={toggleMut.isPending}
                       aria-pressed={o.active}
-                      className="inline-flex min-h-11 items-center rounded-lg border border-border px-3.5 text-[13px] font-medium transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={`inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-medium transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 ${
+                        o.active
+                          ? "border-amber-500/30 bg-amber-50/50 text-amber-800 hover:bg-amber-100/60 hover:border-amber-500/50 dark:bg-amber-950/20 dark:text-amber-300"
+                          : "border-[#194d38]/30 bg-[#edf4eb]/60 text-[#194d38] hover:bg-[#edf4eb] hover:border-[#194d38]/50"
+                      }`}
                     >
-                      {o.active ? "Pause" : "Activate"}
+                      {o.active ? (
+                        <>
+                          <FiPause aria-hidden className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Pause</span>
+                        </>
+                      ) : (
+                        <>
+                          <FiPlay aria-hidden className="h-3.5 w-3.5 text-[#194d38]" />
+                          <span>Activate</span>
+                        </>
+                      )}
                     </button>
                   )}
+
                   {canDelete && (
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(o)}
-                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
+                      className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-transparent px-3 text-xs font-medium text-[#b34538] transition-all duration-150 hover:border-[#b34538]/25 hover:bg-[#f9e5df] active:scale-[0.98]"
                     >
-                      <FiTrash2 aria-hidden className="h-4 w-4" />
-                      Delete
+                      <FiTrash2 aria-hidden className="h-3.5 w-3.5" />
+                      <span>Delete</span>
                     </button>
                   )}
+
                   {canAssignHr && members && members.length > 0 && (
-                    <select
-                      value={o.id === editTarget?.id ? responsibleHrId : o.responsible_hr_id ?? ""}
-                      onChange={(e) => hrMut.mutate({ offerId: o.id, hrId: e.target.value })}
-                      aria-label={`Responsible recruiter for ${o.title}`}
-                      className="min-h-11 rounded-lg border border-border bg-surface px-3 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="">Unassigned HR</option>
-                      {members.map((m: { id: string; full_name: string; email: string }) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="ml-auto">
+                      <select
+                        value={o.id === editTarget?.id ? responsibleHrId : o.responsible_hr_id ?? ""}
+                        onChange={(e) => hrMut.mutate({ offerId: o.id, hrId: e.target.value })}
+                        aria-label={`Responsible recruiter for ${o.title}`}
+                        className="min-h-10 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-foreground font-medium transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#194d38]/20"
+                      >
+                        <option value="">Unassigned HR</option>
+                        {members.map((m: { id: string; full_name: string; email: string }) => (
+                          <option key={m.id} value={m.id}>
+                            Recruiter: {m.full_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
               </li>

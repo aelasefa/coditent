@@ -18,6 +18,8 @@ export function SupportStatusBadge({ status }: { status: SupportStatus }) {
 
 export function SupportButton() {
   const pathname = usePathname();
+  const compactForChat = pathname.startsWith("/chat");
+  const reserveFlowSpace = !compactForChat;
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"new" | "history">("new");
   const [subject, setSubject] = useState("");
@@ -51,8 +53,8 @@ export function SupportButton() {
   const close = () => { if (!send.isPending) setOpen(false); };
 
   return <>
-    <div className={styles.spacer} aria-hidden="true" />
-    <button className={styles.trigger} type="button" aria-haspopup="dialog" onClick={() => {
+    {reserveFlowSpace ? <div className={styles.spacer} aria-hidden="true" /> : null}
+    <button className={`${styles.trigger} ${compactForChat ? styles.triggerChat : ""}`} type="button" aria-label="Support" aria-haspopup="dialog" onClick={() => {
       if (!subject && !description) setPagePath(pathname);
       setOpen(true);
     }}><FiHelpCircle aria-hidden="true" /><span>Support</span></button>

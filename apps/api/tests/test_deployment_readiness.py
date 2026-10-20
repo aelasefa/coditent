@@ -22,6 +22,13 @@ def _render_deploy_script(app_dir: Path) -> str:
         .replace("{{ app_dir }}", str(app_dir))
         .replace("{{ repo_branch }}", "main")
         .replace("{{ api_port }}", "8001")
+        .replace(
+            "{{ compose_build_services | default([]) | join(' ') }}", "api"
+        )
+        .replace(
+            "{{ compose_run_services | default([]) | join(' ') }}",
+            "redis api worker ai-dispatcher",
+        )
     )
 
 
@@ -93,13 +100,59 @@ def test_deploy_rejects_missing_or_untrusted_revision(tmp_path: Path) -> None:
     assert "requires the tested 40-character commit SHA" in result.stderr
 
 
-def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
+def test_image_deployment_scopes_git_safe_directory_to_app_dir() -> None:
+    script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+
+    assert 'git -c safe.directory="$APP_DIR" rev-parse HEAD' in script
+    assert "git config --global --add safe.directory" not in script
+
+
+def test_image_deployment_reconciles_and_safely_reloads_host_waf() -> None:
+    script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+
+    assert "ansible/roles/nginx/templates/modsecurity-coditent.conf.j2" in script
+    assert 'cmp --silent "$WAF_SOURCE" "$WAF_DESTINATION"' in script
+    assert "nginx -t && systemctl reload nginx" in script
+    assert "restoring previous configuration" in script
+
+
+def test_ci_builds_immutable_api_image_and_deploys_without_ssh() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
 
-    assert "EC2_SSH_KNOWN_HOSTS" in workflow
+    assert "aws-actions/configure-aws-credentials@v4" in workflow
+    assert "aws-actions/amazon-ecr-login@v2" in workflow
+    assert "docker/build-push-action@v6" in workflow
+    assert "id-token: write" in workflow
+    assert "AWS_DEPLOY_ROLE_ARN" in workflow
+    assert "ECR_REPOSITORY" in workflow
+    assert "EC2_INSTANCE_ID" in workflow
+    assert "AWS-RunShellScript" in workflow
+    # AWS-RunShellScript starts commands with /bin/sh on Ubuntu. Keep its
+    # command preamble POSIX-compatible; the deployment script launches Bash.
+    assert '"set -eu"' in workflow
+    assert '"set -euo pipefail"' not in workflow
+    assert "aws ecr describe-images" in workflow
+    assert "steps.image.outputs.exists != 'true'" in workflow
+    assert "aws ssm send-command" in workflow
+    assert "for attempt in {1..90}" in workflow
+    assert "Success|Cancelled|Failed|TimedOut" in workflow
+    assert "scripts/deploy-production-image.sh" in workflow
+    assert "${{ github.sha }}" in workflow
+    assert "docker compose build" not in workflow
+    assert "EC2_SSH_KEY" not in workflow
+    assert "EC2_SSH_KNOWN_HOSTS" not in workflow
     assert "ssh-keyscan" not in workflow
-    assert "StrictHostKeyChecking=no" not in workflow
-    assert "StrictHostKeyChecking=yes" in workflow
+
+
+def test_ci_requires_online_ssm_and_verifies_public_https() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+    assert "describe-instance-information" in workflow
+    assert 'test "$STATUS" = "Online"' in workflow
+    assert "get-command-invocation" in workflow
+    assert 'test "$STATUS" = "Success"' in workflow
+    assert "group: coditent-deploy-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: false" in workflow
     assert "TESTED_COMMIT: ${{ github.sha }}" in workflow
     assert "PUBLIC_BASE_URL must use HTTPS" in workflow
     assert "--proto '=https'" in workflow
@@ -107,12 +160,17 @@ def test_ci_uses_pinned_host_key_https_and_tested_commit() -> None:
     assert 'test "$HTTP_STATUS" = "308"' in workflow
     assert "REDIRECT_TARGET" in workflow
     assert "http://34.205.255.37" not in workflow
-    assert "Provision trusted TLS ingress" in workflow
-    assert "playbooks/setup.yml" in workflow
+    assert "--request PATCH" in workflow
+    assert "--request DELETE" in workflow
+    assert 'test "$PATCH_STATUS" = "401"' in workflow
+    assert 'test "$DELETE_STATUS" = "401"' in workflow
 
 
 def test_compose_uses_readiness_and_healthy_dependencies() -> None:
-    compose = (REPO_ROOT / "docker-compose.yml").read_text()
+    compose_path = REPO_ROOT / "docker-compose.yml"
+    compose = compose_path.read_text()
+    services = yaml.safe_load(compose)["services"]
+    production_compose = (REPO_ROOT / "docker-compose.production.yml").read_text()
     main = (REPO_ROOT / "apps" / "api" / "app" / "main.py").read_text()
 
     assert "urlopen('http://localhost:8001/ready'" in compose
@@ -124,9 +182,33 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert compose.count("image: coditent-api:local") == 3
     assert compose.count("context: ./apps/api") == 1
     assert compose.count("- ./.env") == 3
+    assert production_compose.count("CODITENT_API_IMAGE") == 3
+    assert "volumes: !reset []" in production_compose
+    assert production_compose.count("restart: unless-stopped") == 4
     assert "fetch('http://127.0.0.1:3000/')" in compose
     assert "web:\n        condition: service_healthy" in compose
     assert "app.include_router(health_router" in main
+    # A durable AI job keeps its domain transaction open while the lease
+    # heartbeat and stale-source verifier use an independent session. A pool
+    # of one deterministically ends every otherwise-successful job with
+    # sqlalchemy.exc.TimeoutError.
+    assert int(services["worker"]["environment"]["DB_POOL_SIZE"]) >= 2
+
+
+def test_production_deployment_reconciles_ai_user_quota() -> None:
+    defaults = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "defaults" / "main.yml"
+    ).read_text()
+    root_env = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "templates" / "root.env.j2"
+    ).read_text()
+    configure_env = (
+        REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "configure_env.yml"
+    ).read_text()
+
+    assert "ai_user_daily_quota_units: 200" in defaults
+    assert "AI_USER_DAILY_QUOTA_UNITS={{ ai_user_daily_quota_units }}" in root_env
+    assert "key: AI_USER_DAILY_QUOTA_UNITS" in configure_env
 
 
 def test_readiness_clients_allow_dependency_probe_to_finish() -> None:
@@ -156,6 +238,10 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     ansible_vars = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+    production_compose = (REPO_ROOT / "docker-compose.production.yml").read_text()
 
     oauth_origin = (
         "NEXT_PUBLIC_OAUTH_API_URL: "
@@ -165,11 +251,30 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     assert "ARG NEXT_PUBLIC_OAUTH_API_URL=" in web_dockerfile
     assert "getOAuthBaseUrl()" in social_buttons
     assert 'next_public_oauth_api_url: "{{ next_public_api_url }}"' in ansible_vars
+    assert (
+        'google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
+        in production_vars
+    )
+    assert (
+        'linkedin_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+        in production_vars
+    )
+    expected_google_callback = (
+        'GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
+    )
+    assert production_compose.count(expected_google_callback) == 2
+    expected_linkedin_callback = (
+        'LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+    )
+    assert production_compose.count(expected_linkedin_callback) == 2
+    assert 'OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"' in production_compose
 
 
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
     next_config = (REPO_ROOT / "apps" / "web" / "next.config.mjs").read_text()
     api_client = (REPO_ROOT / "apps" / "web" / "src" / "lib" / "api.ts").read_text()
+    root_vercel = json.loads((REPO_ROOT / "vercel.json").read_text())
+    web_vercel = json.loads((REPO_ROOT / "apps" / "web" / "vercel.json").read_text())
     production = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
     ).read_text()
@@ -179,6 +284,16 @@ def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
     assert 'server_name: "api.coditent.app"' in production
     assert 'frontend_url: "https://coditent.app"' in production
     assert 'cors_origins: "https://coditent.app,https://www.coditent.app"' in production
+    for config in (root_vercel, web_vercel):
+        assert config["env"]["NEXT_PUBLIC_API_URL"] == (
+            "https://api.coditent.app/api-proxy"
+        )
+        assert config["env"]["NEXT_PUBLIC_OAUTH_API_URL"] == (
+            "https://api.coditent.app/api-proxy"
+        )
+    assert '/^http:\\/\\//i.test(envUrl)' in api_client
+    assert 'return "https://api.coditent.app/api-proxy"' in api_client
+    assert '/^http:\\/\\//i.test(configured)' in api_client
     assert 'next_public_api_url: "/api-proxy"' in (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()
@@ -225,6 +340,17 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "proxy_set_header Upgrade $http_upgrade" in template
     assert "Include /etc/modsecurity/crs/crs-setup.conf" in modsecurity_template
     assert "Include /usr/share/modsecurity-crs/rules/*.conf" in modsecurity_template
+    assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in modsecurity_template
+    assert 'SecRule REQUEST_METHOD "@streq GET"' in modsecurity_template
+    assert (
+        'SecRule REQUEST_FILENAME "@rx '
+        '^/api-proxy/auth/sso/(?:google|linkedin)/callback$"'
+        in modsecurity_template
+    )
+    assert '"ctl:ruleEngine=Off"' in modsecurity_template
+    assert modsecurity_template.index("Include /etc/modsecurity/crs/crs-setup.conf") < (
+        modsecurity_template.index("tx.allowed_methods=")
+    ) < modsecurity_template.index("Include /usr/share/modsecurity-crs/rules/*.conf")
     assert "IncludeOptional" not in modsecurity_template
     assert "Activate and verify the final Nginx configuration" in tasks
     assert "Locate the installed ModSecurity base configuration" in tasks
@@ -276,7 +402,7 @@ def test_git_sync_repairs_deployment_tree_ownership() -> None:
     assert "delay: 15" in sync_tasks
 
 
-def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
+def test_ansible_fallback_keeps_builds_serial_but_production_disables_them() -> None:
     compose_tasks = (
         REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "compose_up.yml"
     ).read_text()
@@ -284,11 +410,45 @@ def test_long_compose_builds_are_serial_and_keep_ssh_active() -> None:
 
     assert "docker compose build" in compose_tasks
     assert "COMPOSE_PARALLEL_LIMIT" in compose_tasks
-    assert "async: 1800" in compose_tasks
+    assert "compose_build_timeout" in compose_tasks
     assert "poll: 15" in compose_tasks
     assert "docker compose up -d --no-build" in compose_tasks
+    assert "compose_build_services" in compose_tasks
+    assert "compose_run_services" in compose_tasks
+    assert "default(1)" in compose_tasks
     assert "ServerAliveInterval=30" in ansible_config
     assert "ServerAliveCountMax=20" in ansible_config
+
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+    assert "compose_build: false" in production_vars
+    assert "compose_pull: true" in production_vars
+
+
+def test_production_runs_only_backend_services_from_ecr() -> None:
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+
+    run_services = production_vars.split("compose_run_services:", 1)[1].split(
+        "# The EC2 host", 1
+    )[0]
+
+    assert "compose_build: false" in production_vars
+    assert "compose_pull: true" in production_vars
+    for service in ("redis", "api", "worker", "ai-dispatcher"):
+        assert f"- {service}" in run_services
+    assert "- web" not in run_services
+    assert "- proxy" not in run_services
+
+    deploy_script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+    assert "aws ecr get-login-password" in deploy_script
+    assert 'docker compose pull "${IMAGE_SERVICES[@]}"' in deploy_script
+    assert 'docker compose up -d --no-build' in deploy_script
+    assert "docker compose build" not in deploy_script
+    assert "EXPECTED_COMMIT" in deploy_script
+    assert "PREVIOUS_IMAGE_FILE" in deploy_script
 
 
 def test_application_images_run_as_unprivileged_users() -> None:

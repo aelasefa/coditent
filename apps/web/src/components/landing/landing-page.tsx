@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
 import { TwinklingStars } from "@/components/ui/twinkling-stars";
 import { HeroDemo, ScrollTextReveals, StorySteps } from "./landing-interactions";
+import { LandingFinalArtwork } from "./landing-final-artwork";
 import { SiteHeader } from "./site-header";
 import styles from "./landing-page.module.css";
 
@@ -157,7 +158,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="final-title" className={styles.finalSection}>
+        <section id="next-step" aria-labelledby="final-title" className={styles.finalSection}>
           <div className={styles.finalInner}>
             <div>
               <p className={styles.eyebrow} data-scroll-reveal>Begin here</p>
@@ -175,14 +176,7 @@ export function LandingPage() {
               </div>
             </div>
             <div className={styles.finalImage}>
-              <Image
-                src="/images/landing/open-threshold-seamless.png"
-                alt="Professionals meeting beneath a broad green arch"
-                fill
-                quality={95}
-                sizes="(max-width: 500px) 120vw, (max-width: 900px) 110vw, 56vw"
-                className={styles.finalArtwork}
-              />
+              <LandingFinalArtwork />
             </div>
           </div>
         </section>
