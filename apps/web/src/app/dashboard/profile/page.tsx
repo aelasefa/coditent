@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import type { CVExtracted } from "@/lib/types";
 import { isQualityBio } from "@/lib/bio-utils";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { validateManagedFile } from "@/lib/file-validation";
 import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
@@ -262,14 +263,6 @@ export default function ProfileBuilderPage() {
     }
   };
 
-  const getApiError = (err: unknown, fallback: string): string => {
-    const data = (err as { response?: { data?: { detail?: unknown; message?: unknown } } })?.response?.data;
-    const detail = data?.detail;
-    if (typeof detail === "string" && detail) return detail;
-    if (typeof data?.message === "string" && data.message) return data.message;
-    return err instanceof Error && err.message ? err.message : fallback;
-  };
-
   const runParse = async () => {
     setCvBusy("parsing");
     setCvError(null);
@@ -298,7 +291,7 @@ export default function ProfileBuilderPage() {
       setUseExtracted(use);
       setCvOk("Extraction done. Review below, then apply and save.");
     } catch (err: unknown) {
-      setCvError(getApiError(err, "Extraction failed. Retry or fill profile manually."));
+      setCvError(getApiErrorMessage(err, "Extraction failed. Retry or fill profile manually."));
     } finally {
       setCvBusy("idle");
     }
@@ -326,7 +319,7 @@ export default function ProfileBuilderPage() {
       setCvOk("CV uploaded. Extracting info...");
       await runParse();
     } catch (err: unknown) {
-      setCvError(getApiError(err, "CV upload failed. Retry."));
+      setCvError(getApiErrorMessage(err, "CV upload failed. Retry."));
       setCvBusy("idle");
     } finally {
       if (cvFileRef.current) cvFileRef.current.value = "";

@@ -109,9 +109,14 @@ export default function SsoCallbackPage() {
 
     function sendToParent(message: OAuthPopupResult): boolean {
       let sent = false;
-      if (opener && !opener.closed) {
-        opener.postMessage(message, window.location.origin);
-        sent = true;
+      if (opener) {
+        try {
+          opener.postMessage(message, window.location.origin);
+          sent = true;
+        } catch {
+          // A strict COOP header may detach the opener after the provider
+          // redirect. The attempt-scoped BroadcastChannel below still works.
+        }
       }
       if (attemptId && "BroadcastChannel" in window) {
         channel = new BroadcastChannel(oauthChannelName(attemptId));
@@ -172,7 +177,7 @@ export default function SsoCallbackPage() {
       return cleanup;
     }
 
-    if (!isNamedPopup && (!opener || opener.closed)) {
+    if (!isNamedPopup && !opener) {
       void finishStandalone();
       return cleanup;
     }
@@ -208,10 +213,14 @@ export default function SsoCallbackPage() {
   );
 
   function tryAgain() {
-    if (window.opener && !window.opener.closed) {
-      window.opener.focus();
-      window.close();
-      return;
+    if (window.opener) {
+      try {
+        window.opener.focus();
+        window.close();
+        return;
+      } catch {
+        // Fall through to the local login route if COOP detached the opener.
+      }
     }
     router.replace(provider === "linkedin" ? "/login" : "/login");
   }
