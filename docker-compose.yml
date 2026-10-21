@@ -29,8 +29,6 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     restart: on-failure
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     env_file:
@@ -81,8 +79,6 @@ services:
   worker:
     image: coditent-api:local
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     env_file:
@@ -122,8 +118,6 @@ services:
   ai-dispatcher:
     image: coditent-api:local
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     env_file:
@@ -180,8 +174,6 @@ services:
         BACKEND_PROXY_URL: http://api:8001
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     depends_on:
