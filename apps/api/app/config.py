@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     totp_encryption_key: str | None = None
     # Verification codes have a fixed security lifetime. Literal prevents a
     # stale deployment environment from silently extending it.
-    otp_expire_minutes: Literal[5] = 5
+    otp_expire_minutes: int = Field(default=5, ge=5, le=5)
     otp_max_attempts: int = 5
     otp_resend_cooldown_seconds: int = 60
     redis_url: str = "redis://localhost:6380/0"
