@@ -61,7 +61,6 @@ export function SocialLoginButtons({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const popupRef = useRef<Window | null>(null);
-  const closePollRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const attemptIdRef = useRef<string | null>(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -75,11 +74,7 @@ export function SocialLoginButtons({
     "inline-flex h-11 w-full items-center justify-center gap-3 rounded-full px-4 text-sm font-semibold transition-all duration-300 ease-md active:scale-95";
 
   useEffect(() => {
-    function clearClosePoll() {
-      if (closePollRef.current !== null) {
-        window.clearInterval(closePollRef.current);
-        closePollRef.current = null;
-      }
+    function clearPopupTimeout() {
       if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
@@ -93,8 +88,13 @@ export function SocialLoginButtons({
 
     function acknowledge(attemptId: string) {
       const acknowledgement = { type: OAUTH_POPUP_ACK, attemptId } as const;
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.postMessage(acknowledgement, window.location.origin);
+      if (popupRef.current) {
+        try {
+          popupRef.current.postMessage(acknowledgement, window.location.origin);
+        } catch {
+          // COOP can sever the opener relationship while the popup is on the
+          // identity provider. BroadcastChannel remains the primary handoff.
+        }
       }
       channelRef.current?.postMessage(acknowledgement);
     }
@@ -108,7 +108,7 @@ export function SocialLoginButtons({
       }
 
       handledRef.current = true;
-      clearClosePoll();
+      clearPopupTimeout();
 
       if (result.type === "CODITENT_OAUTH_ERROR") {
         setPopupError(readableOAuthError(result.error));
@@ -161,7 +161,7 @@ export function SocialLoginButtons({
     window.addEventListener("message", handleMessage);
     return () => {
       window.removeEventListener("message", handleMessage);
-      clearClosePoll();
+      clearPopupTimeout();
       closeChannel();
     };
   }, [queryClient, router, searchParams]);
@@ -171,11 +171,6 @@ export function SocialLoginButtons({
     setOauthMfa(null);
     setOauthMfaCode("");
     handledRef.current = false;
-
-    if (popupRef.current && !popupRef.current.closed) {
-      popupRef.current.focus();
-      return;
-    }
 
     const width = 520;
     const height = 650;
@@ -218,7 +213,7 @@ export function SocialLoginButtons({
       features
     );
 
-    if (!popup || popup.closed) {
+    if (!popup) {
       setPopupError("The sign-in popup was blocked. Allow popups for Coditent and try again.");
       channelRef.current?.close();
       channelRef.current = null;
@@ -227,18 +222,6 @@ export function SocialLoginButtons({
 
     popupRef.current = popup;
     popup.focus();
-    closePollRef.current = window.setInterval(() => {
-      if (popup.closed) {
-        if (closePollRef.current !== null) window.clearInterval(closePollRef.current);
-        closePollRef.current = null;
-        popupRef.current = null;
-        if (!handledRef.current) {
-          setPopupError("The sign-in window was closed before authentication finished.");
-          channelRef.current?.close();
-          channelRef.current = null;
-        }
-      }
-    }, 400);
     timeoutRef.current = window.setTimeout(() => {
       if (!handledRef.current) {
         setPopupError("Social sign-in took too long. Close the sign-in window and try again.");
