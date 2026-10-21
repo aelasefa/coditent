@@ -275,6 +275,63 @@
   }
 }
 
+/* At compact desktop widths the heading wraps, making the full form taller.
+   Tighten only vertical rhythm so centered content stays below the header. */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .header {
+    height: 60px;
+    min-height: 60px;
+  }
+
+  .shell {
+    padding-block: 0.65rem 1rem;
+  }
+
+  .eyebrow {
+    margin-bottom: 0.65rem;
+  }
+
+  .title {
+    font-size: clamp(2.7rem, 4.8vw, 3.55rem);
+  }
+
+  .subtitle {
+    margin-top: 0.75rem;
+    line-height: 1.45;
+  }
+
+  .formArea {
+    margin-top: 1.1rem;
+    padding-top: 1rem;
+  }
+
+  .form {
+    gap: 0.7rem;
+    margin-top: 0.8rem;
+  }
+
+  .roleTab,
+  .roleTabActive {
+    min-height: 38px;
+  }
+
+  .socialLogin :global(button) {
+    height: 40px;
+  }
+
+  .socialLogin :global(.my-5) {
+    margin-block: 0.7rem;
+  }
+
+  .input {
+    height: 42px;
+  }
+
+  .submitButton {
+    min-height: 44px;
+  }
+}
+
 /* Keep the complete authentication flow inside a laptop/desktop viewport.
    Mobile remains scrollable so the on-screen keyboard cannot hide controls. */
 @media (min-width: 761px) {
