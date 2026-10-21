@@ -352,7 +352,7 @@
   }
 }
 
-@media (max-height: 850px) and (min-width: 761px) {
+@media (max-height: 1000px) and (min-width: 761px) {
   .header {
     height: 58px;
     min-height: 58px;
