@@ -233,7 +233,7 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
             />
             <Composer
               peerName={peerName}
-              pending={sendMut.isPending}
+              pending={false}
               onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)}
             />
           </>

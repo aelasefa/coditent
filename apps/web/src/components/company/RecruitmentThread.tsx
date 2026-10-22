@@ -196,7 +196,7 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
       </div>
       <Composer
         peerName={peerName}
-        pending={sendMut.isPending}
+        pending={false}
         onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)}
       />
     </div>
