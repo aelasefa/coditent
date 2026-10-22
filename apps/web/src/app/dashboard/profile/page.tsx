@@ -679,14 +679,21 @@ export default function ProfileBuilderPage() {
 
                 {activeSection === "documents" ? (
                   <div className={styles.documentEditor}>
-                    <div className={styles.documentCurrent}>
-                      <FiFileText aria-hidden />
-                      <div><strong>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "No CV uploaded"}</strong><p>{hasCv ? "This CV is available when you apply." : "Upload a PDF or DOCX file to make applying easier."}</p></div>
-                      {hasCv ? <div className="flex items-center gap-3">
-                        {cvMeta?.content_type === "application/pdf" ? <a href={getCVPreviewUrl()} target="_blank" rel="noreferrer noopener">Preview</a> : null}
-                        <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a>
-                      </div> : null}
-                    </div>
+                    {cvBusy !== "deleting" ? <>
+                      <div className={styles.documentCurrent}>
+                        <FiFileText aria-hidden />
+                        <div><strong>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "No CV uploaded"}</strong><p>{hasCv ? "This CV is available when you apply." : "Upload a PDF or DOCX file to make applying easier."}</p></div>
+                        {hasCv ? <div className="flex items-center gap-3">
+                          {cvMeta?.content_type === "application/pdf" ? <a href={getCVPreviewUrl()} target="_blank" rel="noreferrer noopener">Preview</a> : null}
+                          <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a>
+                        </div> : null}
+                      </div>
+                      <div className={styles.documentActions}>
+                        <Button type="button" variant="outline" onClick={() => cvFileRef.current?.click()} disabled={cvBusy !== "idle"}><FiUpload aria-hidden /> {hasCv ? "Replace CV" : "Upload CV"}</Button>
+                        {hasCv ? <Button type="button" variant="ghost" onClick={() => setDeleteDialogOpen(true)} disabled={cvBusy !== "idle"}><FiTrash2 aria-hidden /> Remove CV</Button> : null}
+                      </div>
+                      <p className={styles.documentHelp}>PDF or DOCX · maximum 5 MB. Extracted information is only applied after you review it.</p>
+                    </> : null}
                     <input ref={cvFileRef} type="file" accept=".pdf,.docx" onChange={handleCVSelect} disabled={cvBusy !== "idle"} className="sr-only" aria-label="Choose CV file" />
                     {cvBusy !== "idle" ? (
                       <CVProcessingIndicator
@@ -695,7 +702,7 @@ export default function ProfileBuilderPage() {
                         filename={cvPendingFilename ?? cvMeta?.filename ?? "Your CV"}
                       />
                     ) : null}
-                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p>{canRetryCVParse ? <Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button> : null}</div> : null}
+                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p>{canRetryCVParse && cvErrorAction === "parse" ? <Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button> : null}{cvErrorAction === "delete" ? <Button type="button" size="sm" variant="outline" onClick={handleCVDelete} loading={cvBusy === "deleting"}>Retry removal</Button> : null}</div> : null}
                     {cvOk ? <p role="status" className={styles.cvMessage}>{cvOk}</p> : null}
                     {extracted && cvBusy !== "deleting" ? <div className={styles.extractedPanel}>
                       <h3>Review details from your CV</h3>
