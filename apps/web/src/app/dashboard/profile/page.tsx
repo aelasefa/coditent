@@ -36,6 +36,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { getProfileCompletion } from "@/components/candidate/profile-completion";
+import { CVProcessingIndicator } from "@/components/candidate/cv-processing-indicator";
 import { ProfileArtwork } from "@/components/candidate/profile-artwork";
 import { useCandidateAvatarPreview } from "@/components/shell/candidate-top-shell";
 import styles from "@/components/candidate/candidate-pages.module.css";
@@ -106,6 +107,7 @@ export default function ProfileBuilderPage() {
   } | null>(null);
   const [cvProgress, setCvProgress] = useState(0);
   const [cvBusy, setCvBusy] = useState<"idle" | "uploading" | "parsing">("idle");
+  const [cvPendingFilename, setCvPendingFilename] = useState<string | null>(null);
   const [cvError, setCvError] = useState<string | null>(null);
   const [cvOk, setCvOk] = useState<string | null>(null);
   const [extracted, setExtracted] = useState<CVExtracted | null>(null);
@@ -311,6 +313,7 @@ export default function ProfileBuilderPage() {
     }
     setCvBusy("uploading");
     setCvProgress(0);
+    setCvPendingFilename(file.name);
     try {
       const meta = await uploadCV(file, setCvProgress);
       setCvMeta(meta);
@@ -318,13 +321,13 @@ export default function ProfileBuilderPage() {
       setExtracted(null);
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       queryClient.invalidateQueries({ queryKey: ["cv-meta"] });
-      setCvOk("CV uploaded. Extracting info...");
       await runParse();
     } catch (err: unknown) {
       setCvError(getApiErrorMessage(err, "CV upload failed. Retry."));
       setCanRetryCVParse(false);
       setCvBusy("idle");
     } finally {
+      setCvPendingFilename(null);
       if (cvFileRef.current) cvFileRef.current.value = "";
     }
   };
@@ -361,6 +364,9 @@ export default function ProfileBuilderPage() {
       form.setValue("skills", merged.join(", "), { shouldDirty: true });
     }
     setCvOk("Extracted values applied. Review and save profile.");
+    setExtracted(null);
+    setReviewValues({});
+    setUseExtracted({});
   };
 
   const handleSave = form.handleSubmit(async (vals) => {
@@ -663,14 +669,20 @@ export default function ProfileBuilderPage() {
                         <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a>
                       </div> : null}
                     </div>
-                    <input ref={cvFileRef} type="file" accept=".pdf,.docx" onChange={handleCVSelect} className="sr-only" aria-label="Choose CV file" />
+                    <input ref={cvFileRef} type="file" accept=".pdf,.docx" onChange={handleCVSelect} disabled={cvBusy !== "idle"} className="sr-only" aria-label="Choose CV file" />
                     <div className={styles.documentActions}>
-                      <Button type="button" variant="outline" onClick={() => cvFileRef.current?.click()} loading={cvBusy === "uploading"}><FiUpload aria-hidden /> {hasCv ? "Replace CV" : "Upload CV"}</Button>
-                      {hasCv ? <Button type="button" variant="ghost" onClick={() => setDeleteDialogOpen(true)}><FiTrash2 aria-hidden /> Remove CV</Button> : null}
+                      <Button type="button" variant="outline" onClick={() => cvFileRef.current?.click()} disabled={cvBusy !== "idle"}><FiUpload aria-hidden /> {hasCv ? "Replace CV" : "Upload CV"}</Button>
+                      {hasCv ? <Button type="button" variant="ghost" onClick={() => setDeleteDialogOpen(true)} disabled={cvBusy !== "idle"}><FiTrash2 aria-hidden /> Remove CV</Button> : null}
                     </div>
                     <p className={styles.documentHelp}>PDF or DOCX · maximum 5 MB. Extracted information is only applied after you review it.</p>
-                    {cvBusy !== "idle" ? <p role="status" className={styles.cvMessage}>{cvBusy === "uploading" ? `Uploading ${cvProgress}%` : "Reading your CV…"}</p> : null}
-                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p>{canRetryCVParse ? <Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button> : null}</div> : null}
+                    {cvBusy !== "idle" ? (
+                      <CVProcessingIndicator
+                        phase={cvBusy}
+                        progress={cvProgress}
+                        filename={cvPendingFilename ?? cvMeta?.filename ?? "Your CV"}
+                      />
+                    ) : null}
+                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p><Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button></div> : null}
                     {cvOk ? <p role="status" className={styles.cvMessage}>{cvOk}</p> : null}
                     {extracted ? <div className={styles.extractedPanel}>
                       <h3>Review details from your CV</h3>
