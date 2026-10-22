@@ -90,7 +90,7 @@ function PipelineContent() {
     },
   });
 
-  const apps = appsQ.data ?? [];
+  const apps = useMemo(() => appsQ.data ?? [], [appsQ.data]);
   const offersById = useMemo(() => new Map((offersQ.data ?? []).map((o) => [o.id, o.title])), [offersQ.data]);
 
   const filtered = useMemo(() => {

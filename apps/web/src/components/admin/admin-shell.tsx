@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/cn";
@@ -35,17 +35,15 @@ const NAV = [
   { label: "Settings", href: "/admin/settings", icon: FiSettings },
 ];
 
-async function logout() {
-  if (typeof window !== "undefined") {
-    await logoutSession().catch(() => undefined);
-    window.location.href = "/admin/login";
-  }
-}
-
 export function AdminShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
+  const logout = async () => {
+    await logoutSession().catch(() => undefined);
+    router.replace("/admin/login");
+  };
 
   const nav = (
     <nav aria-label="Admin" className="flex-1 space-y-1 overflow-y-auto px-3.5 py-4">

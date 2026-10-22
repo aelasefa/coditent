@@ -238,6 +238,10 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     ansible_vars = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "all.yml"
     ).read_text()
+    production_vars = (
+        REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
+    ).read_text()
+    production_compose = (REPO_ROOT / "docker-compose.production.yml").read_text()
 
     oauth_origin = (
         "NEXT_PUBLIC_OAUTH_API_URL: "
@@ -247,6 +251,23 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     assert "ARG NEXT_PUBLIC_OAUTH_API_URL=" in web_dockerfile
     assert "getOAuthBaseUrl()" in social_buttons
     assert 'next_public_oauth_api_url: "{{ next_public_api_url }}"' in ansible_vars
+    assert (
+        'google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
+        in production_vars
+    )
+    assert (
+        'linkedin_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+        in production_vars
+    )
+    expected_google_callback = (
+        'GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
+    )
+    assert production_compose.count(expected_google_callback) == 2
+    expected_linkedin_callback = (
+        'LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+    )
+    assert production_compose.count(expected_linkedin_callback) == 2
+    assert 'OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"' in production_compose
 
 
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
@@ -320,6 +341,13 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
     assert "Include /etc/modsecurity/crs/crs-setup.conf" in modsecurity_template
     assert "Include /usr/share/modsecurity-crs/rules/*.conf" in modsecurity_template
     assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in modsecurity_template
+    assert 'SecRule REQUEST_METHOD "@streq GET"' in modsecurity_template
+    assert (
+        'SecRule REQUEST_FILENAME "@rx '
+        '^/api-proxy/auth/sso/(?:google|linkedin)/callback$"'
+        in modsecurity_template
+    )
+    assert '"ctl:ruleEngine=Off"' in modsecurity_template
     assert modsecurity_template.index("Include /etc/modsecurity/crs/crs-setup.conf") < (
         modsecurity_template.index("tx.allowed_methods=")
     ) < modsecurity_template.index("Include /usr/share/modsecurity-crs/rules/*.conf")

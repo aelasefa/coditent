@@ -28,7 +28,7 @@ export default function AdminCompaniesPage() {
   const [plan, setPlan] = useState<"free" | "pro" | "enterprise">("free");
   const [subscriptionStatus, setSubscriptionStatus] = useState<"trialing" | "active" | "past_due" | "canceled">("active");
 
-  const companies = companiesQ.data ?? [];
+  const companies = useMemo(() => companiesQ.data ?? [], [companiesQ.data]);
   const filtered = useMemo(() => {
     let list = companies;
     if (statusFilter !== "all") list = list.filter((c) => (c.status || "active") === statusFilter);

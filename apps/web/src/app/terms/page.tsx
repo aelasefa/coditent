@@ -26,6 +26,9 @@ export default function TermsPage() {
           You must provide accurate information, keep it reasonably current, and protect your credentials. You are responsible for activity performed through your account unless you promptly report unauthorized access. Do not share an individual account or attempt to use another person’s identity.
         </p>
         <p>
+          Public registration creates a candidate account. Company users join an organization through an invitation, and platform-administrator accounts are managed by Coditent. These account types have separate views and permissions.
+        </p>
+        <p>
           Company owners and administrators control invitations and roles within their workspace, including OWNER, ADMIN, HR, RECRUITER, and HIRING MANAGER permissions. They are responsible for granting appropriate access, removing former team members, and ensuring their users handle candidate information lawfully and confidentially.
         </p>
       </section>
@@ -46,7 +49,7 @@ export default function TermsPage() {
       <section aria-labelledby="terms-content">
         <h2 id="terms-content">Your content</h2>
         <p>
-          You retain ownership of content you submit, including profiles, CVs, job offers, messages, feedback, and work samples. You grant Coditent a limited, non-exclusive license to host, copy, process, display, and transmit that content only as needed to operate, secure, improve, and support the service. This license ends when the content is deleted from active systems, except where continued retention is legally permitted or necessary for existing applications, audit integrity, backups, or dispute resolution.
+          You retain ownership of content you submit, including profiles, CVs, job offers, messages, feedback, and work samples. You grant Coditent a limited, non-exclusive license to host, copy, process, display, and transmit that content only as needed to operate, secure, and support the service. This license ends when the content is deleted from active systems, except where continued retention is legally permitted or necessary for existing applications, audit integrity, backups, or dispute resolution.
         </p>
         <p>
           You confirm that you have the rights and permissions needed to upload your content and that it does not violate another person’s privacy, confidentiality, intellectual-property, or other legal rights. Do not upload highly sensitive information that is unnecessary for recruitment, such as bank credentials, government authentication secrets, or medical records.
@@ -135,8 +138,7 @@ export default function TermsPage() {
 
       <section aria-labelledby="terms-contact">
         <h2 id="terms-contact">Contact</h2>
-        <p>Questions about these Terms: <a className="font-medium text-primary underline underline-offset-4" href="mailto:support@coditent.com">support@coditent.com</a></p>
-        <p>Privacy questions: <a className="font-medium text-primary underline underline-offset-4" href="mailto:privacy@coditent.com">privacy@coditent.com</a></p>
+        <p>Terms, privacy, and support questions: <a className="font-medium text-primary underline underline-offset-4" href="mailto:notifications@coditent.app">notifications@coditent.app</a></p>
       </section>
     </LegalPage>
   );

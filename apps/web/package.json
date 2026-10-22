@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:friends": "node --test --experimental-strip-types tests/friend-ui.test.mts"
+    "test:unit": "node --import ./tests/register-typescript.mjs --test tests/*.test.mts tests/*.test.mjs",
+    "test:friends": "node --import ./tests/register-typescript.mjs --test tests/friend-ui.test.mts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

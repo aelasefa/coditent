@@ -95,7 +95,10 @@ export default function CompanyJobsPage() {
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
   const [responsibleHrId, setResponsibleHrId] = useState("");
 
-  const apps = (appsQ.data ?? []) as unknown as Array<{ opportunity_id: string; status: string }>;
+  const apps = useMemo(
+    () => (appsQ.data ?? []) as unknown as Array<{ opportunity_id: string; status: string }>,
+    [appsQ.data],
+  );
   const appsByOffer = useMemo(() => {
     const m = new Map<string, number>();
     apps.forEach((a) => m.set(a.opportunity_id, (m.get(a.opportunity_id) ?? 0) + 1));

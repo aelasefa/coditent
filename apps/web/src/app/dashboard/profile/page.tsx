@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import axios from "axios";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import type { CVExtracted } from "@/lib/types";
 import { isQualityBio } from "@/lib/bio-utils";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { validateManagedFile } from "@/lib/file-validation";
 import { PageContainer } from "@/components/shell/page-container";
 import { Avatar } from "@/components/ui/avatar";
@@ -178,7 +179,7 @@ export default function ProfileBuilderPage() {
     setSkills(profileQuery.data.skills?.split(",").map((s) => s.trim()).filter(Boolean) ?? []);
   }, [profileQuery.data, form]);
 
-  const values = form.watch();
+  const values = useWatch({ control: form.control });
   const completion = getProfileCompletion(profileQuery.data, userQuery.data?.avatar_url);
   const hasCv = Boolean(cvMeta?.filename || profileQuery.data?.cv_url);
   const doneCount = completion.done;
@@ -264,14 +265,6 @@ export default function ProfileBuilderPage() {
     }
   };
 
-  const getApiError = (err: unknown, fallback: string): string => {
-    const data = (err as { response?: { data?: { detail?: unknown; message?: unknown } } })?.response?.data;
-    const detail = data?.detail;
-    if (typeof detail === "string" && detail) return detail;
-    if (typeof data?.message === "string" && data.message) return data.message;
-    return err instanceof Error && err.message ? err.message : fallback;
-  };
-
   const runParse = async () => {
     setCvBusy("parsing");
     setCvError(null);
@@ -300,7 +293,7 @@ export default function ProfileBuilderPage() {
       setUseExtracted(use);
       setCvOk("Extraction done. Review below, then apply and save.");
     } catch (err: unknown) {
-      setCvError(getApiError(err, "Extraction failed. Retry or fill profile manually."));
+      setCvError(getApiErrorMessage(err, "Extraction failed. Retry or fill profile manually."));
     } finally {
       setCvBusy("idle");
     }
@@ -328,7 +321,7 @@ export default function ProfileBuilderPage() {
       queryClient.invalidateQueries({ queryKey: ["cv-meta"] });
       await runParse();
     } catch (err: unknown) {
-      setCvError(getApiError(err, "CV upload failed. Retry."));
+      setCvError(getApiErrorMessage(err, "CV upload failed. Retry."));
       setCvBusy("idle");
     } finally {
       setCvPendingFilename(null);

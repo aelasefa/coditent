@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <section aria-labelledby="privacy-controller">
         <h2 id="privacy-controller">Who is responsible for your data</h2>
         <p>
-          Coditent, operating from Morocco, is responsible for the personal data described in this policy. Company customers are also responsible for how their authorized team members use candidate information within their recruitment workspace. Questions or rights requests can be sent to <a className="font-medium text-primary underline underline-offset-4" href="mailto:privacy@coditent.com">privacy@coditent.com</a>.
+          Coditent, operating from Morocco, is responsible for the personal data described in this policy. Company customers are also responsible for how their authorized team members use candidate information within their recruitment workspace. Questions or rights requests can be sent to <a className="font-medium text-primary underline underline-offset-4" href="mailto:notifications@coditent.app">notifications@coditent.app</a>.
         </p>
       </section>
 
@@ -71,9 +71,9 @@ export default function PrivacyPage() {
         <h2 id="privacy-sharing">Service providers and disclosures</h2>
         <p>We do not sell personal data. We disclose information only as needed to operate the service, including to:</p>
         <ul className="list-disc pl-5">
-          <li>hosting, database, file-storage, caching, monitoring, and infrastructure providers, including Supabase where configured;</li>
+          <li>our deployment host and Supabase, which provide application hosting, PostgreSQL database services, and private file storage;</li>
           <li>Google Gemini for requested AI-supported features;</li>
-          <li>email-delivery providers used for verification, invitations, recovery, and service notices;</li>
+          <li>Resend for verification, invitation, recovery, and service email delivery;</li>
           <li>Google or LinkedIn when you choose their sign-in service;</li>
           <li>professional advisers, authorities, courts, or counterparties when disclosure is legally required or reasonably necessary to protect rights, safety, and platform integrity; and</li>
           <li>a successor organization in connection with a merger, financing, reorganization, or sale, subject to appropriate confidentiality protections.</li>
@@ -113,7 +113,7 @@ export default function PrivacyPage() {
           Subject to applicable law, including Morocco’s Law No. 09-08, you may ask whether we process your information and request access, correction, or opposition for legitimate reasons. You may also use available account tools to update information, export account data, remove a CV, or schedule account deletion. Other rights, including deletion, restriction, portability, or withdrawal of consent, may apply depending on your location and the processing involved.
         </p>
         <p>
-          Send a request to <a className="font-medium text-primary underline underline-offset-4" href="mailto:privacy@coditent.com">privacy@coditent.com</a>. We may need to verify your identity and may retain limited information where the law permits or requires it. You may also contact Morocco’s <a className="font-medium text-primary underline underline-offset-4" href="https://www.cndp.ma/" rel="noreferrer" target="_blank">Commission Nationale de contrôle de la protection des Données à caractère Personnel (CNDP)</a> about your rights.
+          Send a request to <a className="font-medium text-primary underline underline-offset-4" href="mailto:notifications@coditent.app">notifications@coditent.app</a>. We may need to verify your identity and may retain limited information where the law permits or requires it. You may also contact Morocco’s <a className="font-medium text-primary underline underline-offset-4" href="https://www.cndp.ma/" rel="noreferrer" target="_blank">Commission Nationale de contrôle de la protection des Données à caractère Personnel (CNDP)</a> about your rights.
         </p>
       </section>
 
@@ -133,8 +133,7 @@ export default function PrivacyPage() {
 
       <section aria-labelledby="privacy-contact">
         <h2 id="privacy-contact">Contact</h2>
-        <p>Privacy questions and rights requests: <a className="font-medium text-primary underline underline-offset-4" href="mailto:privacy@coditent.com">privacy@coditent.com</a></p>
-        <p>General support: <a className="font-medium text-primary underline underline-offset-4" href="mailto:support@coditent.com">support@coditent.com</a></p>
+        <p>Privacy questions, rights requests, and general support: <a className="font-medium text-primary underline underline-offset-4" href="mailto:notifications@coditent.app">notifications@coditent.app</a></p>
       </section>
     </LegalPage>
   );

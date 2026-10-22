@@ -28,7 +28,7 @@ export function LegalPage({
       <main id="legal-content" tabIndex={-1} aria-labelledby="legal-title" className="mx-auto max-w-3xl px-6 py-10 sm:py-16">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Legal</p>
         <h1 id="legal-title" className="mt-3 font-serif text-5xl font-normal tracking-[-0.045em] sm:text-6xl">{title}</h1>
-        <p className="mt-3 text-sm text-foreground-secondary">Effective: <time dateTime="2026-10-14">14 October 2026</time> — Coditent, Morocco</p>
+        <p className="mt-3 text-sm text-foreground-secondary">Effective: <time dateTime="2026-10-16">16 October 2026</time> — Coditent, Morocco</p>
         <div className="mt-10 space-y-9 break-words text-base leading-7 text-foreground-secondary [&_h2]:mb-3 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:font-normal [&_h2]:tracking-tight [&_h2]:text-foreground [&_li]:mt-2">
           {children}
         </div>

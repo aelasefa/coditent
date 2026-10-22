@@ -97,7 +97,7 @@ export default function TeamPage() {
     },
   });
 
-  const members = membersData ?? [];
+  const members = useMemo(() => membersData ?? [], [membersData]);
   const filtered = useMemo(() => {
     let list = members;
     if (roleFilter !== "all") list = list.filter((m) => m.company_role === roleFilter);

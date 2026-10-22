@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     access_token_cookie_name: str = "access_token"
     csrf_cookie_name: str = "coditent_csrf"
     oauth_browser_cookie_name: str = "oauth_browser"
+    oauth_browser_cookie_path: str = Field(
+        default="/auth/sso",
+        pattern=r"^/[A-Za-z0-9/_-]*$",
+    )
     access_token_cookie_secure: bool = True
     access_token_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     trusted_device_cookie_name: str = "trusted_device"
