@@ -89,8 +89,6 @@ class TokenResponse(APIModel):
     token: str
     user: UserOut
     trusted_device_token: str | None = None
-    # Avoid a second authenticated request solely to choose the post-login route.
-    onboarding_completed: bool | None = None
 
 
 class OAuthHandoffExchangeRequest(APIModel):

@@ -77,7 +77,6 @@ from app.services.passwords import hash_password, verify_password, verify_passwo
 from app.services.authentication import (
     AuthenticationRejected,
     AuthenticationStoreUnavailable,
-    candidate_onboarding_completed,
     complete_authentication,
     consume_mfa_challenge,
     ensure_access_session_active,
@@ -780,7 +779,6 @@ async def exchange_oauth_handoff(
             token=token,
             user=UserOut.model_validate(user),
             is_new_registration=bool(handoff.get("is_new_registration")),
-            onboarding_completed=await candidate_onboarding_completed(db, user),
         ).model_dump(mode="json"),
     )
     set_access_cookie(response, token)
@@ -1038,11 +1036,7 @@ async def verify_email(
 
     token = issue_access_token(user)
     set_access_cookie(response, token)
-    return TokenResponse(
-        token=token,
-        user=UserOut.model_validate(user),
-        onboarding_completed=False,
-    )
+    return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
 @router.post(
@@ -1213,11 +1207,7 @@ async def login(
     token = completion.token
     set_access_cookie(response, token)
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
-    return TokenResponse(
-        token=token,
-        user=UserOut.model_validate(user),
-        onboarding_completed=await candidate_onboarding_completed(db, user),
-    )
+    return TokenResponse(token=token, user=UserOut.model_validate(user))
 
 
 

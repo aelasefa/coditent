@@ -111,7 +111,6 @@ export interface TokenResponse {
   token: string;
   user: User;
   trusted_device_token?: string | null;
-  onboarding_completed?: boolean | null;
 }
 
 export interface MfaChallengeResponse {
