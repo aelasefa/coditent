@@ -470,7 +470,7 @@ def test_web_runtime_and_framework_are_on_supported_patched_lines() -> None:
 
     assert web_dockerfile.count("FROM node:22-alpine") == 3
     assert package["engines"]["node"] == ">=22.0.0"
-    assert package["dependencies"]["next"] == "16.3.8"
+    assert package["dependencies"]["next"] == "16.4.2"
     assert package["dependencies"]["react"] == "19.3.0"
     assert package["dependencies"]["react-dom"] == "19.3.0"
     assert package["dependencies"]["axios"] == "1.20.0"
