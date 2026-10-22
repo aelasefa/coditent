@@ -119,7 +119,7 @@ echo "=== Pulling the tested API image ==="
 docker compose pull "${IMAGE_SERVICES[@]}"
 
 echo "=== Starting production backend services without building ==="
-docker compose up -d --no-build --remove-orphans "${COMPOSE_SERVICES[@]}"
+docker compose up -d --no-build --remove-orphans --force-recreate "${COMPOSE_SERVICES[@]}"
 
 echo "=== Waiting for application readiness ==="
 for attempt in {1..30}; do
@@ -143,7 +143,7 @@ if [[ -s "$PREVIOUS_IMAGE_FILE" ]]; then
     echo "=== Restoring the previous API image ===" >&2
     set_image_in_env "$PREVIOUS_IMAGE"
     export CODITENT_API_IMAGE="$PREVIOUS_IMAGE"
-    docker compose up -d --no-build --remove-orphans "${COMPOSE_SERVICES[@]}" || true
+    docker compose up -d --no-build --remove-orphans --force-recreate "${COMPOSE_SERVICES[@]}" || true
   fi
 fi
 

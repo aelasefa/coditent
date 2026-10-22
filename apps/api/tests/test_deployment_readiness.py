@@ -446,6 +446,7 @@ def test_production_runs_only_backend_services_from_ecr() -> None:
     assert "aws ecr get-login-password" in deploy_script
     assert 'docker compose pull "${IMAGE_SERVICES[@]}"' in deploy_script
     assert 'docker compose up -d --no-build' in deploy_script
+    assert "--force-recreate" in deploy_script
     assert "docker compose build" not in deploy_script
     assert "EXPECTED_COMMIT" in deploy_script
     assert "PREVIOUS_IMAGE_FILE" in deploy_script

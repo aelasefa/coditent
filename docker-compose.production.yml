@@ -40,3 +40,8 @@ services:
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
       CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
       ACCESS_TOKEN_COOKIE_SECURE: "true"
+
+networks:
+  default:
+    name: coditent_network
+    external: true
