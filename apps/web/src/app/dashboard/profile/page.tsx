@@ -92,6 +92,7 @@ export default function ProfileBuilderPage() {
   const { toast } = useToast();
   const setAvatarPreview = useCandidateAvatarPreview();
   const [activeSection, setActiveSection] = useState<ProfileSection>("about");
+  const [applicationReturnPath, setApplicationReturnPath] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -124,6 +125,13 @@ export default function ProfileBuilderPage() {
     photoReaderRef.current?.abort();
     setAvatarPreview(null);
   }, [setAvatarPreview]);
+
+  useEffect(() => {
+    const requestedPath = new URLSearchParams(window.location.search).get("returnTo");
+    if (requestedPath?.startsWith("/dashboard/recommendations")) {
+      setApplicationReturnPath(requestedPath);
+    }
+  }, []);
 
   const form = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -517,6 +525,26 @@ export default function ProfileBuilderPage() {
         </div>
         <ProfileArtwork />
       </section>
+
+      {applicationReturnPath ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3" aria-label="Return to application">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Complete the required details, then return to the job.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Save any profile changes before continuing.</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (hasDraft) setPendingNavigation(applicationReturnPath);
+              else router.push(applicationReturnPath);
+            }}
+          >
+            Return to job
+          </Button>
+        </section>
+      ) : null}
 
       {loading ? (
         <div className="space-y-4" role="status" aria-label="Loading profile">
