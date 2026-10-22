@@ -55,7 +55,7 @@ export function MessageList({
       {messages.map((m, index) => {
         const day = dayLabel(m.created_at);
         const showDay = day && day !== lastDay;
-        const mine = myId ? m.sender_id === myId : false;
+        const mine = m.delivery_status === "sending" || (myId ? m.sender_id === myId : false);
         const grouped = !showDay && lastSender === m.sender_id;
         lastDay = day;
         lastSender = m.sender_id;

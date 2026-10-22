@@ -35,7 +35,6 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
   const {
     live: recruitmentLive,
     markMessagesRead: markRealtimeMessagesRead,
-    sendMessage: sendRealtimeMessage,
   } = useRecruitmentChatSocket({
     applicationId,
     onMessage: handleRealtimeMessage,
@@ -98,18 +97,15 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
   }, [applicationId, ctx?.chat_enabled, handleMessagesRead, markRealtimeMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
-    mutationFn: async (text: string) => {
-      const realtime = ctx?.chat_enabled ? sendRealtimeMessage(text) : null;
-      if (realtime) return realtime;
-      return sendRecruitmentMessage(applicationId, text);
-    },
+    // Persist outgoing messages over HTTP. The socket remains responsible for
+    // incoming live updates, while the optimistic bubble keeps sending instant.
+    mutationFn: (text: string) => sendRecruitmentMessage(applicationId, text),
     onMutate: (text) => {
-      if (!me?.id || !ctx?.peer?.id) return undefined;
       const optimistic = createOptimisticMessage({
         applicationId,
         content: text,
-        receiverId: ctx.peer.id,
-        senderId: me.id,
+        receiverId: ctx?.peer?.id ?? "pending-peer",
+        senderId: me?.id ?? "optimistic-self",
       });
       qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
         ...previous,
