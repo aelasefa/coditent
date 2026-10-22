@@ -49,10 +49,7 @@ function LoginInner() {
     if (data.trusted_device_token) saveTrustedDevice(data.trusted_device_token);
     const nextPath = safeNext(searchParams.get("next"));
     saveToken(data.token);
-    router.push(await getPostAuthDestination(queryClient, data.user, {
-      next: nextPath,
-      onboardingCompleted: data.onboarding_completed,
-    }));
+    router.push(await getPostAuthDestination(queryClient, data.user, { next: nextPath }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
