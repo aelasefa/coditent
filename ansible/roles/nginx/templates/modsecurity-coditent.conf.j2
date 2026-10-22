@@ -11,6 +11,18 @@ SecRequestBodyLimitAction Reject
 SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)" \
     "id:1000001,phase:1,pass,nolog,ctl:requestBodyProcessor=JSON"
 
+# Candidate profiles intentionally accept natural-language prose, technology
+# names, and portfolio URLs. Those values can resemble SQL/XSS signatures even
+# though FastAPI validates the strict schema and SQLAlchemy parameterizes every
+# write. Exclude only request arguments on this exact authenticated JSON update;
+# protocol, size, authentication, rate-limit, and non-body WAF checks remain.
+SecRule REQUEST_METHOD "@streq PUT" \
+    "id:1000004,phase:1,pass,nolog,chain"
+    SecRule REQUEST_FILENAME "@streq /api-proxy/candidates/profile" \
+        "chain"
+        SecRule REQUEST_HEADERS:Content-Type "@rx ^application/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)" \
+            "ctl:ruleRemoveTargetById=100001;ARGS,ctl:ruleRemoveTargetById=100002;ARGS,ctl:ruleRemoveTargetById=100004;ARGS,ctl:ruleRemoveTargetByTag=attack-sqli;ARGS,ctl:ruleRemoveTargetByTag=attack-xss;ARGS"
+
 # OAuth providers return high-entropy, signed state and authorization-code
 # values that trigger CRS false positives. Exempt only the exact supported GET
 # callback transactions; FastAPI still verifies the browser-bound, single-use

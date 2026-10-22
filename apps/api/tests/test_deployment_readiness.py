@@ -382,6 +382,44 @@ def test_ansible_declares_collection_and_syntax_check() -> None:
         assert f"playbooks/{playbook}" in deploy_helper
 
 
+def test_profile_waf_exception_is_narrow_and_body_only() -> None:
+    waf_files = (
+        (
+            REPO_ROOT
+            / "ansible"
+            / "roles"
+            / "nginx"
+            / "templates"
+            / "modsecurity-coditent.conf.j2",
+            "Candidate profiles intentionally",
+            "# OAuth providers",
+        ),
+        (
+            REPO_ROOT / "nginx" / "modsecurity" / "modsecurity.conf",
+            "Profile prose and portfolio URLs",
+            "# Custom Rules",
+        ),
+    )
+
+    for path, start_marker, end_marker in waf_files:
+        waf = path.read_text()
+        exception = waf.split(start_marker, 1)[1].split(end_marker, 1)[0]
+
+        assert 'SecRule REQUEST_METHOD "@streq PUT"' in exception
+        assert (
+            'SecRule REQUEST_FILENAME "@streq /api-proxy/candidates/profile"'
+            in exception
+        )
+        assert "Content-Type" in exception and "json" in exception
+        assert "ctl:ruleRemoveTargetById=100001;ARGS" in exception
+        assert "ctl:ruleRemoveTargetById=100002;ARGS" in exception
+        assert "ctl:ruleRemoveTargetById=100004;ARGS" in exception
+        assert "ctl:ruleRemoveTargetByTag=attack-sqli;ARGS" in exception
+        assert "ctl:ruleRemoveTargetByTag=attack-xss;ARGS" in exception
+        assert "ctl:ruleEngine=Off" not in exception
+        assert "ctl:requestBodyAccess=Off" not in exception
+
+
 def test_git_sync_repairs_deployment_tree_ownership() -> None:
     sync_tasks = (
         REPO_ROOT / "ansible" / "roles" / "coditent" / "tasks" / "sync_code.yml"
