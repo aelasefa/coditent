@@ -6,10 +6,11 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from redis.exceptions import RedisError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import get_async_redis
-from app.models import RevokedSession, RevokedTrustedDevice, User
+from app.models import CandidateProfile, RevokedSession, RevokedTrustedDevice, User
 from app.utils.jwt import (
     create_access_token,
     create_mfa_token,
@@ -48,6 +49,24 @@ class AuthenticationStoreUnavailable(RuntimeError):
 class AuthenticationCompletion:
     token: str
     requires_2fa: bool
+
+
+async def candidate_onboarding_completed(
+    db: AsyncSession,
+    user: User,
+) -> bool | None:
+    """Return candidate routing state without another browser round trip."""
+    if user.role.value != "CANDIDATE":
+        return None
+    completed = (
+        await db.execute(
+            select(CandidateProfile.onboarding_completed).where(
+                CandidateProfile.user_id == user.id
+            )
+        )
+    ).scalar_one_or_none()
+    # Missing legacy profiles are incomplete rather than dashboard-ready.
+    return bool(completed)
 
 
 def _mfa_challenge_key(challenge_id: str) -> str:

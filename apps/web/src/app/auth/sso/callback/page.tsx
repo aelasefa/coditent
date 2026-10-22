@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Logo } from "@/components/ui/logo";
-import { exchangeOAuthHandoff, getMe, verifyTwoFactor } from "@/lib/api";
+import { exchangeOAuthHandoff, verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
@@ -145,11 +145,12 @@ export default function SsoCallbackPage() {
           return;
         }
         saveToken(session.token);
-        const user = await getMe();
+        const user = session.user;
         localStorage.setItem("user", JSON.stringify(user));
         router.replace(
           await getPostAuthDestination(queryClient, user, {
             isNewRegistration: session.is_new_registration,
+            onboardingCompleted: session.onboarding_completed,
           })
         );
       } catch {
@@ -243,6 +244,7 @@ export default function SsoCallbackPage() {
       router.replace(
         await getPostAuthDestination(queryClient, session.user, {
           isNewRegistration: mfaChallenge.isNewRegistration,
+          onboardingCompleted: session.onboarding_completed,
         })
       );
     } catch {

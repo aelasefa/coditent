@@ -39,6 +39,7 @@ from app.services.auth_cookies import (
 from app.services.authentication import (
     AuthenticationRejected,
     AuthenticationStoreUnavailable,
+    candidate_onboarding_completed,
     consume_mfa_challenge,
     ensure_account_can_authenticate,
     ensure_login_account_type,
@@ -295,4 +296,5 @@ async def two_factor_verify_challenge(
         token=final_token,
         user=UserOut.model_validate(user),
         trusted_device_token=trusted_device_token,
+        onboarding_completed=await candidate_onboarding_completed(db, user),
     )

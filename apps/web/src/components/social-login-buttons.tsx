@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { safeNextDestination } from "@/lib/auth-redirect";
-import { exchangeOAuthHandoff, getMe, getOAuthBaseUrl, logoutSession, verifyTwoFactor } from "@/lib/api";
+import { exchangeOAuthHandoff, getOAuthBaseUrl, logoutSession, verifyTwoFactor } from "@/lib/api";
 import { removeToken, saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
@@ -133,13 +133,14 @@ export function SocialLoginButtons({
           return;
         }
         saveToken(session.token);
-        const user = await getMe();
+        const user = session.user;
         localStorage.setItem("user", JSON.stringify(user));
         const next = safeNextDestination(searchParams.get("next"));
         router.replace(
           await getPostAuthDestination(queryClient, user, {
             next,
             isNewRegistration: session.is_new_registration,
+            onboardingCompleted: session.onboarding_completed,
           })
         );
       } catch {
@@ -251,6 +252,7 @@ export function SocialLoginButtons({
         await getPostAuthDestination(queryClient, session.user, {
           next,
           isNewRegistration: oauthMfa.isNewRegistration,
+          onboardingCompleted: session.onboarding_completed,
         })
       );
     } catch {
