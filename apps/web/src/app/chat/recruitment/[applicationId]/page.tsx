@@ -19,7 +19,7 @@ import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 import { recruitmentChatErrorMessage } from "@/lib/recruitment-chat-error";
-import { confirmOptimisticMessage, createOptimisticMessage, removeOptimisticMessage } from "@/lib/optimistic-chat";
+import { confirmOptimisticMessage, createOptimisticMessage, markOptimisticMessageFailed, retryOptimisticMessage } from "@/lib/optimistic-chat";
 
 export default function RecruitmentChatPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const qc = useQueryClient();
@@ -114,17 +114,20 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
   const sendMut = useMutation({
     // Persist outgoing messages over HTTP. The socket remains responsible for
     // incoming live updates, while the optimistic bubble keeps sending instant.
-    mutationFn: (text: string) => sendRecruitmentMessage(applicationId, text),
-    onMutate: (text) => {
+    mutationFn: ({ text }: { text: string; clientMessageId: string }) => sendRecruitmentMessage(applicationId, text),
+    onMutate: ({ text, clientMessageId }) => {
       const optimistic = createOptimisticMessage({
         applicationId,
+        clientMessageId,
         content: text,
         receiverId: ctx?.peer?.id ?? "pending-peer",
         senderId: me?.id ?? "optimistic-self",
       });
       qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
         ...previous,
-        messages: [...previous.messages, optimistic],
+        messages: previous.messages.some((message) => message.id === optimistic.id)
+          ? retryOptimisticMessage(previous.messages, optimistic.id)
+          : [...previous.messages, optimistic],
       } : previous);
       return { optimisticId: optimistic.id };
     },
@@ -140,16 +143,23 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
       qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
-    onError: (_error, _text, mutationContext) => {
+    onError: (_error, _variables, mutationContext) => {
       if (mutationContext) {
         qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
           ...previous,
-          messages: removeOptimisticMessage(previous.messages, mutationContext.optimisticId),
+          messages: markOptimisticMessageFailed(previous.messages, mutationContext.optimisticId),
         } : previous);
       }
-      toast("Message failed to send", { description: "Retry.", variant: "error" });
+      toast("Message failed to send", { description: "Retry from the message bubble.", variant: "error" });
     },
   });
+
+  const retryMessage = (message: ChatMessage) => {
+    const clientMessageId = message.id.startsWith("optimistic:")
+      ? message.id.slice("optimistic:".length)
+      : crypto.randomUUID();
+    sendMut.mutate({ text: message.content, clientMessageId });
+  };
 
   const peerName = ctx?.peer?.full_name ?? "recruiter";
   const peerRole = me?.role === "CANDIDATE" ? "Recruiter" : "Candidate";
@@ -226,11 +236,12 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
             <MessageList
               messages={ctx.messages}
               myId={me?.id}
+              onRetry={retryMessage}
             />
             <Composer
               peerName={peerName}
               pending={false}
-              onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)}
+              onSend={(text) => sendMut.mutate({ text, clientMessageId: crypto.randomUUID() })}
             />
           </>
         )}

@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-view";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useFriendChatSocket } from "@/hooks/use-friend-chat-socket";
+import { confirmOptimisticMessage, createOptimisticMessage, markOptimisticMessageFailed, retryOptimisticMessage } from "@/lib/optimistic-chat";
 
 type FriendChatPage = ChatMessagePage & Pick<FriendChatContext, "peer" | "can_message" | "relationship_state" | "conversation_type">;
 
@@ -27,10 +28,21 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
     } : previous);
   }, [id, qc]);
 
-  const handleRealtimeMessage = useCallback((message: ChatMessage) => {
+  const handleRealtimeMessage = useCallback((message: ChatMessage, clientMessageId?: string) => {
     qc.setQueryData<InfiniteData<FriendChatPage, string | null>>(["chat", id], (previous) => {
-      if (!previous || previous.pages.some((page) => page.messages.some((item) => item.id === message.id))) return previous;
-      return { ...previous, pages: previous.pages.map((page, index) => index === 0 ? { ...page, messages: [...page.messages, message] } : page) };
+      if (!previous) return previous;
+      const optimisticId = clientMessageId ? `optimistic:${clientMessageId}` : null;
+      const alreadyConfirmed = previous.pages.some((page) => page.messages.some((item) => item.id === message.id));
+      if (alreadyConfirmed && !optimisticId) return previous;
+      return {
+        ...previous,
+        pages: previous.pages.map((page, index) => index === 0 ? {
+          ...page,
+          messages: optimisticId
+            ? confirmOptimisticMessage(page.messages, optimisticId, message)
+            : [...page.messages, message],
+        } : page),
+      };
     });
     void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
   }, [id, qc]);
@@ -99,16 +111,62 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
   }, [context?.can_message, handleMessagesRead, id, markRealtimeMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
-    mutationFn: async (text: string) => {
-      const realtime = context?.can_message ? sendRealtimeMessage(text) : null;
-      return realtime ? realtime : sendMessage(id, text);
+    mutationFn: async ({ text, clientMessageId }: { text: string; clientMessageId: string }) => {
+      const realtime = context?.can_message ? sendRealtimeMessage(text, clientMessageId) : null;
+      return realtime ?? sendMessage(id, text);
     },
-    onSuccess: (created) => {
-      handleRealtimeMessage(created);
+    onMutate: ({ text, clientMessageId }) => {
+      const optimistic = createOptimisticMessage({
+        clientMessageId,
+        content: text,
+        receiverId: context?.peer?.id ?? id,
+        senderId: meQuery.data?.id ?? "optimistic-self",
+      });
+      qc.setQueryData<InfiniteData<FriendChatPage, string | null>>(["chat", id], (previous) => previous ? {
+        ...previous,
+        pages: previous.pages.map((page, index) => index === 0 ? {
+          ...page,
+          messages: page.messages.some((message) => message.id === optimistic.id)
+            ? retryOptimisticMessage(page.messages, optimistic.id)
+            : [...page.messages, optimistic],
+        } : page),
+      } : previous);
+      return { optimisticId: optimistic.id };
+    },
+    onSuccess: (created, _variables, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<InfiniteData<FriendChatPage, string | null>>(["chat", id], (previous) => previous ? {
+          ...previous,
+          pages: previous.pages.map((page, index) => index === 0 ? {
+            ...page,
+            messages: confirmOptimisticMessage(page.messages, mutationContext.optimisticId, created),
+          } : page),
+        } : previous);
+      } else {
+        handleRealtimeMessage(created);
+      }
       void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
-    onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
+    onError: (_error, _variables, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<InfiniteData<FriendChatPage, string | null>>(["chat", id], (previous) => previous ? {
+          ...previous,
+          pages: previous.pages.map((page, index) => index === 0 ? {
+            ...page,
+            messages: markOptimisticMessageFailed(page.messages, mutationContext.optimisticId),
+          } : page),
+        } : previous);
+      }
+      toast("Message failed to send", { description: "Retry from the message bubble.", variant: "error" });
+    },
   });
+
+  const retryMessage = (message: ChatMessage) => {
+    const clientMessageId = message.id.startsWith("optimistic:")
+      ? message.id.slice("optimistic:".length)
+      : crypto.randomUUID();
+    sendMut.mutate({ text: message.content, clientMessageId });
+  };
 
   const peer = context?.peer;
   return (
@@ -121,8 +179,8 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
       ) : (
         <>
           {msgQuery.hasNextPage ? <div className="border-b border-border-subtle px-4 py-2 text-center"><button type="button" className="text-xs font-semibold text-primary underline disabled:opacity-60" disabled={msgQuery.isFetchingNextPage} onClick={() => void msgQuery.fetchNextPage()}>{msgQuery.isFetchingNextPage ? "Loading…" : "Load earlier messages"}</button></div> : null}
-          <MessageList messages={messages} myId={meQuery.data?.id} />
-          {context?.can_message ? <Composer peerName={peer?.full_name ?? "friend"} pending={sendMut.isPending} onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)} /> : <div className={styles.threadNotice} role="status"><strong>Read-only conversation</strong><p>You can send new messages only while this candidate is your friend.</p></div>}
+          <MessageList messages={messages} myId={meQuery.data?.id} onRetry={retryMessage} />
+          {context?.can_message ? <Composer peerName={peer?.full_name ?? "friend"} pending={false} onSend={(text) => sendMut.mutate({ text, clientMessageId: crypto.randomUUID() })} /> : <div className={styles.threadNotice} role="status"><strong>Read-only conversation</strong><p>You can send new messages only while this candidate is your friend.</p></div>}
         </>
       )}
     </ChatWorkspace>
