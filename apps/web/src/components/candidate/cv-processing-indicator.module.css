@@ -21,7 +21,8 @@
 .scanner {
   position: relative;
   width: 7rem;
-  height: 9rem;
+  height: 9.4rem;
+  overflow: hidden;
 }
 
 .paper {
@@ -110,6 +111,67 @@
   opacity: 0.9;
 }
 
+.root[data-phase="deleting"] .paper {
+  z-index: 1;
+  inset: 0.2rem 0.9rem 3.15rem;
+  animation: cv-paper-shred 1.8s var(--ease-standard) infinite;
+  will-change: transform, opacity, clip-path;
+}
+
+.shredderHead {
+  position: absolute;
+  z-index: 3;
+  top: 6.05rem;
+  right: 0.15rem;
+  left: 0.15rem;
+  height: 1.15rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.45rem 0.45rem 0.7rem 0.7rem;
+  background: var(--primary);
+  box-shadow: 0 0.35rem 0 var(--border-strong), 0 0.65rem 1rem rgb(25 77 56 / 16%);
+}
+
+.shredderHead > span {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.6rem;
+  left: 0.6rem;
+  height: 0.16rem;
+  border-radius: 999px;
+  background: rgb(8 41 30 / 72%);
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 20%);
+}
+
+.shreds {
+  position: absolute;
+  z-index: 2;
+  top: 6.85rem;
+  right: 0.72rem;
+  bottom: 0;
+  left: 0.72rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.18rem;
+  overflow: hidden;
+}
+
+.shreds > span {
+  display: block;
+  width: 0.5rem;
+  height: 1.9rem;
+  border: 1px solid var(--border);
+  border-top: 0;
+  background: var(--surface);
+  opacity: 0;
+  animation: cv-shred-strip 1.8s ease-in infinite;
+  will-change: transform, opacity;
+}
+
+.shreds > span:nth-child(2n) { height: 2.2rem; animation-delay: -80ms; }
+.shreds > span:nth-child(3n) { height: 1.65rem; animation-delay: -160ms; }
+.shreds > span:nth-child(4n) { transform-origin: top; animation-delay: -40ms; }
+.shreds > span:nth-child(5n) { height: 2rem; animation-delay: -210ms; }
+
 .copy { min-width: 0; }
 
 .eyebrow {
@@ -186,6 +248,12 @@
   transition: width var(--duration-normal) var(--ease-standard);
 }
 
+.indeterminateTrack > span {
+  width: 42%;
+  animation: cv-delete-progress 1.4s var(--ease-standard) infinite;
+  will-change: transform;
+}
+
 .waitNote {
   max-width: 32rem;
   margin: 0.75rem 0 0;
@@ -206,6 +274,24 @@
   100% { opacity: 0; transform: translateY(6.9rem); }
 }
 
+@keyframes cv-paper-shred {
+  0%, 14% { clip-path: inset(0 0 0 0); opacity: 1; transform: translateY(0); }
+  72% { clip-path: inset(0 0 78% 0); opacity: 0.92; transform: translateY(4.1rem); }
+  100% { clip-path: inset(0 0 100% 0); opacity: 0; transform: translateY(4.9rem); }
+}
+
+@keyframes cv-shred-strip {
+  0%, 24% { opacity: 0; transform: translateY(-1.3rem) rotate(0deg); }
+  38% { opacity: 0.95; }
+  78% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(2.65rem) rotate(3deg); }
+}
+
+@keyframes cv-delete-progress {
+  from { transform: translateX(-125%); }
+  to { transform: translateX(340%); }
+}
+
 @media (max-width: 639px) {
   .root {
     grid-template-columns: 1fr;
@@ -221,8 +307,8 @@
 
   .scanner {
     width: 6rem;
-    height: 7.6rem;
-    transform: scale(0.88);
+    height: 9.4rem;
+    transform: scale(0.82);
     transform-origin: center;
   }
 
@@ -233,7 +319,10 @@
 @media (prefers-reduced-motion: reduce) {
   .paper,
   .scanBeam,
-  .progressTrack > span {
+  .shreds > span,
+  .progressTrack > span,
+  .root[data-phase="deleting"] .paper,
+  .indeterminateTrack > span {
     animation: none;
     transition: none;
   }
@@ -242,4 +331,17 @@
     top: 50%;
     opacity: 0.62;
   }
+
+  .root[data-phase="deleting"] .paper {
+    clip-path: inset(0 0 35% 0);
+    opacity: 0.85;
+    transform: translateY(2.15rem);
+  }
+
+  .shreds > span {
+    opacity: 0.55;
+    transform: translateY(0.6rem);
+  }
+
+  .indeterminateTrack { display: none; }
 }
