@@ -360,6 +360,9 @@ export default function ProfileBuilderPage() {
       form.setValue("skills", merged.join(", "), { shouldDirty: true });
     }
     setCvOk("Extracted values applied. Review and save profile.");
+    setExtracted(null);
+    setReviewValues({});
+    setUseExtracted({});
   };
 
   const handleSave = form.handleSubmit(async (vals) => {
