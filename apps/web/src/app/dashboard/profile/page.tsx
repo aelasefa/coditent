@@ -682,7 +682,7 @@ export default function ProfileBuilderPage() {
                         filename={cvPendingFilename ?? cvMeta?.filename ?? "Your CV"}
                       />
                     ) : null}
-                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p><Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button></div> : null}
+                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p>{canRetryCVParse ? <Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button> : null}</div> : null}
                     {cvOk ? <p role="status" className={styles.cvMessage}>{cvOk}</p> : null}
                     {extracted ? <div className={styles.extractedPanel}>
                       <h3>Review details from your CV</h3>
