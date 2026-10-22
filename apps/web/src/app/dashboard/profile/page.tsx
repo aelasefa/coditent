@@ -86,20 +86,6 @@ function toProfileValues(profile: Partial<import("@/lib/types").Profile>): Profi
   };
 }
 
-function cvFilenameFromStoragePath(cvUrl: string): string {
-  const storageName = cvUrl.split(/[?#]/, 1)[0]?.split("/").pop();
-  if (!storageName) return "CV uploaded";
-
-  let decodedName = storageName;
-  try {
-    decodedName = decodeURIComponent(storageName);
-  } catch {
-    // Keep the valid part returned by storage when the path contains malformed encoding.
-  }
-
-  return decodedName.replace(/^[a-f0-9]{32}_/i, "") || "CV uploaded";
-}
-
 export default function ProfileBuilderPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -123,6 +109,7 @@ export default function ProfileBuilderPage() {
   const [cvOk, setCvOk] = useState<string | null>(null);
   const [extracted, setExtracted] = useState<CVExtracted | null>(null);
   const [cvWarnings, setCvWarnings] = useState<string[]>([]);
+  const [canRetryCVParse, setCanRetryCVParse] = useState(false);
   const [reviewValues, setReviewValues] = useState<Record<string, string>>({});
   const [useExtracted, setUseExtracted] = useState<Record<string, boolean>>({});
   const cvFileRef = useRef<HTMLInputElement>(null);
@@ -160,11 +147,16 @@ export default function ProfileBuilderPage() {
   const cvMetaQuery = useQuery({ queryKey: ["cv-meta"], queryFn: getCVMeta, retry: false });
 
   useEffect(() => {
-    if (cvMetaQuery.data) setCvMeta(cvMetaQuery.data);
-    if (profileQuery.data?.cv_url && !cvMetaQuery.data) {
-      setCvMeta({ filename: cvFilenameFromStoragePath(profileQuery.data.cv_url) });
+    if (cvMetaQuery.data) {
+      setCvMeta(cvMetaQuery.data);
+      setCanRetryCVParse(true);
+      return;
     }
-  }, [cvMetaQuery.data, profileQuery.data]);
+    if (cvMetaQuery.isError && axios.isAxiosError(cvMetaQuery.error) && cvMetaQuery.error.response?.status === 404) {
+      setCvMeta(null);
+      setCanRetryCVParse(false);
+    }
+  }, [cvMetaQuery.data, cvMetaQuery.error, cvMetaQuery.isError]);
 
   useEffect(() => {
     if (userQuery.data?.avatar_url && !photoPreview && !photoFile) setPhotoPreview(userQuery.data.avatar_url);
@@ -179,7 +171,7 @@ export default function ProfileBuilderPage() {
 
   const values = useWatch({ control: form.control });
   const completion = getProfileCompletion(profileQuery.data, userQuery.data?.avatar_url);
-  const hasCv = Boolean(cvMeta?.filename || profileQuery.data?.cv_url);
+  const hasCv = Boolean(cvMeta?.filename);
   const doneCount = completion.done;
   const totalCount = completion.total;
 
@@ -302,6 +294,7 @@ export default function ProfileBuilderPage() {
     if (!file) return;
     setCvError(null);
     setCvOk(null);
+    setCanRetryCVParse(false);
     const validationError = await validateManagedFile(file, "cv");
     if (validationError) {
       setCvError(validationError);
@@ -313,6 +306,7 @@ export default function ProfileBuilderPage() {
     try {
       const meta = await uploadCV(file, setCvProgress);
       setCvMeta(meta);
+      setCanRetryCVParse(true);
       setExtracted(null);
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       queryClient.invalidateQueries({ queryKey: ["cv-meta"] });
@@ -320,6 +314,7 @@ export default function ProfileBuilderPage() {
       await runParse();
     } catch (err: unknown) {
       setCvError(getApiErrorMessage(err, "CV upload failed. Retry."));
+      setCanRetryCVParse(false);
       setCvBusy("idle");
     } finally {
       if (cvFileRef.current) cvFileRef.current.value = "";
@@ -331,6 +326,7 @@ export default function ProfileBuilderPage() {
     try {
       await deleteCV();
       setCvMeta(null);
+      setCanRetryCVParse(false);
       setExtracted(null);
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       queryClient.invalidateQueries({ queryKey: ["cv-meta"] });
@@ -634,7 +630,7 @@ export default function ProfileBuilderPage() {
                     <div className={styles.documentCurrent}>
                       <FiFileText aria-hidden />
                       <div><strong>{hasCv ? cvMeta?.filename ?? "CV uploaded" : "No CV uploaded"}</strong><p>{hasCv ? "This CV is available when you apply." : "Upload a PDF or DOCX file to make applying easier."}</p></div>
-                      {hasCv && profileQuery.data?.cv_url ? <div className="flex items-center gap-3">
+                      {hasCv ? <div className="flex items-center gap-3">
                         {cvMeta?.content_type === "application/pdf" ? <a href={getCVPreviewUrl()} target="_blank" rel="noreferrer noopener">Preview</a> : null}
                         <a href={getCVDownloadUrl()} target="_blank" rel="noreferrer noopener">Download</a>
                       </div> : null}
@@ -646,7 +642,7 @@ export default function ProfileBuilderPage() {
                     </div>
                     <p className={styles.documentHelp}>PDF or DOCX · maximum 5 MB. Extracted information is only applied after you review it.</p>
                     {cvBusy !== "idle" ? <p role="status" className={styles.cvMessage}>{cvBusy === "uploading" ? `Uploading ${cvProgress}%` : "Reading your CV…"}</p> : null}
-                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p><Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button></div> : null}
+                    {cvError ? <div role="alert" className={styles.cvError}><p>{cvError}</p>{canRetryCVParse ? <Button type="button" size="sm" variant="outline" onClick={runParse} loading={cvBusy === "parsing"}>Retry reading</Button> : null}</div> : null}
                     {cvOk ? <p role="status" className={styles.cvMessage}>{cvOk}</p> : null}
                     {extracted ? <div className={styles.extractedPanel}>
                       <h3>Review details from your CV</h3>

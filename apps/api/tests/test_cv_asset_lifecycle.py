@@ -156,6 +156,12 @@ async def _seed_candidate(
         user_id=candidate.id,
         current_cv_asset_id=old_asset.id,
         cv_url=old_asset.storage_path,
+        city="Casablanca",
+        phone="+212600000000",
+        headline="Software engineer",
+        bio="I build reliable software products.",
+        skills="Python, FastAPI",
+        years_of_experience=0,
     )
     offer = Offer(
         recruiter_id=candidate.id,
@@ -237,6 +243,34 @@ async def test_apply_ignores_foreign_key_then_replace_and_delete_retains_snapsho
     assert deleted == [uploaded[0]]
     application = await db.get(Application, application.id)
     assert application is not None and application.cv_asset_id == old_asset.id
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_incomplete_candidate_profile(
+    db: AsyncSession,
+    monkeypatch,
+) -> None:
+    candidate, profile, _asset, offer = await _seed_candidate(db)
+    profile.headline = None
+    profile.skills = "   "
+    profile.years_of_experience = None
+    await db.commit()
+    monkeypatch.setattr(applications, "log_audit", _no_audit)
+
+    with pytest.raises(HTTPException) as caught:
+        await applications.create_application(
+            ApplicationCreate(opportunity_id=offer.id),
+            candidate,
+            db,
+        )
+
+    assert caught.value.status_code == 409
+    assert caught.value.detail == {
+        "code": "PROFILE_INCOMPLETE",
+        "message": "Please complete your profile before applying for this job.",
+        "missing_fields": ["Professional title", "Skills", "Experience or education"],
+    }
+    assert await db.scalar(select(Application)) is None
 
 
 @pytest.mark.asyncio
