@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, getProfile, offerLogoSrc } from "@/lib/api";
+import { api, getMe, getProfile, offerLogoSrc } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { MatchScore, getMatchState } from "./match-score";
 import { formatDate, formatSalary, offerLocation, parseSkills } from "./offer-utils";
+import { getApplicationProfileReadiness } from "./profile-completion";
 import type { Recommendation } from "@/lib/types";
 import styles from "./candidate-pages.module.css";
 
@@ -20,8 +23,10 @@ interface JobDetailsProps {
 
 export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
+  const [missingProfileFields, setMissingProfileFields] = useState<string[]>([]);
   const offer = rec.offer;
   const score = rec.score ?? rec.ai_score ?? null;
   const reasoning = rec.reasoning ?? rec.ai_reasoning ?? null;
@@ -37,20 +42,30 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
     if (applied || pending || !offer.active) return;
     setPending(true);
     try {
-      let cvUrl: string | undefined;
-      try {
-        const profile = (await getProfile()) as { cv_url?: string | null };
-        cvUrl = profile?.cv_url || undefined;
-      } catch {
-        cvUrl = undefined;
+      const [profile, user] = await Promise.all([getProfile(), getMe()]);
+      const readiness = getApplicationProfileReadiness(profile, user);
+      if (!readiness.complete) {
+        setMissingProfileFields(readiness.missing);
+        return;
       }
-      await api.post("/applications", { opportunity_id: offer.id, cv_url: cvUrl });
+      await api.post("/applications", { opportunity_id: offer.id, cv_url: profile.cv_url || undefined });
       onApplied(offer.id);
       toast("Application submitted", { description: `${offer.title} at ${offer.company}`, variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["my-applications"] });
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: unknown } }; message?: string };
       const detail = err?.response?.data?.detail;
+      if (
+        detail &&
+        typeof detail === "object" &&
+        "code" in detail &&
+        detail.code === "PROFILE_INCOMPLETE" &&
+        "missing_fields" in detail &&
+        Array.isArray(detail.missing_fields)
+      ) {
+        setMissingProfileFields(detail.missing_fields.filter((field): field is string => typeof field === "string"));
+        return;
+      }
       const msg = Array.isArray(detail)
         ? detail.map((x: { msg?: string }) => x.msg).join("; ")
         : typeof detail === "string"
@@ -179,6 +194,32 @@ export function JobDetails({ rec, applied, onApplied }: JobDetailsProps) {
           </>
         )}
       </section>
+
+      <Dialog
+        open={missingProfileFields.length > 0}
+        onClose={() => setMissingProfileFields([])}
+        title="Complete your profile to apply"
+        description="Add the required information before applying for this job. A complete profile helps employers evaluate your application."
+        size="md"
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setMissingProfileFields([])}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => router.push(`/dashboard/profile?returnTo=${encodeURIComponent(`/dashboard/recommendations?offer=${offer.id}`)}`)}
+            >
+              Complete my profile
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm font-medium text-foreground">Still required:</p>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-foreground-secondary">
+          {missingProfileFields.map((field) => <li key={field}>{field}</li>)}
+        </ul>
+      </Dialog>
     </div>
   );
 }

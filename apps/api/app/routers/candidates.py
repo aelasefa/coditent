@@ -42,6 +42,7 @@ from app.services.cv_parser import (
 )
 from app.services.cv_storage import (
     CVStorageError,
+    CVStorageNotFoundError,
     delete_cv,
     download_cv,
     upload_cv,
@@ -449,8 +450,13 @@ async def download_candidate_cv(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV uploaded")
     try:
         data = await asyncio.to_thread(download_cv, asset.storage_path)
-    except CVStorageError as exc:
+    except CVStorageNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV not found") from exc
+    except CVStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV storage temporarily unavailable",
+        ) from exc
     disposition = "inline" if preview and asset.content_type == "application/pdf" else "attachment"
     return StreamingResponse(
         iter([data]),
@@ -513,10 +519,18 @@ async def parse_candidate_cv(
         )
     try:
         data = await asyncio.to_thread(download_cv, asset.storage_path)
-    except CVStorageError as exc:
+    except CVStorageNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "CV_FILE_READ_ERROR", "message": "CV not found"},
+        ) from exc
+    except CVStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "CV_STORAGE_UNAVAILABLE",
+                "message": "CV storage temporarily unavailable",
+            },
         ) from exc
 
     filename = asset.original_filename
