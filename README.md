@@ -121,10 +121,13 @@ Create the root environment file:
 cp .env.example .env
 ```
 
-Fill every required value, then start the complete stack:
+Add the application credentials to Vault as described in
+[`docs/security/vault.md`](docs/security/vault.md), create the limited AppRole,
+and put only its credentials plus nonsecret/public configuration in `.env`.
+Start Vault first and then the full stack with:
 
 ```bash
-docker compose up --build
+./scripts/run_project.sh
 ```
 
 Local endpoints:
@@ -199,7 +202,7 @@ flowchart TD
     WS --> Browser
     Routers --> Resend[Resend email - OTP + invites only - services/email.py]
     API --> Metrics[GET /metrics Prometheus + structlog]
-    API --> Vault[HashiCorp Vault - startup secret sync - best-effort]
+    API --> Vault[HashiCorp Vault - required startup secret source]
 ```
 
 Request lifecycle:
@@ -235,7 +238,7 @@ CODITENT/
 │   │   │   ├── dependencies.py # get_current_user + require_* gates + pagination
 │   │   │   ├── core/permissions.py  # VALID_COMPANY_ROLES + PERMISSIONS matrix + can()
 │   │   │   ├── core/audit.py   # log_audit() → admin_activity_logs
-│   │   │   ├── core/vault.py   # Vault client (startup sync, best-effort)
+│   │   │   ├── core/vault.py   # Required Vault KV v2 startup client
 │   │   │   ├── utils/jwt.py    # create/verify HS256 tokens, 60-min default
 │   │   │   ├── utils/sanitizer.py   # input text sanitization for validators
 │   │   │   ├── routers/        # 12 routers (89 route decorators)
@@ -277,7 +280,7 @@ CODITENT/
 | `apps/web/src/app/` | Route groups + pages | User-facing screens per role | Calls `lib/api.ts` helpers |
 | `apps/web/src/components/` | Reusable UI (incl. `ui/avatar.tsx`, `company/CompanyLogoSection.tsx`) | Consistent design system | Pages |
 | `apps/web/src/lib/` | API client, auth, types, permissions mirror | Single frontend↔backend contract | All pages/components |
-| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `docker compose up --build`; push-to-main deploys |
+| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `./scripts/run_project.sh`; push-to-main deploys |
 
 ---
 
@@ -351,7 +354,7 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 - **Services** (`services/`): `ai.py` (ranking + single-match), `screening.py`, `cv_parser.py`, `cv_extraction.py`, `cv_storage.py` (bucket `candidate-cvs`), `company_logo.py` (bucket `company-logos`), `email.py` + `email_verification.py` (Resend via `urllib`), `oauth_service.py`, `recruitment_chat.py` (rules), `recommendation_jobs.py` (cache key + fallback + generation), `match_scoring.py` (per-offer lifecycle), `admin_seed.py`.
 - **Background:** Celery `coditent` app, JSON only (`tasks.py:15-20`) — 3 tasks: `recommendations.generate`, `recommendations.score_single`, `applications.screen`. Each builds a fresh event loop + `engine.dispose()` first (fork-pool loop-binding fix, `tasks.py:40-51`). No beat/scheduler — no periodic jobs; expiry is lazy everywhere.
 - **Realtime:** WS ` /chat/recruitment/{application_id}/ws?token=JWT` (`routers/chat.py:469`), in-memory fan-out (single replica; code comment flags Redis pub/sub need).
-- **Observability:** `structlog` loggers, Prometheus `/metrics` (`main.py:79-81`, `observability.py`), `/protected` auth probe, Vault best-effort secret sync on startup (`main.py:59-70`).
+- **Observability:** `structlog` loggers, Prometheus `/metrics` (`main.py:79-81`, `observability.py`), `/protected` auth probe. Vault must be available at startup; API, worker, and dispatcher authenticate with the limited read-only AppRole.
 
 ---
 
@@ -846,9 +849,10 @@ Docker + Compose, Node 22+, Python 3.12, Supabase project, Gemini key, Resend ke
 
 ```bash
 git clone <repo> && cd coditent
-cp .env.example .env && cp apps/api/.env.example apps/api/.env && cp apps/web/.env.example apps/web/.env.local
-# fill real values (DATABASE_URL Supabase + keys)
-docker compose up --build
+test -f .env || cp .env.example .env
+# Initialize/unseal Vault, add app secrets, create the limited AppRole,
+# and start the full stack as documented in docs/security/vault.md.
+./scripts/run_project.sh
 ```
 
 Only commands that work with this repo are shown; there is no `db` service and no seed script (dev data via API: `POST /auth/register`, invitation flows, `POST /offers`).
@@ -966,7 +970,7 @@ Recruitment WS (`ready/message/error`, 4401/4403/4404, in-memory fan-out) + 3 s 
 
 ### Security features — Implemented
 
-bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require_*` + `can()` + 404-isolation, invite token hashing + single-use + expiry + email-match + rotation, OTP hashing/attempts/cooldown/rollback, CV/logo ownership + type/size/magic-bytes validation, chat receiver derivation + per-message re-auth, input sanitization validators, CORS allowlist, env-only secrets.
+bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require_*` + `can()` + 404-isolation, invite token hashing + single-use + expiry + email-match + rotation, OTP hashing/attempts/cooldown/rollback, CV/logo ownership + type/size/magic-bytes validation, chat receiver derivation + per-message re-auth, input sanitization validators, CORS allowlist, Vault-only backend application secrets.
 
 ---
 
@@ -1020,7 +1024,7 @@ User and organization deletion are implemented as retention-safe logical deactiv
 - **Input validation:** Pydantic 422s, `sanitize_input_text` on profile/offer text, UUID parsing, 2000-char chat caps, 5 MB CV / 2 MB logo caps, extension + MIME + magic-bytes checks.
 - **CORS:** explicit origins + credentials (`main.py:29-41`); prod mixed-content avoided via `/api-proxy`.
 - **SQL injection:** SQLAlchemy ORM + bound params throughout (no string-built SQL found in routers).
-- **Secrets:** env-only (`config.py`), `.env` gitignored, service-role key backend-only, Vault best-effort sync; docs use placeholders.
+- **Secrets:** application credentials are loaded from Vault KV v2 at startup; Compose does not pass `.env` into backend containers, and Vault outages or missing credentials stop startup. `.env` contains limited Vault AppRole credentials and nonsecret/public settings.
 - **File validation:** CV (pdf/docx + magic + 5 MB) and logo (png/jpg/webp + magic + 2 MB) both sides; randomized unique paths; path-only DB storage; scoped streams.
 - **Invitation security:** token hashing + UNIQUE + single-use + expiry (7 d / 72 h) + email-match + resend rotation + lazy-expiry.
 - **WS authorization:** JWT from query + full viewer re-check + per-message re-auth; close codes 4401/4403/4404.
