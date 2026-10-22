@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getMe, getRecruitmentChat, getRecruitmentMessagesPage, markRecruitmentMessagesRead, sendRecruitmentMessage } from "@/lib/api";
 import type { ChatMessage, RecruitmentChatContext } from "@/lib/types";
@@ -15,6 +15,7 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
   const qc = useQueryClient();
   const { toast } = useToast();
   const markingReadRef = useRef(false);
+  const [pendingSendCount, setPendingSendCount] = useState(0);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
 
   const handleRealtimeMessage = useCallback((message: ChatMessage) => {
@@ -40,7 +41,7 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
     onMessage: handleRealtimeMessage,
     onMessagesRead: handleMessagesRead,
     onReady: () => {
-      void qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      if (pendingSendCount === 0) void qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
       void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
   });
@@ -48,7 +49,9 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
   const chatQuery = useQuery({
     queryKey: ["recruitment-chat", applicationId],
     queryFn: () => getRecruitmentChat(applicationId),
-    refetchInterval: recruitmentLive ? false : 3000,
+    refetchInterval: recruitmentLive || pendingSendCount > 0 ? false : 3000,
+    refetchOnReconnect: !recruitmentLive && pendingSendCount === 0,
+    refetchOnWindowFocus: !recruitmentLive && pendingSendCount === 0,
     retry: false,
   });
   const ctx = chatQuery.data;
@@ -100,7 +103,9 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
     // Persist outgoing messages over HTTP. The socket remains responsible for
     // incoming live updates, while the optimistic bubble keeps sending instant.
     mutationFn: ({ text }: { text: string; clientMessageId: string }) => sendRecruitmentMessage(applicationId, text),
-    onMutate: ({ text, clientMessageId }) => {
+    onMutate: async ({ text, clientMessageId }) => {
+      setPendingSendCount((count) => count + 1);
+      await qc.cancelQueries({ queryKey: ["recruitment-chat", applicationId], exact: true });
       const optimistic = createOptimisticMessage({
         applicationId,
         clientMessageId,
@@ -135,6 +140,7 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
       }
       toast("Message failed to send", { description: "Retry from the message bubble.", variant: "error" });
     },
+    onSettled: () => setPendingSendCount((count) => Math.max(0, count - 1)),
   });
 
   const retryMessage = (message: ChatMessage) => {

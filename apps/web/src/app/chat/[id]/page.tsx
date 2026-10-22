@@ -1,9 +1,9 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { getConversationPage, getMe, markFriendMessagesRead, sendMessage, type ChatMessagePage } from "@/lib/api";
-import type { ChatMessage, FriendChatContext } from "@/lib/types";
+import type { ChatMessage, ConversationSummary, FriendChatContext } from "@/lib/types";
 import { ChatWorkspace } from "@/components/candidate/chat-workspace";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
@@ -11,6 +11,7 @@ import { ChatHeader, Composer, MessageList } from "@/components/candidate/chat-v
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useFriendChatSocket } from "@/hooks/use-friend-chat-socket";
 import { confirmOptimisticMessage, createOptimisticMessage, markOptimisticMessageFailed, retryOptimisticMessage } from "@/lib/optimistic-chat";
+import { clearConversationUnread } from "@/lib/friend-ui";
 
 type FriendChatPage = ChatMessagePage & Pick<FriendChatContext, "peer" | "can_message" | "relationship_state" | "conversation_type">;
 
@@ -18,6 +19,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
   const qc = useQueryClient();
   const { toast } = useToast();
   const markingReadRef = useRef(false);
+  const [pendingSendCount, setPendingSendCount] = useState(0);
   const { id } = use(params);
   const meQuery = useQuery({ queryKey: ["me"], queryFn: getMe });
 
@@ -26,6 +28,12 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
       ...previous,
       pages: previous.pages.map(updater),
     } : previous);
+  }, [id, qc]);
+
+  const clearUnreadBadge = useCallback(() => {
+    qc.setQueryData<ConversationSummary[]>(["conversation-inbox"], (previous) => (
+      clearConversationUnread(previous, `/chat/${id}`)
+    ));
   }, [id, qc]);
 
   const handleRealtimeMessage = useCallback((message: ChatMessage, clientMessageId?: string) => {
@@ -65,7 +73,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
     onMessagesRead: handleMessagesRead,
     onRevoked: handleRevoked,
     onReady: () => {
-      void qc.invalidateQueries({ queryKey: ["chat", id] });
+      if (pendingSendCount === 0) void qc.invalidateQueries({ queryKey: ["chat", id] });
       void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
   });
@@ -75,7 +83,9 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => getConversationPage(id, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
-    refetchInterval: live ? false : 3000,
+    refetchInterval: live || pendingSendCount > 0 ? false : 3000,
+    refetchOnReconnect: !live && pendingSendCount === 0,
+    refetchOnWindowFocus: !live && pendingSendCount === 0,
     retry: false,
   });
 
@@ -90,12 +100,15 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     const markVisibleMessagesRead = async () => {
-      if (!context?.can_message || !unreadIncomingKey || document.visibilityState !== "visible" || !document.hasFocus() || markingReadRef.current) return;
+      if (!context?.can_message || !unreadIncomingKey || document.visibilityState !== "visible" || markingReadRef.current) return;
       markingReadRef.current = true;
+      clearUnreadBadge();
       try {
         if (markRealtimeMessagesRead()) return;
         const receipt = await markFriendMessagesRead(id);
         if (receipt.read_at) handleMessagesRead(receipt.message_ids, receipt.read_at);
+      } catch {
+        void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
       } finally {
         markingReadRef.current = false;
       }
@@ -108,14 +121,16 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
       window.removeEventListener("focus", onVisibilityChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [context?.can_message, handleMessagesRead, id, markRealtimeMessagesRead, unreadIncomingKey]);
+  }, [clearUnreadBadge, context?.can_message, handleMessagesRead, id, markRealtimeMessagesRead, qc, unreadIncomingKey]);
 
   const sendMut = useMutation({
     mutationFn: async ({ text, clientMessageId }: { text: string; clientMessageId: string }) => {
       const realtime = context?.can_message ? sendRealtimeMessage(text, clientMessageId) : null;
       return realtime ?? sendMessage(id, text);
     },
-    onMutate: ({ text, clientMessageId }) => {
+    onMutate: async ({ text, clientMessageId }) => {
+      setPendingSendCount((count) => count + 1);
+      await qc.cancelQueries({ queryKey: ["chat", id], exact: true });
       const optimistic = createOptimisticMessage({
         clientMessageId,
         content: text,
@@ -159,6 +174,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ id: string 
       }
       toast("Message failed to send", { description: "Retry from the message bubble.", variant: "error" });
     },
+    onSettled: () => setPendingSendCount((count) => Math.max(0, count - 1)),
   });
 
   const retryMessage = (message: ChatMessage) => {

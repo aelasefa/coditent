@@ -102,7 +102,7 @@ function ChatInbox({ activeHref }: { activeHref?: string }) {
                     <span className={styles.rowTop}><strong>{item.name}</strong><time dateTime={item.date ?? undefined} suppressHydrationWarning>{dateLabel(item.date)}</time></span>
                     <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-primary">
                       {item.badge}
-                      {item.unreadCount > 0 ? <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground" aria-label={`${item.unreadCount} unread messages`}>{item.unreadCount}</span> : null}
+                      {item.unreadCount > 0 && activeHref !== item.href ? <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground" aria-label={`${item.unreadCount} unread messages`}>{item.unreadCount}</span> : null}
                     </span>
                     <span className={styles.rowContext}>{item.context}</span>
                     <span className={styles.rowDetail}>{item.detail}{item.stage ? ` · ${stageLabel(item.stage)}` : ""}</span>
