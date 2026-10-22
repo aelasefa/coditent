@@ -50,6 +50,16 @@ export function mapCombinedInbox(items: ConversationSummary[]): InboxItem[] {
   })).sort((left, right) => dateValue(right.date) - dateValue(left.date));
 }
 
+export function clearConversationUnread(
+  items: ConversationSummary[] | undefined,
+  href: string,
+): ConversationSummary[] | undefined {
+  if (!items) return items;
+  return items.map((item) => item.href === href && item.unread_count > 0
+    ? { ...item, unread_count: 0 }
+    : item);
+}
+
 export function filterInbox(items: InboxItem[], filter: InboxFilter, search: string): InboxItem[] {
   const term = search.trim().toLocaleLowerCase();
   return items.filter((item) => {

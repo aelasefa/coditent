@@ -250,7 +250,7 @@ export interface ChatMessage {
   sender?: User;
   application_id?: string | null;
   /** Client-only state used while an optimistic message is being confirmed. */
-  delivery_status?: "sending";
+  delivery_status?: "sending" | "failed";
 }
 
 export interface CandidateSnapshot {

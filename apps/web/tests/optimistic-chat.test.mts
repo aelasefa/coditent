@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { confirmOptimisticMessage, removeOptimisticMessage } from "../src/lib/optimistic-chat.ts";
+import { confirmOptimisticMessage, markOptimisticMessageFailed, retryOptimisticMessage } from "../src/lib/optimistic-chat.ts";
 import type { ChatMessage } from "../src/lib/types.ts";
 
 const optimistic: ChatMessage = {
@@ -28,6 +28,13 @@ test("confirmation does not duplicate a message delivered over the socket first"
   assert.deepEqual(confirmOptimisticMessage([optimistic, confirmed], optimistic.id, confirmed), [confirmed]);
 });
 
-test("failed sends remove their optimistic placeholder", () => {
-  assert.deepEqual(removeOptimisticMessage([optimistic], optimistic.id), []);
+test("failed sends remain visible and can return to sending for retry", () => {
+  const failed = { ...optimistic, delivery_status: "failed" as const };
+  assert.deepEqual(markOptimisticMessageFailed([optimistic], optimistic.id), [failed]);
+  assert.deepEqual(retryOptimisticMessage([failed], optimistic.id), [optimistic]);
+});
+
+test("confirmation preserves the optimistic message position", () => {
+  const newer = { ...confirmed, id: "confirmed-two", content: "Later" };
+  assert.deepEqual(confirmOptimisticMessage([optimistic, newer], optimistic.id, confirmed), [confirmed, newer]);
 });

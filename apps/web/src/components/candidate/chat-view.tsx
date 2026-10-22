@@ -25,9 +25,11 @@ function timeLabel(iso: string): string {
 export function MessageList({
   messages,
   myId,
+  onRetry,
 }: {
   messages: ChatMessage[];
   myId?: string;
+  onRetry?: (message: ChatMessage) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -45,7 +47,7 @@ export function MessageList({
   let lastSender = "";
   let latestOutgoingIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (myId && messages[index].sender_id === myId) {
+    if (messages[index].delivery_status || (myId && messages[index].sender_id === myId)) {
       latestOutgoingIndex = index;
       break;
     }
@@ -55,12 +57,15 @@ export function MessageList({
       {messages.map((m, index) => {
         const day = dayLabel(m.created_at);
         const showDay = day && day !== lastDay;
-        const mine = m.delivery_status === "sending" || (myId ? m.sender_id === myId : false);
+        const sending = m.delivery_status === "sending";
+        const failed = m.delivery_status === "failed";
+        const mine = sending || failed || (myId ? m.sender_id === myId : false);
         const grouped = !showDay && lastSender === m.sender_id;
+        const showDeliveryState = mine && (sending || failed || index === latestOutgoingIndex);
         lastDay = day;
         lastSender = m.sender_id;
         return (
-          <div key={m.id}>
+          <div key={m.id} className={sending ? styles.optimisticMessage : undefined}>
             {showDay ? (
               <p suppressHydrationWarning className="py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{day}</p>
             ) : null}
@@ -69,7 +74,8 @@ export function MessageList({
                 <div
                   className={cn(
                     "w-fit rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                    mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground"
+                    mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground",
+                    failed && "opacity-80 ring-1 ring-danger/40",
                   )}
                 >
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.content}</p>
@@ -77,13 +83,18 @@ export function MessageList({
                     {timeLabel(m.created_at)}
                   </p>
                 </div>
-                {mine && index === latestOutgoingIndex ? (
-                  <p
-                    className="mt-1 pr-1 text-[10px] font-medium leading-none text-muted-foreground"
-                    aria-label={m.delivery_status === "sending" ? "Message sending" : m.read_at ? "Message seen" : "Message sent"}
+                {showDeliveryState ? (
+                  <div
+                    className={cn("mt-1 flex items-center gap-1.5 pr-1 text-[10px] font-medium leading-none", failed ? "text-danger" : "text-muted-foreground")}
+                    aria-label={sending ? "Message sending" : failed ? "Message failed to send" : m.read_at ? "Message seen" : "Message sent"}
                   >
-                    {m.delivery_status === "sending" ? "Sending…" : m.read_at ? "Seen" : "✓ Sent"}
-                  </p>
+                    <span>{sending ? "Sending…" : failed ? "Not sent" : m.read_at ? "Seen" : "✓ Sent"}</span>
+                    {failed && onRetry ? (
+                      <button type="button" className="font-bold underline underline-offset-2" onClick={() => onRetry(m)}>
+                        Retry
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>

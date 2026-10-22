@@ -28,7 +28,7 @@ export function useFriendChatSocket({
   onReady,
 }: {
   peerId: string;
-  onMessage: (message: ChatMessage) => void;
+  onMessage: (message: ChatMessage, clientMessageId?: string) => void;
   onMessagesRead: (messageIds: string[], readAt: string) => void;
   onRevoked: () => void;
   onReady?: () => void;
@@ -58,8 +58,7 @@ export function useFriendChatSocket({
     }
   }, []);
 
-  const sendMessage = useCallback((content: string): Promise<ChatMessage> | null => {
-    const clientMessageId = crypto.randomUUID();
+  const sendMessage = useCallback((content: string, clientMessageId = crypto.randomUUID()): Promise<ChatMessage> | null => {
     if (!sendFrame({ type: "message_send", content, client_message_id: clientMessageId })) return null;
     return new Promise<ChatMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -106,7 +105,7 @@ export function useFriendChatSocket({
             } else if (payload.type === "message" && payload.message) {
               handlers.current.onMessage(payload.message);
             } else if (payload.type === "message_ack" && payload.message && payload.client_message_id) {
-              handlers.current.onMessage(payload.message);
+              handlers.current.onMessage(payload.message, payload.client_message_id);
               const pending = pendingRef.current.get(payload.client_message_id);
               if (pending) {
                 clearTimeout(pending.timer);
