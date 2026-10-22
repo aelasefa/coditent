@@ -7,8 +7,8 @@ from cryptography.fernet import Fernet
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
-    BaseSettingsSource,
     EnvSettingsSource,
+    PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
 
@@ -16,10 +16,8 @@ from pydantic_settings import (
 class VaultSettingsSource(EnvSettingsSource):
     """Pydantic settings source that pulls secrets from HashiCorp Vault KV v2.
 
-    Priority chain per field:
-      1. Vault KV store  (preloaded cache via ``vault_client.read_secrets()``)
-      2. Process environment variable / ``.env`` file  (parent EnvSettingsSource)
-      3. Field default / default_factory
+    Secret fields are populated only from the Vault cache. Nonsecret runtime
+    configuration continues to come from environment variables and defaults.
     """
 
     def __call__(self) -> dict[str, Any]:
@@ -28,8 +26,7 @@ class VaultSettingsSource(EnvSettingsSource):
 
         vault_secrets = vault_client.read_secrets()
 
-        # Let the parent handle the env-file and process-env layer first.
-        data: dict[str, Any] = super().__call__()
+        data: dict[str, Any] = {}
 
         # For every Settings field, check if Vault has a value under the
         # field name or any of its declared env-var aliases.
@@ -48,11 +45,42 @@ class VaultSettingsSource(EnvSettingsSource):
 
             for candidate in candidates:
                 if candidate in vault_secrets:
-                    # Vault wins — override whatever env/default gave us.
-                    data[field_name] = vault_secrets[candidate]
+                    # Use the alias when the field has one; pydantic only
+                    # accepts aliased fields under their alias names.
+                    key = candidate if field_info.validation_alias is not None else field_name
+                    data[key] = vault_secrets[candidate]
                     break
 
         return data
+
+
+_VAULT_ONLY_FIELDS = {
+    "database_url",
+    "supabase_url",
+    "supabase_service_key",
+    "google_client_id",
+    "google_client_secret",
+    "linkedin_client_id",
+    "linkedin_client_secret",
+    "secret_key",
+    "gemini_api_key",
+    "resend_api_key",
+    "email_outbox_encryption_key",
+    "totp_encryption_key",
+}
+
+
+def _remove_vault_only_values(source: PydanticBaseSettingsSource) -> None:
+    """Prevent .env and container environment values overriding Vault keys."""
+    values = getattr(source, "env_vars", None)
+    if not isinstance(values, dict):
+        return
+    blocked = {name.upper() for name in _VAULT_ONLY_FIELDS}
+    blocked.update({"JWT_SECRET", "SECRET_KEY"})
+    blocked.update(name.upper() for name in _VAULT_ONLY_FIELDS)
+    for key in tuple(values):
+        if key.upper() in blocked:
+            values.pop(key, None)
 
 
 class Settings(BaseSettings):
@@ -241,18 +269,19 @@ class Settings(BaseSettings):
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
-        init_settings: BaseSettingsSource,
-        env_settings: BaseSettingsSource,
-        dotenv_settings: BaseSettingsSource,
-        secrets_dir_settings: BaseSettingsSource,
-    ) -> tuple[BaseSettingsSource, ...]:
-        """Put Vault ahead of env and dotenv so Vault always wins for secrets."""
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Load credentials from Vault; keep environment for nonsecret config."""
+        _remove_vault_only_values(env_settings)
+        _remove_vault_only_values(dotenv_settings)
         return (
             init_settings,
             VaultSettingsSource(settings_cls),
             env_settings,
             dotenv_settings,
-            secrets_dir_settings,
         )
 
 

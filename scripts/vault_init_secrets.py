@@ -12,8 +12,8 @@ Requirements
 ------------
 - Vault must be running and reachable at ``VAULT_ADDR``.
 - ``VAULT_TOKEN`` must have write permission on ``secret/data/coditent``.
-- Both ``VAULT_ADDR`` and ``VAULT_TOKEN`` must be present in the env file
-  (or already in the process environment).
+- Supply ``VAULT_TOKEN`` as a temporary process environment variable; do not
+  save an administrator token in the application's ``.env`` file.
 - ``pip install httpx python-dotenv`` (already in requirements.txt).
 """
 
@@ -36,11 +36,14 @@ except ImportError:
     print("ERROR: httpx is required.  Run: pip install httpx")
     sys.exit(1)
 
-# ── Keys that are NOT secrets and should remain in .env only ──────────────────
-# These configure infrastructure topology, not application secrets.
+# ── Keys that must never be copied into the application secret document ──────
 NON_SECRET_KEYS: set[str] = {
     "VAULT_ADDR",
     "VAULT_TOKEN",
+    "VAULT_ROLE_ID",
+    "VAULT_SECRET_ID",
+    "VAULT_DEV_ROOT_TOKEN_ID",
+    "DEV_ROOT_TOKEN_ID",
     "REDIS_URL",
     "FRONTEND_URL",
     "NEXT_PUBLIC_API_URL",
@@ -83,7 +86,6 @@ SECRET_KEYS: set[str] = {
     "RESEND_API_KEY",
     "TOTP_ENCRYPTION_KEY",
     "EMAIL_OUTBOX_ENCRYPTION_KEY",
-    "VAULT_DEV_ROOT_TOKEN_ID",
 }
 
 
@@ -141,6 +143,10 @@ def main() -> None:
         action="store_true",
         help="Print what would be written without touching Vault",
     )
+    parser.add_argument(
+        "--token-file",
+        help="Read the temporary Vault write token from a local file",
+    )
     args = parser.parse_args()
 
     env_path = Path(args.env_file)
@@ -150,8 +156,19 @@ def main() -> None:
 
     raw: dict[str, str | None] = dotenv_values(env_path)
 
-    vault_addr = raw.get("VAULT_ADDR") or os.getenv("VAULT_ADDR", "")
-    vault_token = raw.get("VAULT_TOKEN") or os.getenv("VAULT_TOKEN", "")
+    vault_addr = os.getenv("VAULT_ADDR") or raw.get("VAULT_ADDR") or ""
+    vault_token = ""
+    if args.token_file:
+        token_file = Path(args.token_file)
+        if not token_file.exists():
+            print(f"ERROR: token file not found: {token_file}")
+            sys.exit(1)
+        if token_file.stat().st_mode & 0o077:
+            print("ERROR: token file permissions must be 0600 or stricter.")
+            sys.exit(1)
+        vault_token = token_file.read_text(encoding="utf-8").strip()
+    else:
+        vault_token = os.getenv("VAULT_TOKEN") or raw.get("VAULT_TOKEN") or ""
 
     if not vault_addr:
         print("ERROR: VAULT_ADDR is not set in env file or environment.")
@@ -175,10 +192,9 @@ def main() -> None:
 
     print(f"\n📋 Env file: {env_path.resolve()}")
     print(f"🏦 Vault:    {vault_addr}/v1/{args.mount}/data/{args.path}")
-    print(f"\n✅  Secrets to upload ({len(secrets)}):")
+    print(f"\n✅  Secret names to upload ({len(secrets)}):")
     for k in sorted(secrets.keys()):
-        masked = secrets[k][:4] + "***" if len(secrets[k]) > 4 else "***"
-        print(f"   {k:<40} {masked}")
+        print(f"   {k}")
     print(f"\n⏭️  Skipped — stay in .env ({len(skipped)}):")
     for k in sorted(skipped):
         print(f"   {k}")
@@ -201,8 +217,9 @@ def main() -> None:
 
     if not args.dry_run:
         print(
-            "\n💡 You can now remove the secrets listed above from your .env file.\n"
-            "   Keep only VAULT_ADDR and VAULT_TOKEN (and any non-secret config)."
+            "\nSecrets are now in Vault. Remove their values from .env after "
+            "verifying the Vault copy and configuring the limited AppRole "
+            "credentials used by the application."
         )
 
 

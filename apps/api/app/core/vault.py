@@ -1,15 +1,15 @@
 """HashiCorp Vault KV v2 client for CODITENT.
 
 All application secrets are stored in Vault at ``secret/data/coditent``.
-The client is intentionally fail-open: if Vault is unreachable the caller
-falls back to the process environment so local development and CI work
-without a running Vault server.
+Backend containers authenticate with a narrowly scoped AppRole. When Vault
+is required, startup fails closed instead of falling back to environment
+variables.
 
 Usage
 -----
 from app.core.vault import vault_client
 
-# Returns the secret from Vault, or falls back to os.environ, or ``default``.
+# Returns the secret from Vault, or ``default``.
 value = vault_client.get_secret("SOME_KEY", default="fallback")
 
 # Eagerly preloads all secrets once and caches them for the process lifetime.
@@ -40,10 +40,17 @@ class VaultClient:
 
     def __init__(self) -> None:
         self.vault_addr: str = os.getenv("VAULT_ADDR", "").strip().rstrip("/")
-        self.vault_token: str = os.getenv("VAULT_TOKEN", "").strip()
+        self.role_id: str = os.getenv("VAULT_ROLE_ID", "").strip()
+        self.secret_id: str = os.getenv("VAULT_SECRET_ID", "").strip()
+        self.vault_token: str = ""
         self.mount_point: str = "secret"
         self.secret_path: str = "coditent"
-        self.enabled: bool = bool(self.vault_addr and self.vault_token)
+        self.required: bool = os.getenv("VAULT_REQUIRED", "false").lower() in {
+            "1", "true", "yes",
+        }
+        self.enabled: bool = bool(
+            self.vault_addr and self.role_id and self.secret_id
+        )
         # Populated on first preload(); None means "not yet loaded".
         self._cache: dict[str, Any] | None = None
 
@@ -59,6 +66,17 @@ class VaultClient:
 
     def _kv_url(self) -> str:
         return f"{self.vault_addr}/v1/{self.mount_point}/data/{self.secret_path}"
+
+    def _login(self, client: httpx.Client) -> None:
+        """Exchange AppRole credentials for a short-lived Vault token."""
+        if self.vault_token:
+            return
+        response = client.post(
+            f"{self.vault_addr}/v1/auth/approle/login",
+            json={"role_id": self.role_id, "secret_id": self.secret_id},
+        )
+        response.raise_for_status()
+        self.vault_token = response.json()["auth"]["client_token"]
 
     # ------------------------------------------------------------------
     # Public API
@@ -91,15 +109,18 @@ class VaultClient:
             return  # already loaded
 
         if not self.enabled:
-            logger.info(
-                "vault_disabled: VAULT_ADDR/VAULT_TOKEN not set — "
-                "falling back to environment variables"
-            )
+            if self.required:
+                raise RuntimeError(
+                    "Vault is required: set VAULT_ADDR, VAULT_ROLE_ID, "
+                    "and VAULT_SECRET_ID"
+                )
+            logger.info("vault_disabled")
             self._cache = {}
             return
 
         try:
             with httpx.Client(timeout=_VAULT_HTTP_TIMEOUT) as client:
+                self._login(client)
                 resp = client.get(self._kv_url(), headers=self._headers())
             if resp.status_code == 200:
                 data: dict[str, Any] = (
@@ -115,12 +136,18 @@ class VaultClient:
                     "vault_read_failed",
                     extra={"status": resp.status_code},
                 )
+                if self.required:
+                    raise RuntimeError(
+                        f"Vault secret read failed (HTTP {resp.status_code})"
+                    )
                 self._cache = {}
         except Exception as exc:
             logger.error(
                 "vault_unreachable",
                 extra={"exception_type": type(exc).__name__},
             )
+            if self.required:
+                raise RuntimeError("Vault is required but unavailable") from exc
             self._cache = {}
 
     def read_secrets(self) -> dict[str, Any]:
@@ -130,19 +157,15 @@ class VaultClient:
         return self._cache or {}
 
     def get_secret(self, key: str, default: str | None = None) -> str | None:
-        """Return *key* from Vault cache, then env, then *default*.
+        """Return *key* from Vault cache, then *default*.
 
         Priority order:
         1. Vault KV store (preloaded cache)
-        2. Process environment variable
-        3. *default* argument
+        2. *default* argument
         """
         secrets = self.read_secrets()
         if key in secrets:
             return secrets[key]
-        env_val = os.getenv(key)
-        if env_val is not None:
-            return env_val
         return default
 
     def write_secrets(self, data: dict[str, Any]) -> bool:
@@ -152,7 +175,7 @@ class VaultClient:
         ``scripts/vault_init_secrets.py`` setup helper — not called at
         runtime by the application itself.
         """
-        if not self.enabled:
+        if not self.vault_addr or not self.vault_token:
             logger.error("vault_write_failed: Vault is not enabled")
             return False
         try:
