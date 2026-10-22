@@ -211,3 +211,7 @@ services:
       interval: 10s
       timeout: 15s
       retries: 10
+
+networks:
+  default:
+    name: coditent_network

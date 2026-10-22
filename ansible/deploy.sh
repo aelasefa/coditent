@@ -45,6 +45,10 @@ case "$COMMAND" in
         echo "--> Restarting application containers on [$ENVIRONMENT]..."
         ansible-playbook -i "$INVENTORY" playbooks/restart.yml --limit "$ENVIRONMENT" "${@:3}"
         ;;
+    monitoring)
+        echo "--> Deploying monitoring stack on [$ENVIRONMENT]..."
+        ansible-playbook -i "$INVENTORY" playbooks/monitoring.yml --limit "$ENVIRONMENT" "${@:3}"
+        ;;
     rollback)
         echo "--> Running rollback playbook on [$ENVIRONMENT]..."
         ansible-playbook -i "$INVENTORY" playbooks/rollback.yml --limit "$ENVIRONMENT" "${@:3}"
@@ -53,6 +57,7 @@ case "$COMMAND" in
         echo "--> Checking playbook syntax..."
         ansible-playbook -i "$INVENTORY" playbooks/setup.yml --syntax-check
         ansible-playbook -i "$INVENTORY" playbooks/deploy.yml --syntax-check
+        ansible-playbook -i "$INVENTORY" playbooks/monitoring.yml --syntax-check
         ansible-playbook -i "$INVENTORY" playbooks/rollback.yml --syntax-check
         ansible-playbook -i "$INVENTORY" playbooks/restart.yml --syntax-check
         echo "All playbooks passed syntax check!"

@@ -401,6 +401,10 @@
     state: absent
   notify: Reload nginx
 
+- name: Configure Grafana virtual host and certificates
+  ansible.builtin.include_tasks: grafana.yml
+  when: grafana_enabled | default(true)
+
 - name: Test Nginx configuration
   ansible.builtin.command: nginx -t
   changed_when: false

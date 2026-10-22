@@ -1,0 +1,86 @@
+---
+# ============================================================
+# Coditent Monitoring Deployment Tasks (Prometheus + Grafana + Node Exporter)
+# ============================================================
+
+- name: Ensure monitoring directory exists
+  ansible.builtin.file:
+    path: "{{ monitoring_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Sync monitoring configuration to destination host
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../../monitoring/"
+    dest: "{{ monitoring_dir }}/"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+    directory_mode: '0755'
+  when: inventory_hostname not in ['localhost', '127.0.0.1']
+
+- name: Verify monitoring compose file exists
+  ansible.builtin.stat:
+    path: "{{ monitoring_compose_file }}"
+  register: monitoring_compose_stat
+
+- name: Require monitoring compose file
+  ansible.builtin.assert:
+    that:
+      - monitoring_compose_stat.stat.exists
+    fail_msg: "Monitoring compose file not found at {{ monitoring_compose_file }}"
+
+- name: Ensure shared Docker network exists before monitoring launch
+  ansible.builtin.command:
+    cmd: docker network create coditent_network
+  register: docker_net_result
+  failed_when: false
+  changed_when: docker_net_result.rc == 0
+
+- name: Connect API container to shared monitoring network
+  ansible.builtin.command:
+    cmd: docker network connect --alias api coditent_network coditent-api-1
+  register: docker_connect_result
+  failed_when: false
+  changed_when: docker_connect_result.rc == 0
+
+- name: Launch or update monitoring stack with Docker Compose
+  ansible.builtin.command:
+    cmd: docker compose -f {{ monitoring_compose_file }} up -d
+  register: monitoring_up_output
+  changed_when: >-
+    'Started' in ((monitoring_up_output.stderr | default('')) + (monitoring_up_output.stdout | default(''))) or
+    'Recreated' in ((monitoring_up_output.stderr | default('')) + (monitoring_up_output.stdout | default(''))) or
+    'Created' in ((monitoring_up_output.stderr | default('')) + (monitoring_up_output.stdout | default('')))
+
+- name: Wait for Prometheus service health
+  ansible.builtin.uri:
+    url: "{{ prometheus_healthcheck_url }}"
+    method: GET
+    status_code: 200
+  register: prometheus_health
+  until: prometheus_health.status == 200
+  retries: 15
+  delay: 3
+
+- name: Wait for Grafana service health
+  ansible.builtin.uri:
+    url: "{{ grafana_healthcheck_url }}"
+    method: GET
+    status_code: 200
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 15
+  delay: 3
+
+- name: Report monitoring container status
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ monitoring_compose_file }} ps"
+  register: monitoring_ps
+  changed_when: false
+
+- name: Display monitoring container status
+  ansible.builtin.debug:
+    var: monitoring_ps.stdout_lines

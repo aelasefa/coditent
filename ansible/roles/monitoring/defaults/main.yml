@@ -1,0 +1,15 @@
+---
+# ============================================================
+# Coditent Monitoring Stack Defaults
+# ============================================================
+
+monitoring_enabled: true
+monitoring_dir: "{{ app_dir }}/monitoring"
+monitoring_compose_file: "{{ monitoring_dir }}/compose.yml"
+
+prometheus_port: 9090
+grafana_port: 3000
+node_exporter_port: 9100
+
+prometheus_healthcheck_url: "http://127.0.0.1:{{ prometheus_port }}/-/healthy"
+grafana_healthcheck_url: "http://127.0.0.1:{{ grafana_port }}/api/health"

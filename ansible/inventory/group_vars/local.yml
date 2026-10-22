@@ -1,0 +1,13 @@
+---
+# ============================================================
+# Local Development Environment Overrides
+# ============================================================
+
+env_name: local
+ansible_become: false
+app_user: "{{ lookup('env', 'USER') | default('ubuntu') }}"
+app_group: "{{ lookup('env', 'USER') | default('ubuntu') }}"
+app_dir: "{{ playbook_dir }}/../.."
+monitoring_dir: "{{ app_dir }}/monitoring"
+monitoring_compose_file: "{{ monitoring_dir }}/compose.yml"
+nginx_enabled: false
