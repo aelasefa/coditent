@@ -45,6 +45,52 @@ from app.services.recruitment_chat import (
 router = APIRouter()
 
 
+def _missing_application_profile_fields(
+    user: User, profile: CandidateProfile | None
+) -> list[str]:
+    """Return the candidate details required before an application can be sent."""
+    missing: list[str] = []
+
+    if not (user.full_name or "").strip():
+        missing.append("Full name")
+
+    if profile is None:
+        return missing + [
+            "City",
+            "Phone",
+            "Professional title",
+            "Professional summary",
+            "Skills",
+            "Experience or education",
+            "CV",
+        ]
+
+    required_text_fields = (
+        ("city", "City"),
+        ("phone", "Phone"),
+        ("headline", "Professional title"),
+        ("bio", "Professional summary"),
+        ("skills", "Skills"),
+    )
+    for field, label in required_text_fields:
+        value = getattr(profile, field, None)
+        if not value or not str(value).strip():
+            missing.append(label)
+
+    has_experience = profile.years_of_experience is not None
+    has_education = all(
+        value is not None and str(value).strip()
+        for value in (profile.field_of_study, profile.university, profile.study_level)
+    )
+    if not has_experience and not has_education:
+        missing.append("Experience or education")
+
+    if profile.current_cv_asset_id is None:
+        missing.append("CV")
+
+    return missing
+
+
 @router.get("", response_model=dict[str, list[dict]])
 async def list_applications(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -318,12 +364,18 @@ async def download_application_cv(
         raise HTTPException(status_code=404, detail="No CV attached to this application")
     cv_path = cv_asset.storage_path
 
-    from app.services.cv_storage import CVStorageError, download_cv
+    from app.services.cv_storage import (
+        CVStorageError,
+        CVStorageNotFoundError,
+        download_cv,
+    )
 
     try:
         data = await asyncio.to_thread(download_cv, cv_path)
-    except CVStorageError:
+    except CVStorageNotFoundError:
         raise HTTPException(status_code=404, detail="CV not found")
+    except CVStorageError:
+        raise HTTPException(status_code=503, detail="CV storage temporarily unavailable")
 
     await log_audit(
         db,
@@ -367,6 +419,16 @@ async def create_application(
             select(CandidateProfile).where(CandidateProfile.user_id == current_user.id)
         )
     ).scalar_one_or_none()
+    missing_profile_fields = _missing_application_profile_fields(current_user, profile)
+    if missing_profile_fields:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PROFILE_INCOMPLETE",
+                "message": "Please complete your profile before applying for this job.",
+                "missing_fields": missing_profile_fields,
+            },
+        )
     cv_asset: CVAsset | None = None
     if profile is not None and profile.current_cv_asset_id is not None:
         try:

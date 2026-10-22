@@ -484,3 +484,5 @@ def test_frontend_review_and_retry():
     assert "runParse" in page
     assert "Review details from your CV" in page
     assert "getApiError" in page
+    assert "canRetryCVParse ?" in page
+    assert "profileQuery.data?.cv_url" not in page.split("const hasCv", 1)[1].split(";", 1)[0]
