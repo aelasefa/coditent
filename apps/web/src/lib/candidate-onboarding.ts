@@ -12,11 +12,19 @@ export const candidateOnboardingQuery = (userId: string) => ({
 export async function getPostAuthDestination(
   queryClient: QueryClient,
   user: User,
-  options: { next?: string | null; isNewRegistration?: boolean } = {}
+  options: {
+    next?: string | null;
+    isNewRegistration?: boolean;
+    onboardingCompleted?: boolean | null;
+  } = {}
 ): Promise<string> {
   queryClient.setQueryData(["me"], user);
 
   if (user.role === "CANDIDATE") {
+    if (options.onboardingCompleted === false) return "/get-started";
+    if (options.onboardingCompleted === true) {
+      return getAuthenticatedDestination(user, options);
+    }
     try {
       const onboarding = await queryClient.fetchQuery(
         candidateOnboardingQuery(user.id)
