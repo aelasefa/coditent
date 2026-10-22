@@ -249,6 +249,8 @@ export interface ChatMessage {
   read_at?: string | null;
   sender?: User;
   application_id?: string | null;
+  /** Client-only state used while an optimistic message is being confirmed. */
+  delivery_status?: "sending";
 }
 
 export interface CandidateSnapshot {
