@@ -19,6 +19,7 @@ import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 import { recruitmentChatErrorMessage } from "@/lib/recruitment-chat-error";
+import { confirmOptimisticMessage, createOptimisticMessage, removeOptimisticMessage } from "@/lib/optimistic-chat";
 
 export default function RecruitmentChatPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const qc = useQueryClient();
@@ -117,12 +118,41 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       if (realtime) return realtime;
       return sendRecruitmentMessage(applicationId, text);
     },
-    onSuccess: (created) => {
-      handleRealtimeMessage(created);
+    onMutate: (text) => {
+      if (!me?.id || !ctx?.peer?.id) return undefined;
+      const optimistic = createOptimisticMessage({
+        applicationId,
+        content: text,
+        receiverId: ctx.peer.id,
+        senderId: me.id,
+      });
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+        ...previous,
+        messages: [...previous.messages, optimistic],
+      } : previous);
+      return { optimisticId: optimistic.id };
+    },
+    onSuccess: (created, _text, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+          ...previous,
+          messages: confirmOptimisticMessage(previous.messages, mutationContext.optimisticId, created),
+        } : previous);
+      } else {
+        handleRealtimeMessage(created);
+      }
       qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
       qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
-    onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
+    onError: (_error, _text, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+          ...previous,
+          messages: removeOptimisticMessage(previous.messages, mutationContext.optimisticId),
+        } : previous);
+      }
+      toast("Message failed to send", { description: "Retry.", variant: "error" });
+    },
   });
 
   const peerName = ctx?.peer?.full_name ?? "recruiter";

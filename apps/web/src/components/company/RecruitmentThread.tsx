@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 import { recruitmentChatErrorMessage } from "@/lib/recruitment-chat-error";
+import { confirmOptimisticMessage, createOptimisticMessage, removeOptimisticMessage } from "@/lib/optimistic-chat";
 
 export function RecruitmentThread({ applicationId, peerName }: { applicationId: string; peerName: string }) {
   const qc = useQueryClient();
@@ -102,10 +103,39 @@ export function RecruitmentThread({ applicationId, peerName }: { applicationId: 
       if (realtime) return realtime;
       return sendRecruitmentMessage(applicationId, text);
     },
-    onSuccess: (created) => {
-      handleRealtimeMessage(created);
+    onMutate: (text) => {
+      if (!me?.id || !ctx?.peer?.id) return undefined;
+      const optimistic = createOptimisticMessage({
+        applicationId,
+        content: text,
+        receiverId: ctx.peer.id,
+        senderId: me.id,
+      });
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+        ...previous,
+        messages: [...previous.messages, optimistic],
+      } : previous);
+      return { optimisticId: optimistic.id };
     },
-    onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
+    onSuccess: (created, _text, mutationContext) => {
+      if (!mutationContext) {
+        handleRealtimeMessage(created);
+        return;
+      }
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+        ...previous,
+        messages: confirmOptimisticMessage(previous.messages, mutationContext.optimisticId, created),
+      } : previous);
+    },
+    onError: (_error, _text, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+          ...previous,
+          messages: removeOptimisticMessage(previous.messages, mutationContext.optimisticId),
+        } : previous);
+      }
+      toast("Message failed to send", { description: "Retry.", variant: "error" });
+    },
   });
 
   if (chatQuery.isLoading) {

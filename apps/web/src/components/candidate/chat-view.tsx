@@ -78,8 +78,11 @@ export function MessageList({
                   </p>
                 </div>
                 {mine && index === latestOutgoingIndex ? (
-                  <p className="mt-1 pr-1 text-[10px] font-medium leading-none text-muted-foreground" aria-label={m.read_at ? "Message seen" : "Message sent"}>
-                    {m.read_at ? "Seen" : "✓ Sent"}
+                  <p
+                    className="mt-1 pr-1 text-[10px] font-medium leading-none text-muted-foreground"
+                    aria-label={m.delivery_status === "sending" ? "Message sending" : m.read_at ? "Message seen" : "Message sent"}
+                  >
+                    {m.delivery_status === "sending" ? "Sending…" : m.read_at ? "Seen" : "✓ Sent"}
                   </p>
                 ) : null}
               </div>
@@ -120,10 +123,11 @@ export function Composer({
     const text = value.trim();
     if (!text || pending || disabled) return;
     setError(null);
+    setValue("");
     try {
       await onSend(text);
-      setValue("");
     } catch {
+      setValue((current) => current || text);
       setError("Message was not confirmed. Your draft is preserved; retry when connected.");
     }
   }

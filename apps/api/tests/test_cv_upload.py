@@ -480,9 +480,10 @@ def test_router_error_codes():
 
 def test_frontend_review_and_retry():
     page = (Path(__file__).resolve().parents[2] / "web" / "src" / "app" / "dashboard" / "profile" / "page.tsx").read_text()
-    assert "Retry reading" in page
+    cv_error_block = page.split("{cvError ?", 1)[1].split("{cvOk ?", 1)[0]
+    assert "Retry reading" in cv_error_block
     assert "runParse" in page
     assert "Review details from your CV" in page
     assert "getApiError" in page
-    assert "canRetryCVParse ?" in page
+    assert "canRetryCVParse" in cv_error_block
     assert "profileQuery.data?.cv_url" not in page.split("const hasCv", 1)[1].split(";", 1)[0]
