@@ -3,6 +3,7 @@ services:
   # Persistent local Vault. Initialize and unseal it before starting the app.
   # ──────────────────────────────────────────────────────────────────────────
   vault:
+    profiles: ["local-vault"]
     image: hashicorp/vault:1.17
     container_name: coditent-vault
     restart: unless-stopped
@@ -34,7 +35,7 @@ services:
       - ALL
     environment:
       # AppRole is read-only and can only access secret/data/coditent.
-      VAULT_ADDR: http://vault:8200
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
       VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
       VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
       VAULT_REQUIRED: "true"
@@ -64,6 +65,7 @@ services:
     depends_on:
       vault:
         condition: service_healthy
+        required: false
       redis:
         condition: service_healthy
     healthcheck:
@@ -85,12 +87,13 @@ services:
     depends_on:
       vault:
         condition: service_healthy
+        required: false
       api:
         condition: service_started
       redis:
         condition: service_healthy
     environment:
-      VAULT_ADDR: http://vault:8200
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
       VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
       VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
       VAULT_REQUIRED: "true"
@@ -124,12 +127,13 @@ services:
     depends_on:
       vault:
         condition: service_healthy
+        required: false
       api:
         condition: service_started
       redis:
         condition: service_healthy
     environment:
-      VAULT_ADDR: http://vault:8200
+      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
       VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
       VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
       VAULT_REQUIRED: "true"
