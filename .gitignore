@@ -3,7 +3,13 @@
 # ==========================================
 .env
 .env*
+.eenv*
+!.env.example
+!.env.teammate.example
+!.env.template
 .vault/
+.vault-unseal-keys*
+*unseal-keys*
 sed7el.txt
 .env.local
 .env.development.local
@@ -178,3 +184,5 @@ ansible/**/vault.yml
 !docs/security/**
 !docs/operations/ecr-ssm-deployment.md
 !monitoring/README.md
+!docs/shared-vault.md
+!deploy/vault-server/README.md

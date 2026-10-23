@@ -1,0 +1,19 @@
+services:
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: coditent-vault-server
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+      VAULT_API_ADDR: "http://${TAILSCALE_IP}:8200"
+    ports:
+      - "${TAILSCALE_IP}:8200:8200"
+    volumes:
+      - ./config/vault.hcl:/vault/config/vault.hcl:ro
+      - vault_server_data:/vault/file
+    command: vault server -config=/vault/config/vault.hcl
+
+volumes:
+  vault_server_data:

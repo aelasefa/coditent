@@ -1,0 +1,19 @@
+[Unit]
+Description=HashiCorp Vault Auto-Unseal on Boot
+After=docker.service tailscaled.service network-online.target
+Requires=docker.service tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/coditent-vault
+EnvironmentFile=/opt/coditent-vault/.env
+ExecStartPre=/usr/bin/docker compose up -d vault
+ExecStart=/opt/coditent-vault/unseal-on-boot.sh
+Restart=on-failure
+RestartSec=10s
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
