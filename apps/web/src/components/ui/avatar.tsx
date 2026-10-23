@@ -7,6 +7,7 @@ interface AvatarProps {
   name: string;
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
+  optimize?: boolean;
 }
 
 const sizes = {
@@ -16,6 +17,13 @@ const sizes = {
   xl: "h-16 w-16 text-lg",
 };
 
+const imageSizes = {
+  sm: 32,
+  md: 40,
+  lg: 48,
+  xl: 64,
+};
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -23,7 +31,7 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function Avatar({ src, name, size = "md", className }: AvatarProps) {
+export function Avatar({ src, name, size = "md", className, optimize = false }: AvatarProps) {
   const resolvedSrc = resolveApiAssetUrl(src);
   // Single accessible name on the wrapper: avoids announcing or copying
   // the name twice next to an adjacent visible name label.
@@ -38,7 +46,15 @@ export function Avatar({ src, name, size = "md", className }: AvatarProps) {
       )}
     >
       {resolvedSrc ? (
-        <Image src={resolvedSrc} alt="" width={64} height={64} unoptimized className="h-full w-full object-cover" />
+        <Image
+          src={resolvedSrc}
+          alt=""
+          width={imageSizes[size]}
+          height={imageSizes[size]}
+          sizes={`${imageSizes[size]}px`}
+          unoptimized={!optimize}
+          className="h-full w-full object-cover"
+        />
       ) : (
         <span aria-hidden>{initials(name)}</span>
       )}

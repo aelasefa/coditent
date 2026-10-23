@@ -29,7 +29,7 @@ export function JobCard({ rec, selected, applied, href, onSelect }: JobCardProps
   const body = (
     <>
       <div className="flex items-start gap-3">
-        <Avatar name={offer.company} size="md" src={offerLogoSrc(offer)} />
+        <Avatar name={offer.company} size="md" src={offerLogoSrc(offer)} optimize />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold text-foreground">{offer.title}</p>
           <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{offer.company}</p>
