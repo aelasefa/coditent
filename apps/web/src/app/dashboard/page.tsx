@@ -10,7 +10,7 @@ import { PageContainer } from "@/components/shell/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TwinklingStars } from "@/components/ui/twinkling-stars";
-import { JobCard } from "@/components/candidate/job-card";
+import { JobCard, JobCardSkeleton } from "@/components/candidate/job-card";
 import { ApplicationStage } from "@/components/candidate/application-stage";
 import { NextActionCard, type NextAction } from "@/components/candidate/next-action-card";
 import { getProfileCompletion } from "@/components/candidate/profile-completion";
@@ -44,7 +44,8 @@ export default function DashboardPage() {
   const recs = recsQuery.data ?? [];
   const apps = appsQuery.data ?? [];
   const chats = chatsQuery.data ?? [];
-  const loading = meQuery.isLoading || profileQuery.isLoading || recsQuery.isLoading || appsQuery.isLoading;
+  const journeyLoading = meQuery.isLoading || profileQuery.isLoading || appsQuery.isLoading || chatsQuery.isLoading;
+  const actionsLoading = profileQuery.isLoading || recsQuery.isLoading || chatsQuery.isLoading;
 
   const firstName = (me?.full_name ?? "").split(" ")[0] || null;
   const completion = getProfileCompletion(profile, me?.avatar_url);
@@ -110,60 +111,82 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-3" role="status" aria-label="Loading dashboard">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32" />)}
+      <div className={styles.dashboardFlow}>
+        <section className={styles.journeyRail} aria-label="Your career at a glance" aria-busy={journeyLoading}>
+          {journeyLoading ? (
+            <div className="contents" role="status" aria-label="Loading career summary">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className={styles.journeyItem} aria-hidden="true">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="mt-3 h-9 w-16" />
+                  <Skeleton className="mt-3 h-3 w-40 max-w-full" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <Link href="/profile" className={styles.journeyItem}>
+                <span>Profile</span>
+                <strong className={profileIsComplete ? styles.journeyCompleteMark : undefined}>
+                  {profileIsComplete ? <FiCheck aria-hidden="true" /> : `${completionPercent}%`}
+                </strong>
+                <p>{completion.missing.length ? `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} left to add` : "Your profile is complete"}</p>
+                <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${completionPercent}%` }} /></div>
+              </Link>
+              <Link href="/dashboard/applications" className={styles.journeyItem}>
+                <span>Applications</span><strong>{apps.length}</strong><p>Track each stage and next step</p>
+              </Link>
+              <Link href="/chat" className={styles.journeyItem}>
+                <span>Conversations</span><strong>{chats.length}</strong><p>Messages about your applications</p>
+              </Link>
+            </>
+          )}
+        </section>
+
+        <section aria-label="Next actions">
+          <div className={styles.sectionHeading}><h2>What needs your attention</h2></div>
+          {actionsLoading ? (
+            <div className={styles.actionGrid} role="status" aria-label="Loading next actions">
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
+            </div>
+          ) : nextActions.length === 0 ? <div className={styles.quietNotice}><p>Nothing urgent right now. Discover a role that fits your next move.</p><Link href="/dashboard/recommendations">Explore roles <FiArrowRight aria-hidden /></Link></div> : (
+            <div className={styles.actionGrid}>{nextActions.map((action) => <NextActionCard key={action.title} action={action} />)}</div>
+          )}
+        </section>
+
+        <section aria-label="Recommended for you">
+          <div className={styles.sectionHeading}><h2>Opportunities to explore</h2><Link href="/dashboard/recommendations" className={styles.sectionLink}>View all <FiArrowRight aria-hidden /></Link></div>
+          {recsQuery.isLoading ? (
+            <div className={styles.recommendationGrid} aria-label="Loading recommended opportunities">
+              <JobCardSkeleton />
+              <JobCardSkeleton />
+            </div>
+          ) : topRecs.length === 0 ? <EmptyState title="No opportunities yet" description="Analyze matches in Discover to see relevant roles here." primaryAction={{ label: "Open Discover", href: "/dashboard/recommendations" }} /> : (
+            <div className={styles.recommendationGrid}>{topRecs.map((recommendation) => <JobCard key={recommendation.id} rec={recommendation} applied={appliedIds.has(recommendation.offer.id)} href={`/dashboard/recommendations?offer=${recommendation.offer.id}`} />)}</div>
+          )}
+        </section>
+
+        <section aria-label="Application activity">
+          <div className={styles.sectionHeading}><h2>Application activity</h2><Link href="/dashboard/applications" className={styles.sectionLink}>Open tracker <FiArrowRight aria-hidden /></Link></div>
+          {appsQuery.isLoading ? (
+            <div role="status" aria-label="Loading application activity">
+              <Skeleton className="h-[74px]" />
+            </div>
+          ) : recentApps.length === 0 ? <EmptyState icon={FiBriefcase} title="No applications yet" description="Applied roles appear here with their latest stage." primaryAction={{ label: "Discover opportunities", href: "/dashboard/recommendations" }} /> : (
+            <ul className={styles.activityList}>{recentApps.map((application) => <li key={application.id}><Link href={`/dashboard/applications?app=${application.id}`}><span><strong>{application.opportunity?.title ?? "Application"}</strong><small>{application.opportunity?.company ?? ""}{application.updated_at ? ` · Updated ${new Date(application.updated_at).toLocaleDateString()}` : ""}</small></span><ApplicationStage status={application.status} /><FiArrowRight aria-hidden className={styles.activityArrow} /></Link></li>)}</ul>
+          )}
+        </section>
+
+        <div className={styles.careerArtwork} aria-hidden="true">
+          <Image
+            src="/images/candidate/career-journey.png"
+            alt=""
+            fill
+            sizes="(max-width: 767px) calc(100vw - 2rem), (max-width: 1279px) calc(100vw - 3rem), 1152px"
+          />
         </div>
-      ) : (
-        <div className={styles.dashboardFlow}>
-          <section className={styles.journeyRail} aria-label="Your career at a glance">
-            <Link href="/profile" className={styles.journeyItem}>
-              <span>Profile</span>
-              <strong className={profileIsComplete ? styles.journeyCompleteMark : undefined}>
-                {profileIsComplete ? <FiCheck aria-hidden="true" /> : `${completionPercent}%`}
-              </strong>
-              <p>{completion.missing.length ? `${completion.missing.length} ${completion.missing.length === 1 ? "detail" : "details"} left to add` : "Your profile is complete"}</p>
-              <div className={styles.statusProgress} role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={totalCount} aria-label="Profile completion"><span style={{ width: `${completionPercent}%` }} /></div>
-            </Link>
-            <Link href="/dashboard/applications" className={styles.journeyItem}>
-              <span>Applications</span><strong>{apps.length}</strong><p>Track each stage and next step</p>
-            </Link>
-            <Link href="/chat" className={styles.journeyItem}>
-              <span>Conversations</span><strong>{chats.length}</strong><p>Messages about your applications</p>
-            </Link>
-          </section>
-
-          <section aria-label="Next actions">
-            <div className={styles.sectionHeading}><h2>What needs your attention</h2></div>
-            {nextActions.length === 0 ? <div className={styles.quietNotice}><p>Nothing urgent right now. Discover a role that fits your next move.</p><Link href="/dashboard/recommendations">Explore roles <FiArrowRight aria-hidden /></Link></div> : (
-              <div className={styles.actionGrid}>{nextActions.map((action) => <NextActionCard key={action.title} action={action} />)}</div>
-            )}
-          </section>
-
-          <section aria-label="Recommended for you">
-            <div className={styles.sectionHeading}><h2>Opportunities to explore</h2><Link href="/dashboard/recommendations" className={styles.sectionLink}>View all <FiArrowRight aria-hidden /></Link></div>
-            {topRecs.length === 0 ? <EmptyState title="No opportunities yet" description="Analyze matches in Discover to see relevant roles here." primaryAction={{ label: "Open Discover", href: "/dashboard/recommendations" }} /> : (
-              <div className={styles.recommendationGrid}>{topRecs.map((recommendation) => <JobCard key={recommendation.id} rec={recommendation} applied={appliedIds.has(recommendation.offer.id)} href={`/dashboard/recommendations?offer=${recommendation.offer.id}`} />)}</div>
-            )}
-          </section>
-
-          <section aria-label="Application activity">
-            <div className={styles.sectionHeading}><h2>Application activity</h2><Link href="/dashboard/applications" className={styles.sectionLink}>Open tracker <FiArrowRight aria-hidden /></Link></div>
-            {recentApps.length === 0 ? <EmptyState icon={FiBriefcase} title="No applications yet" description="Applied roles appear here with their latest stage." primaryAction={{ label: "Discover opportunities", href: "/dashboard/recommendations" }} /> : (
-              <ul className={styles.activityList}>{recentApps.map((application) => <li key={application.id}><Link href={`/dashboard/applications?app=${application.id}`}><span><strong>{application.opportunity?.title ?? "Application"}</strong><small>{application.opportunity?.company ?? ""}{application.updated_at ? ` · Updated ${new Date(application.updated_at).toLocaleDateString()}` : ""}</small></span><ApplicationStage status={application.status} /><FiArrowRight aria-hidden className={styles.activityArrow} /></Link></li>)}</ul>
-            )}
-          </section>
-
-          <div className={styles.careerArtwork} aria-hidden="true">
-            <Image
-              src="/images/candidate/career-journey.png"
-              alt=""
-              fill
-              sizes="(max-width: 767px) calc(100vw - 2rem), (max-width: 1279px) calc(100vw - 3rem), 1152px"
-            />
-          </div>
-        </div>
-      )}
+      </div>
     </PageContainer>
   );
 }

@@ -19,6 +19,11 @@ const nextConfig = {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
       },
+      {
+        protocol: "https",
+        hostname: "api.coditent.app",
+        pathname: "/api-proxy/companies/*/logo",
+      },
     ],
   },
   async rewrites() {
