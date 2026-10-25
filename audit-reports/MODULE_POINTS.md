@@ -1,85 +1,93 @@
-# CODITENT selected-module submission
+# ft_transcendence v21.2 module assessment
 
-Validated against the supplied **ft_transcendence subject v21.2** (`en.subject.pdf`, SHA-256 `7d1df8037f5222914f1fb842739993b366a3111ebeddce0ff16ffbab0659cbd5`). Last synchronized with the repository on **2026-10-16**.
+Audit snapshot: **2026-10-22**, commit `708d00f468aac11d41f6af18639bb44e9501de4a`. Major modules are 2 points; minor modules are 1 point. Per Chapter IV, a partial module receives zero verified points. “PASS” means the checked-in implementation supplies every stated requirement by source and available automated evidence; external-provider and browser demonstrations remain evaluator checks.
 
 ## Score
 
 | Result | Points |
 |---|---:|
 | Required minimum | 14 |
-| Raw implemented modules | **22** |
-| Maximum counted bonus | 5 |
-| **Official counted score** | **19 / 19** |
-| Raw buffer above the cap | **3** |
+| Evidence-supported raw implementation | **21** |
+| Points needed to reach 14 | **0** |
+| Eligible bonus | **5** (cap reached) |
+| Official maximum counted result | **19 / 19** |
+| Raw buffer above the counted cap | **2** |
+| Potential pending external demonstration | **1** (OAuth) |
 
-The project claims only the 16 modules below. Alternative framework minors, OAuth, accessibility, extra-browser compatibility, notifications, monitoring, gaming, blockchain, AI-category, and custom modules are excluded from this score. OAuth can be added only after a real configured-provider login is demonstrated; it is not included in the 22 raw points.
+The score does **not** make the submission evaluation-ready: mandatory and README rejection risks are documented in `SUBJECT_COMPLIANCE.md`. The repository README currently claims 22 raw points; that is stale because the `/status` page cited for D04 no longer exists.
 
-“Owner” means the primary evaluation and demonstration lead, chosen from the dominant repository history for the cited implementation. The code remains a team project.
+## Complete catalogue (all 55 modules)
 
-## Selected modules
-
-| ID | Selected module | Points | Owner | Why it qualifies | Primary evidence | Live demonstration |
-|---|---|---:|---|---|---|---|
-| W01 | Frontend + backend frameworks | 2 | mohammedelmahf | Next.js/React render the product UI and FastAPI exposes the domain API; neither is a decorative wrapper. | `apps/web/package.json`, `apps/api/app/main.py` | Start Compose, open the Next.js UI, call `/docs`, then perform one UI action that persists through FastAPI. |
-| W04 | Realtime features | 2 | mohammedelmahf | Socket tickets, Redis cross-process fan-out, ordered events, heartbeat authorization, reconnect recovery, and revocation are implemented. | `apps/api/app/services/chat_realtime.py`, `apps/api/app/services/socket_tickets.py`, `apps/web/src/hooks/use-recruitment-chat-socket.ts`, `apps/api/tests/test_chat_realtime.py` | Open candidate and recruiter sessions, exchange messages, confirm immediate delivery/order/read state, disconnect one client, reconnect, and show recovered history. |
-| W05 | User interaction | 2 | mohammedelmahf | Users have profiles, friend request/accept/remove flows, presence, and direct/recruitment chat. | `apps/api/app/routers/friends.py`, `apps/api/app/routers/chat.py`, `apps/web/src/app/dashboard/friends/page.tsx` | Send and accept a friend request, open the profile, exchange messages, and remove the friendship. |
-| W07 | ORM | 1 | mohammedelmahf | SQLAlchemy 2 models and async sessions own relational access; Alembic maintains PostgreSQL schema history. | `apps/api/app/models.py`, `apps/api/app/database.py`, `apps/api/alembic/versions/` | Show one model/query path, run `alembic current`, and run a PostgreSQL integrity test. |
-| W10 | Server-side rendering | 1 | mohammedelmahf | Public category pages fetch offer data and metadata on the Next.js server. | `apps/web/src/app/offers/[category]/page.tsx`, `apps/web/src/lib/offer-category.ts` | Disable JavaScript or use `curl` and show an offer title/company already present in returned HTML. |
-| W11 | Progressive Web App | 1 | mohammedelmahf | Install manifest, icons, service-worker registration, versioned caching, and a dedicated offline route are present. | `apps/web/public/manifest.webmanifest`, `apps/web/public/sw.js`, `apps/web/src/components/pwa-registration.tsx` | Inspect the manifest/service worker, install the app, cache a public page, go offline, and show the offline experience. |
-| W12 | Custom design system | 1 | Ilyas El Asefar | Shared tokens, typography, icon rules, focus states, and more than ten reusable UI components are used across role surfaces. | `apps/web/src/app/globals.css`, `apps/web/src/components/ui/` | Show the token definitions and the same Button, Dialog, Input, Tabs, Toast, Skeleton, Badge, and navigation primitives across candidate/company/admin pages. |
-| W13 | Advanced search | 1 | mohammedelmahf | Opportunity discovery combines text, field, region, type and work-mode filtering with sorting and pagination. | `apps/web/src/lib/discover-search.ts`, `apps/web/src/components/candidate/filter-bar.tsx`, `apps/web/tests/discover-search.test.mts` | Apply several filters, change sort order, move between result pages, clear the search, and show the URL/state remains coherent. |
-| W14 | File upload and management | 1 | mohammedelmahf | Avatar, CV, and logo workflows validate type, size and content on client/server, use private storage, display progress, support download/preview where applicable, replacement, and deletion. | `apps/web/src/lib/file-validation.ts`, `apps/api/app/routers/candidates.py`, `apps/api/app/services/cv_storage.py`, `apps/api/tests/test_upload_limits.py` | Upload a valid PDF CV, reject an invalid or oversized file, download it through authorization, replace it, then delete it. Repeat the visible flow for an image asset. |
-| U01 | Standard user management | 2 | mohammedelmahf | Users edit profiles, manage avatars with fallbacks, maintain friends, view profiles, and observe bounded multi-tab presence. | `apps/web/src/app/dashboard/profile/page.tsx`, `apps/api/app/routers/friends.py`, `apps/web/src/components/candidate/candidate-presence.tsx` | Edit and reload a profile, upload/remove an avatar, open a friend profile, and show online/offline status using two sessions. |
-| U04 | Advanced permissions | 2 | mohammedelmahf | Platform roles and company roles expose distinct views/actions; administrators manage users while protected operations enforce server-side permission checks. User deletion uses retention-safe deactivation/anonymization. | `apps/api/app/core/permissions.py`, `apps/api/app/routers/admin.py`, `apps/api/tests/test_rbac.py`, `apps/api/tests/test_admin_lifecycle.py` | Compare candidate/company/admin navigation, attempt the same action with allowed and denied roles, change a company role, and deactivate a user. |
-| U05 | Organization system | 2 | mohammedelmahf | Companies can be created, viewed, edited and retention-safely archived; owners/admins add, remove and re-role members; organization actions are role-scoped. | `apps/api/app/routers/companies.py`, `apps/api/app/routers/invitations.py`, `apps/web/src/app/company/team/page.tsx` | Create/invite a company owner, edit company details, invite and re-role a member, deny a forbidden member action, remove the member, and archive the company. |
-| U06 | Complete two-factor authentication | 1 | mohammedelmahf | TOTP enrollment, encrypted secrets, login challenge, one-time recovery codes, trusted devices, disable flow, replay protection, and session/socket revocation are implemented. | `apps/api/app/routers/two_factor.py`, `apps/api/app/services/two_factor.py`, `apps/web/src/components/security/two-factor-security.tsx`, `apps/api/tests/test_two_factor.py` | Enroll with a real authenticator, save recovery codes, log out/in through the challenge, reject a replayed code, use one recovery code once, then disable 2FA. |
-| D04 | Health/status and backup/disaster recovery | 1 | mohammedelmahf | Liveness and dependency readiness, a public status page, encrypted offsite backup automation, retention, and restore tooling are implemented. | `apps/api/app/health.py`, `apps/web/src/app/status/page.tsx`, `ansible/roles/coditent/tasks/backups.yml`, `scripts/test-backup-restore.sh` | Show healthy Compose services and `/ready`, stop one dependency to show failure, restore it, inspect a backup object/checksum, and complete a disposable restore drill. |
-| N02 | Data export/import | 1 | mohammedelmahf | Authenticated exports support JSON, CSV and XML; JSON profile imports are schema-checked, size-limited, field-whitelisted, and applied atomically. | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/web/src/components/security/account-data-controls.tsx` | Export all three formats, inspect readable content, modify an allowed JSON profile field, import it, reload the profile, then reject malformed/oversized input. |
-| N03 | GDPR-oriented data lifecycle | 1 | mohammedelmahf | Users can request readable data, confirm deletion with current credentials, cancel during a seven-day grace period, remove private files, anonymize retained integrity rows, and receive durable operation emails. This is a product module claim, not legal certification. | `apps/api/app/services/privacy.py`, `apps/api/app/services/email_outbox.py`, `apps/api/tests/test_account_data_lifecycle.py` | Schedule deletion, show the execution date, cancel it, reschedule in a disposable account, run the deletion worker, and show files/direct identity removed, retained rows anonymized, login denied, and confirmation delivery recorded. |
+| ID | Module | Type | Max | Status | Verified | Missing requirements / dependency | Evidence |
+|---|---|---|---:|---|---:|---|---|
+| W01 | Framework for frontend and backend | Major | 2 | PASS | 2 | — | `apps/web/package.json`; `apps/api/app/main.py`; production build PASS |
+| W02 | Frontend framework | Minor | 1 | PASS, alternative | 0 | Implemented by Next.js/React but not double-counted with W01 | `apps/web/package.json` |
+| W03 | Backend framework | Minor | 1 | PASS, alternative | 0 | Implemented by FastAPI but not double-counted with W01 | `apps/api/app/main.py` |
+| W04 | Realtime features | Major | 2 | PASS | 2 | Live two-client evaluation still required | `routers/chat.py`; `services/chat_realtime.py`; `test_chat_realtime.py` (4 passed) |
+| W05 | User interaction | Major | 2 | PASS | 2 | — | profiles, friends and chat in `routers/friends.py`, `routers/chat.py`; friendship tests (8 passed) |
+| W06 | Public API | Major | 2 | FAIL | 0 | No separate public API secured by API key with documented/rate-limited CRUD and five endpoints | Product OpenAPI is not this module |
+| W07 | ORM | Minor | 1 | PASS | 1 | Alembic drift is a quality blocker, but persistence uses the ORM | `models.py`; `database.py`; `alembic/versions/` |
+| W08 | Complete CRUD notification system | Minor | 1 | PARTIAL | 0 | Covers selected friend/chat/application events, not all create/update/delete actions | notification router/service |
+| W09 | Realtime collaborative features | Minor | 1 | FAIL | 0 | No shared editing/workspace/drawing collaboration | None found |
+| W10 | Server-side rendering | Minor | 1 | PASS | 1 | — | dynamic `/offers/[category]`; build marks server-rendered |
+| W11 | PWA | Minor | 1 | PASS | 1 | Live install/offline demonstration recommended; fallback is cached `/` | manifest, icons, registration, `public/sw.js`; PWA tests pass |
+| W12 | Custom design system | Minor | 1 | PASS | 1 | — | tokens in `globals.css`; 20+ components under `components/ui/` |
+| W13 | Advanced search | Minor | 1 | PASS | 1 | — | combined filters, sorting and pagination; search tests pass |
+| W14 | File upload and management | Minor | 1 | PASS | 1 | Supabase bucket behavior must be shown live | avatar/CV/logo validation, private storage, progress, preview/download/delete |
+| A01 | WCAG 2.1 AA accessibility | Major | 2 | PARTIAL | 0 | No full WCAG, screen-reader, keyboard or assistive-technology proof | Accessible primitives alone are insufficient |
+| A02 | Three-language i18n | Minor | 1 | FAIL | 0 | No i18n, three complete translations or switcher | None found |
+| A03 | RTL language support | Minor | 1 | FAIL | 0 | No RTL locale or mirrored layout | None found |
+| A04 | Two additional browsers | Minor | 1 | NOT TESTED | 0 | No complete Firefox/Safari/Edge test evidence | Browser data is seven months stale |
+| U01 | Standard user management | Major | 2 | PASS | 2 | — | editable profiles, avatar/default, friends, profile pages and presence |
+| U02 | Game statistics/history | Minor | 1 | FAIL | 0 | Requires a game | Dependency unmet |
+| U03 | OAuth 2.0 remote authentication | Minor | 1 | PARTIAL | 0 | Google/LinkedIn flows exist, but no successful real-provider proof; two OAuth/MFA tests fail without TOTP key | OAuth service/routes/tests |
+| U04 | Advanced permissions | Major | 2 | PASS | 2 | “Delete” is retention-safe deactivation/anonymization; evaluator must accept that interpretation | permissions matrix, admin lifecycle, role UI |
+| U05 | Organization system | Major | 2 | PASS | 2 | Organization deletion is archival | company CRUD/archive, invitation/membership lifecycle |
+| U06 | Complete 2FA | Minor | 1 | PASS | 1 | Requires configured encryption key and real-authenticator demo | TOTP, recovery codes, trusted devices, replay protection |
+| U07 | User activity analytics/insights | Minor | 1 | PARTIAL | 0 | Audit feed/pipeline counts are not complete per-user insights | admin activity/company analytics |
+| AI01 | Game AI opponent | Major | 2 | FAIL | 0 | Requires a game | Dependency unmet |
+| AI02 | Complete RAG system | Major | 2 | FAIL | 0 | No retrieval/context-generation pipeline over a large dataset | None found |
+| AI03 | Complete LLM interface | Major | 2 | PARTIAL | 0 | Text helpers exist, but no streaming-response interface | Gemini profile/recommendation services |
+| AI04 | ML recommendation system | Major | 2 | PARTIAL | 0 | No collaborative filtering or continuous behavior-driven improvement | recommendation/match services |
+| AI05 | AI content moderation | Minor | 1 | FAIL | 0 | No auto moderation/deletion/warning | None found |
+| AI06 | Voice/speech integration | Minor | 1 | FAIL | 0 | No speech interface | None found |
+| AI07 | Sentiment analysis | Minor | 1 | FAIL | 0 | No sentiment workflow | None found |
+| AI08 | Image recognition/tagging | Minor | 1 | FAIL | 0 | No recognition/tagging | None found |
+| C01 | Hardened ModSecurity + HashiCorp Vault | Major | 2 | PARTIAL | 0 | WAF exists; production/default Compose does not deploy HashiCorp Vault. Ansible Vault is a different product | WAF config; optional Vault client/dev override |
+| G01 | Complete web game | Major | 2 | FAIL | 0 | No game | None found |
+| G02 | Remote two-player game | Major | 2 | FAIL | 0 | No game/reconnect gameplay | Dependency unmet |
+| G03 | Multiplayer 3+ game | Major | 2 | FAIL | 0 | No game | Dependency unmet |
+| G04 | Second game + history/matchmaking | Major | 2 | FAIL | 0 | No first/second game | Dependency unmet |
+| G05 | Advanced 3D graphics | Major | 2 | FAIL | 0 | A `three` dependency/decoration is not an immersive 3D module | No qualifying implementation |
+| G06 | Advanced chat | Minor | 1 | PARTIAL | 0 | Persistence, profiles, blocking and receipts exist; game invitations/notifications cannot exist | Dependency incomplete |
+| G07 | Tournament system | Minor | 1 | FAIL | 0 | Requires a game | Dependency unmet |
+| G08 | Game customization | Minor | 1 | FAIL | 0 | Requires a game | Dependency unmet |
+| G09 | Gamification | Minor | 1 | PARTIAL | 0 | Missions/progress do not establish three clear persistent reward mechanics | mission router/UI |
+| G10 | Spectator mode | Minor | 1 | FAIL | 0 | Requires a game | Dependency unmet |
+| D01 | ELK log management | Major | 2 | FAIL | 0 | No ELK, retention or secured dashboard | None found |
+| D02 | Prometheus + Grafana | Major | 2 | PARTIAL | 0 | Metrics exist; no Prometheus deployment, Grafana dashboards, alerts or security | `observability.py`; `/metrics` |
+| D03 | Backend microservices | Major | 2 | PARTIAL | 0 | API/worker/dispatcher share code and database; not independently bounded services | Process separation only |
+| D04 | Health/status + backup/DR | Minor | 1 | PARTIAL | 0 | Health and backup scripts exist, but the required status page was deleted; restore/offsite automation not run | `health.py`; scripts; missing status route |
+| N01 | Advanced analytics dashboard | Major | 2 | PARTIAL | 0 | Lacks complete charts, realtime, export and custom date ranges | company analytics page |
+| N02 | Data export/import | Minor | 1 | PASS | 1 | — | JSON/CSV/XML export; validated JSON import; lifecycle tests pass |
+| N03 | GDPR-oriented features | Minor | 1 | PASS | 1 | Product feature claim, not legal certification | request/export, confirmed/cancelable deletion, emails |
+| B01 | Avalanche/Solidity tournament scores | Major | 2 | FAIL | 0 | No game, smart contract or test-chain integration | None found |
+| B02 | ICP backend | Minor | 1 | FAIL | 0 | No ICP backend | None found |
+| X01 | Custom major | Major | 2 | FAIL | 0 | No selected/justified custom major in README | README excludes custom modules |
+| X02 | Custom minor | Minor | 1 | FAIL | 0 | No selected/justified custom minor in README | README excludes custom modules |
 
 ## Arithmetic
 
 ```text
-Major modules: W01 2 + W04 2 + W05 2 + U01 2 + U04 2 + U05 2 = 12
-Minor modules: W07 + W10 + W11 + W12 + W13 + W14 + U06 + D04 + N02 + N03 = 10
-Raw total: 12 + 10 = 22
-Official result: min(22, 14 required + 5 bonus) = 19 / 19
-Uncounted raw buffer: 22 - 19 = 3
+Majors: W01 + W04 + W05 + U01 + U04 + U05 = 12
+Minors: W07 + W10 + W11 + W12 + W13 + W14 + U06 + N02 + N03 = 9
+Raw evidence-supported total = 21
+Counted total = 14 required + min(7 extra, 5 bonus cap) = 19 / 19
 ```
 
-## Evaluation sequence
+## Safer additions
 
-Use this order so later modules reuse established state:
-
-1. Run `docker compose up --build`; show all six required services healthy and `/ready` successful.
-2. Register and verify a candidate; log in and complete the profile.
-3. Demonstrate SSR, PWA, design system, search, and file management.
-4. Create/invite a company and compare OWNER, HR/RECRUITER, candidate, and platform-admin permissions.
-5. Publish an offer, apply, screen, schedule an interview, and move through stages.
-6. Use two simultaneous sessions for friend, presence, recruitment chat, ordering, reconnect, and revocation behavior.
-7. Enroll and exercise 2FA including recovery and disable.
-8. Export/import data, then demonstrate the cancelable deletion lifecycle with a disposable account.
-9. Show status/readiness, the backup job, and the disposable restore drill.
-10. End with the score arithmetic: **22 raw, 19/19 counted, 3-point buffer**.
-
-## Required provider evidence
-
-Source and local tests do not prove external configuration. For full live evidence, the evaluation environment must provide:
-
-- trusted TLS and working DNS for `coditent.app`;
-- Resend delivery from the configured `notifications@coditent.app` identity;
-- Supabase private bucket upload/download/delete access;
-- Google Gemini responses for the AI-supported hiring workflow;
-- two concurrent browser sessions for realtime behavior; and
-- the configured offsite backup bucket and restore credentials.
-
-If one of these is unavailable, describe it as missing external proof. Do not replace it with a mocked success.
-
-## Unclaimed implementation
-
-- **OAuth (U03):** implemented and tested locally, but excluded until a real Google or LinkedIn authorization/callback is completed.
-- **Accessibility (A01):** many accessible primitives and keyboard behaviors exist, but complete WCAG 2.1 AA and assistive-technology proof are not claimed.
-- **Extra browsers (A04):** not claimed without full feature passes in two browsers beyond mandatory Chrome.
-- **Notifications (W08):** useful notifications exist, but the subject’s complete create/update/delete coverage is not claimed.
-- **AI-category modules:** Gemini supports product workflows, but the implementation does not meet the subject’s streaming LLM, continuously learning recommendation, full RAG, or AI moderation definitions.
-- **Monitoring, game, blockchain, and custom modules:** not claimed.
+1. Recover D04 by restoring a real public status page and running an isolated backup/restore drill (+1).
+2. Configure and demonstrate one OAuth provider end to end, including existing-account MFA (+1).
+3. Expand notifications to every material create/update/delete action and add coverage (+1).
+4. Do not claim an AI module merely because Gemini is called; streaming/learning/retrieval requirements are absent.

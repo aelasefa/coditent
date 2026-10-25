@@ -335,11 +335,11 @@ def build_oauth_authorize_url(
         "state": state_token,
     }
 
-    if code_verifier:
+    if code_verifier and provider.name != "linkedin":
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         query_params["code_challenge"] = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
         query_params["code_challenge_method"] = "S256"
-    if nonce:
+    if nonce and provider.name != "linkedin":
         query_params["nonce"] = nonce
 
     if provider.name == "google":
@@ -364,14 +364,15 @@ async def exchange_code_for_access_token(
     *,
     code_verifier: str,
 ) -> str:
-    payload = {
+    payload: dict[str, Any] = {
         "grant_type": "authorization_code",
         "code": code,
         "client_id": provider.client_id,
         "client_secret": provider.client_secret,
         "redirect_uri": redirect_uri,
-        "code_verifier": code_verifier,
     }
+    if provider.name != "linkedin" and code_verifier:
+        payload["code_verifier"] = code_verifier
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         if provider.name == "google":
@@ -386,18 +387,20 @@ async def exchange_code_for_access_token(
         )
 
     response_payload: dict[str, Any] | None = None
-    if provider.name == "google":
-        try:
-            response_payload = response.json()
-        except ValueError:
-            response_payload = None
+    try:
+        response_payload = response.json()
+    except ValueError:
+        response_payload = None
 
-        if response.is_error:
-            logger.warning(
-                "google_oauth_token_error",
-                status_code=response.status_code,
-                error=(response_payload or {}).get("error"),
-            )
+    if response.is_error:
+        logger.warning(
+            "oauth_token_exchange_error",
+            provider=provider.name,
+            status_code=response.status_code,
+            error=(response_payload or {}).get("error"),
+            error_description=(response_payload or {}).get("error_description"),
+        )
+        if provider.name == "google":
             if isinstance(response_payload, dict) and response_payload.get("error") in {
                 "invalid_client",
                 "invalid_grant",
@@ -408,19 +411,15 @@ async def exchange_code_for_access_token(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="google_token_exchange_failed",
                 )
-        else:
-            logger.info("google_oauth_token_response", status_code=response.status_code)
+    elif provider.name == "google":
+        logger.info("google_oauth_token_response", status_code=response.status_code)
 
     if response.status_code in {400, 401}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_invalid_code")
     if response.is_error:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_exchange_failed")
 
-    try:
-        token_payload = response_payload if isinstance(response_payload, dict) else response.json()
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_parse_failed") from exc
-
+    token_payload = response_payload if isinstance(response_payload, dict) else {}
     access_token = token_payload.get("access_token")
     if not access_token:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_missing")

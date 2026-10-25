@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/company/AppShell";
 import { PageHeader } from "@/components/company/PageHeader";
 import { StatusBadge } from "@/components/company/StatusBadge";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";

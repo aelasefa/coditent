@@ -1,0 +1,51 @@
+groups:
+  - name: coditent_alerts
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target {{ $labels.instance }} ({{ $labels.job }}) is down"
+          description: "Prometheus has failed to scrape target {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: BackendReadinessFailed
+        expr: >-
+          (sum(rate(http_requests_total{job="coditent-api", path="/ready", status_code!="200"}[5m])) > 0)
+          or (((sum(rate(http_requests_total{job="coditent-api", path="/ready", status_code="200"}[5m])) or vector(0)) == 0) and on() (up{job="coditent-api"} == 1))
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Coditent API readiness probe is failing"
+          description: "The /ready endpoint is returning non-200 responses or missing successful checks for 3 minutes, indicating dependency failure."
+
+      - alert: HighHttp5xxErrorRate
+        expr: >-
+          (((sum(rate(http_requests_total{job="coditent-api",path!~"/ready|/metrics|/health",status_code=~"5.."}[5m])) /
+             (sum(rate(http_requests_total{job="coditent-api",path!~"/ready|/metrics|/health"}[5m])) > 0)) * 100)) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High user-facing 5xx error rate on {{ $labels.job }}"
+          description: "Over 5% of user-facing requests on Coditent API resulted in 5xx server errors over the last 5 minutes."
+
+      - alert: HostDiskSpaceLow
+        expr: (100 - ((node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100)) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on host root filesystem"
+          description: "Host root filesystem usage on {{ $labels.instance }} is above 85% for more than 5 minutes."
+
+      - alert: HostHighMemoryUsage
+        expr: ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100) > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High host memory usage"
+          description: "Host memory usage on {{ $labels.instance }} has exceeded 90% for more than 10 minutes."

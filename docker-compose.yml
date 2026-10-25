@@ -218,3 +218,7 @@ services:
 
 volumes:
   vault_data:
+
+networks:
+  default:
+    name: coditent_network

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { filterInbox, friendActionFor, mapCombinedInbox } from "../src/lib/friend-ui.ts";
+import { clearConversationUnread, filterInbox, friendActionFor, mapCombinedInbox } from "../src/lib/friend-ui.ts";
 import type { ConversationSummary } from "../src/lib/types.ts";
 
 test("friend request controls follow the server relationship state", () => {
@@ -49,4 +49,34 @@ test("combined inbox preserves badges, links, unread counts, and latest-first so
   assert.deepEqual(filterInbox(items, "friend", "candidate").map((item) => item.badge), ["Friend"]);
   assert.deepEqual(filterInbox(items, "recruitment", "software").map((item) => item.badge), ["Recruiter"]);
   assert.deepEqual(filterInbox(items, "all", "missing"), []);
+});
+
+test("opening a conversation clears only its unread count", () => {
+  const conversations: ConversationSummary[] = [
+    {
+      conversation_type: "FRIEND",
+      conversation_id: "friend:b",
+      href: "/chat/b",
+      badge: "Friend",
+      context: "Friend conversation",
+      detail: "Direct message",
+      unread_count: 3,
+      can_message: true,
+    },
+    {
+      conversation_type: "FRIEND",
+      conversation_id: "friend:c",
+      href: "/chat/c",
+      badge: "Friend",
+      context: "Friend conversation",
+      detail: "Direct message",
+      unread_count: 2,
+      can_message: true,
+    },
+  ];
+
+  const updated = clearConversationUnread(conversations, "/chat/b");
+
+  assert.deepEqual(updated?.map((item) => item.unread_count), [0, 2]);
+  assert.deepEqual(conversations.map((item) => item.unread_count), [3, 2]);
 });

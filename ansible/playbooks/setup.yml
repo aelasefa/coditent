@@ -26,6 +26,13 @@
         - nginx
         - proxy
 
+    - role: monitoring
+      when: monitoring_enabled | default(true)
+      tags:
+        - monitoring
+        - observability
+
+
   post_tasks:
     - name: Ensure app directory has correct ownership after provisioning
       ansible.builtin.file:

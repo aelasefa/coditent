@@ -29,6 +29,7 @@ compose_run_services:
 # The EC2 host serves only the API. The public application is hosted by
 # Vercel, so keep the TLS hostname and browser-facing origin separate.
 server_name: "api.coditent.app"
+grafana_server_name: "grafana.coditent.app"
 frontend_url: "https://coditent.app"
 cors_origins: "https://coditent.app,https://www.coditent.app"
 # OAuth starts through the public API proxy, which sets a host-bound browser

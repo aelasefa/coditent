@@ -207,7 +207,7 @@
 .accountButton > svg {
   width: 0.9rem;
   height: 0.9rem;
-  color: #6a806f;
+  color: #617369;
 }
 
 .accountName {
@@ -236,7 +236,7 @@
   padding: 0.6rem;
   overflow: hidden;
   border-bottom: 1px solid #e3e9df;
-  color: #6a806f;
+  color: #617369;
   font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -464,7 +464,7 @@
   }
 
   .mobileAccount small {
-    color: #6a806f;
+    color: #617369;
     font-size: 0.7rem;
   }
 

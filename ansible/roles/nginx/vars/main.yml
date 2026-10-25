@@ -2,3 +2,10 @@
 nginx_site_name: coditent
 backend_upstream: "127.0.0.1:8001"
 frontend_upstream: "127.0.0.1:3001"
+
+grafana_site_name: grafana
+grafana_server_name: "grafana.coditent.app"
+grafana_upstream: "127.0.0.1:3000"
+grafana_tls_certificate_path: "/etc/letsencrypt/live/{{ grafana_server_name }}/fullchain.pem"
+grafana_tls_certificate_key_path: "/etc/letsencrypt/live/{{ grafana_server_name }}/privkey.pem"
+

@@ -1,0 +1,47 @@
+---
+# ============================================================
+# Monitoring Deployment Playbook for Coditent
+# Usage:
+#   Local (development):
+#     ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/monitoring.yml --limit local
+#   Production (EC2):
+#     ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/monitoring.yml --limit production
+#   CLI helper:
+#     bash ansible/deploy.sh monitoring [local|production]
+# ============================================================
+
+- name: Deploy Coditent Monitoring Stack (Prometheus + Grafana + Node Exporter)
+  hosts: "{{ target_hosts | default('all') }}"
+  become: "{{ ansible_become | default(true) }}"
+  gather_facts: yes
+
+  roles:
+    - role: monitoring
+      tags:
+        - monitoring
+        - observability
+
+    - role: nginx
+      when: nginx_enabled | default(false)
+      tags:
+        - nginx
+        - proxy
+
+  post_tasks:
+    - name: Flush handlers to apply Nginx changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify public Grafana HTTPS endpoint
+      ansible.builtin.uri:
+        url: "https://{{ grafana_server_name }}/api/health"
+        method: GET
+        status_code: 200
+        validate_certs: yes
+      delegate_to: localhost
+      become: false
+      when: nginx_tls_enabled | default(false)
+      register: public_grafana_health
+      until: public_grafana_health.status == 200
+      retries: 10
+      delay: 3
+

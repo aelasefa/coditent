@@ -1,0 +1,65 @@
+---
+# ============================================================
+# Nginx Virtual Host and TLS Management for Grafana
+# ============================================================
+
+- name: Check whether Grafana TLS certificate already exists
+  ansible.builtin.stat:
+    path: "{{ grafana_tls_certificate_path }}"
+  register: nginx_grafana_tls_certificate
+  when: nginx_tls_enabled | default(false)
+
+- name: Deploy temporary HTTP-only Grafana virtual host for initial ACME challenge
+  ansible.builtin.template:
+    src: grafana.conf.j2
+    dest: /etc/nginx/sites-available/{{ grafana_site_name }}.conf
+    mode: '0644'
+  vars:
+    grafana_render_tls_enabled: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_grafana_tls_certificate.stat.exists
+
+- name: Enable temporary HTTP Grafana site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/{{ grafana_site_name }}.conf
+    dest: /etc/nginx/sites-enabled/{{ grafana_site_name }}.conf
+    state: link
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_grafana_tls_certificate.stat.exists
+
+- name: Test temporary HTTP Nginx configuration for Grafana
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_grafana_tls_certificate.stat.exists
+
+- name: Reload Nginx with temporary HTTP virtual host for Grafana
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+  when:
+    - nginx_tls_enabled | default(false)
+    - not nginx_grafana_tls_certificate.stat.exists
+
+- name: Request trusted Let's Encrypt certificate for Grafana
+  ansible.builtin.command:
+    argv: "{{ ['certbot', 'certonly', '--webroot', '--webroot-path', letsencrypt_webroot, '--preferred-challenges', 'http', '--non-interactive', '--agree-tos', '--no-eff-email', '--keep-until-expiring', '--cert-name', grafana_server_name, '--email', letsencrypt_email, '--domain', grafana_server_name] + (['--staging'] if letsencrypt_staging | default(false) else []) }}"
+    creates: "{{ grafana_tls_certificate_path }}"
+  when: nginx_tls_enabled | default(false)
+
+- name: Deploy final Grafana Nginx virtual host configuration
+  ansible.builtin.template:
+    src: grafana.conf.j2
+    dest: /etc/nginx/sites-available/{{ grafana_site_name }}.conf
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Enable final Grafana Nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/{{ grafana_site_name }}.conf
+    dest: /etc/nginx/sites-enabled/{{ grafana_site_name }}.conf
+    state: link
+  notify: Reload nginx

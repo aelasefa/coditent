@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.routers import candidates, companies
 from app.services.cv_parser import MAX_CV_BYTES, NoExtractableTextError
+from app.services.cv_storage import CVStorageNotFoundError, CVStorageUnavailableError
 from app.services.company_logo import MAX_LOGO_BYTES
 
 
@@ -129,3 +130,69 @@ async def test_no_text_cv_route_returns_documented_422(monkeypatch) -> None:
         "code": "CV_NO_TEXT",
         "message": "No extractable text found",
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("storage_error", "expected_status"),
+    [
+        (CVStorageNotFoundError("missing"), 404),
+        (CVStorageUnavailableError("unavailable"), 503),
+    ],
+)
+async def test_candidate_download_distinguishes_missing_from_unavailable(
+    monkeypatch, storage_error, expected_status
+) -> None:
+    user_id = uuid4()
+    profile = SimpleNamespace(user_id=user_id, current_cv_asset_id=uuid4())
+    asset = SimpleNamespace(
+        storage_path=f"{user_id}/private.pdf",
+        original_filename="resume.pdf",
+        content_type="application/pdf",
+    )
+
+    async def fake_profile(_db, _user_id):
+        return profile
+
+    async def fake_current_asset(_db, _profile, _owner_id):
+        return asset
+
+    def failed_download(_path: str):
+        raise storage_error
+
+    monkeypatch.setattr(candidates, "_get_profile", fake_profile)
+    monkeypatch.setattr(candidates, "get_current_cv_asset", fake_current_asset)
+    monkeypatch.setattr(candidates, "download_cv", failed_download)
+
+    with pytest.raises(HTTPException) as caught:
+        await candidates.download_candidate_cv(
+            SimpleNamespace(id=user_id), SimpleNamespace()
+        )
+    assert caught.value.status_code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_candidate_parse_returns_503_for_storage_transport_failure(monkeypatch) -> None:
+    user_id = uuid4()
+    profile = SimpleNamespace(user_id=user_id, current_cv_asset_id=uuid4())
+    asset = SimpleNamespace(storage_path=f"{user_id}/private.pdf")
+
+    async def fake_profile(_db, _user_id):
+        return profile
+
+    async def fake_current_asset(_db, _profile, _owner_id):
+        return asset
+
+    def failed_download(_path: str):
+        raise CVStorageUnavailableError("unavailable")
+
+    monkeypatch.setattr(candidates, "_get_profile", fake_profile)
+    monkeypatch.setattr(candidates, "get_current_cv_asset", fake_current_asset)
+    monkeypatch.setattr(candidates, "download_cv", failed_download)
+
+    with pytest.raises(HTTPException) as caught:
+        await candidates.parse_candidate_cv(
+            SimpleNamespace(id=user_id), SimpleNamespace()
+        )
+    assert caught.value.status_code == 503
+    assert caught.value.detail["code"] == "CV_STORAGE_UNAVAILABLE"

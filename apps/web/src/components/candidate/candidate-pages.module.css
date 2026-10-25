@@ -60,7 +60,7 @@
 .journeyItem { display: flex; flex-direction: column; min-width: 0; min-height: 148px; padding: 1.2rem 1.5rem; transition: background-color 250ms ease; }
 .journeyItem + .journeyItem { border-left: 1px solid #e3e9df; }
 .journeyItem:hover { background: #f2f6ef; }
-.journeyItem > span { color: #6a806f; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; }
+.journeyItem > span { color: #617369; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; }
 .journeyItem > strong { margin-top: 0.7rem; color: #194d38; font-family: Georgia, "Times New Roman", serif; font-size: 2.25rem; font-weight: 400; line-height: 1; }
 .journeyItem > .journeyCompleteMark { display: flex; height: 2.25rem; align-items: center; }
 .journeyCompleteMark svg { width: 2.35rem; height: 2.35rem; stroke-width: 1.8; }
@@ -165,7 +165,7 @@
 .profileIdentity p { margin: 0.55rem 0 0; color: #40584b; font-size: 0.9rem; line-height: 1.5; }
 .profileIdentity span { display: block; margin-top: 0.35rem; color: #617369; font-size: 0.76rem; }
 .profileIntroActions { display: flex; align-items: center; gap: 0.7rem; margin-top: 1.5rem; }
-.profileIntroActions span { color: #6a806f; font-size: 0.72rem; }
+.profileIntroActions span { color: #617369; font-size: 0.72rem; }
 .profileAvatar { width: 5.25rem; height: 5.25rem; flex: none; font-size: 1.5rem; }
 
 .profileArtwork {
@@ -201,7 +201,7 @@
 
 .statusItem + .statusItem { border-left: 1px solid #e3e9df; }
 .statusItem p { margin: 0.55rem 0 0; color: #617369; font-size: 0.78rem; line-height: 1.4; }
-.statusLabel { color: #6a806f; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.statusLabel { color: #617369; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 .statusValue { display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.65rem; color: #194d38; }
 .statusValue > strong { font-family: Georgia, "Times New Roman", serif; font-size: 2rem; font-weight: 400; line-height: 1; }
 .statusValue > span { color: #52675a; font-size: 0.78rem; }
@@ -222,7 +222,7 @@
 .profileForm { min-height: 430px; }
 .profilePanel { min-height: 390px; padding: clamp(1.25rem, 3.3vw, 2.7rem); animation: candidate-panel-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .panelHeader { display: flex; align-items: start; justify-content: space-between; gap: 2rem; max-width: 950px; margin-bottom: 2rem; padding-bottom: 1.35rem; border-bottom: 1px solid #e3e9df; }
-.panelHeader .eyebrow { margin-bottom: 0.35rem; color: #6a806f; }
+.panelHeader .eyebrow { margin-bottom: 0.35rem; color: #617369; }
 .panelHeader h2 { margin: 0; color: #203d2e; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.9rem, 2.6vw, 2.65rem); font-weight: 400; letter-spacing: -0.04em; line-height: 1.1; }
 .panelHeader p:not(.eyebrow) { margin: 0.5rem 0 0; color: #617369; font-size: 0.88rem; }
 .panelHeader > span { flex: none; color: #819286; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
@@ -323,7 +323,7 @@
 .toolbarSearch { position: relative; }
 .toolbarPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
 .toolbarActions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.7rem 1rem; min-height: 44px; }
-.toolbarActions > span { color: #6a806f; font-size: 0.73rem; }
+.toolbarActions > span { color: #617369; font-size: 0.73rem; }
 .resultsHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2.5rem 0 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #cfdbcf; }
 .resultsHeading h2 { margin: 0; color: #203d2e; font-family: Georgia, "Times New Roman", serif; font-size: 1.75rem; font-weight: 400; letter-spacing: -0.025em; }
 .resultsHeading p { margin: 0; color: #617369; font-size: 0.78rem; }

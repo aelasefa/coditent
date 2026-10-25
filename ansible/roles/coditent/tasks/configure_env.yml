@@ -47,6 +47,18 @@
       value: "{{ google_redirect_uri }}"
     - key: LINKEDIN_REDIRECT_URI
       value: "{{ linkedin_redirect_uri }}"
+    - key: GF_SERVER_DOMAIN
+      value: "{{ gf_server_domain | default('grafana.coditent.app') }}"
+    - key: GF_SERVER_ROOT_URL
+      value: "{{ gf_server_root_url | default('https://grafana.coditent.app/') }}"
+    - key: GF_SERVER_PROTOCOL
+      value: "{{ gf_server_protocol | default('http') }}"
+    - key: GF_AUTH_ANONYMOUS_ENABLED
+      value: "{{ gf_auth_anonymous_enabled | default('false') }}"
+    - key: GF_USERS_ALLOW_SIGN_UP
+      value: "{{ gf_users_allow_sign_up | default('false') }}"
+    - key: GF_SECURITY_COOKIE_SECURE
+      value: "{{ gf_security_cookie_secure | default('true') }}"
 
 - name: Check if remote apps/api/.env already exists
   ansible.builtin.stat:

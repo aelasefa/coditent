@@ -36,6 +36,7 @@ export function useRecruitmentChatSocket({
 }) {
   const [live, setLive] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
+  const readyRef = useRef(false);
   const pendingRef = useRef(new Map<string, PendingSend>());
   const handlers = useRef({ onMessage, onMessagesRead, onReady });
   handlers.current = { onMessage, onMessagesRead, onReady };
@@ -50,7 +51,7 @@ export function useRecruitmentChatSocket({
 
   const sendFrame = useCallback((frame: object): boolean => {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    if (!readyRef.current || !socket || socket.readyState !== WebSocket.OPEN) return false;
     try {
       socket.send(JSON.stringify(frame));
       return true;
@@ -79,6 +80,7 @@ export function useRecruitmentChatSocket({
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempt = 0;
+    let ticketRequestInFlight = false;
 
     const scheduleReconnect = () => {
       if (disposed || retryTimer || !navigator.onLine) return;
@@ -91,21 +93,31 @@ export function useRecruitmentChatSocket({
     };
 
     async function connect() {
-      if (disposed || !navigator.onLine) return;
+      if (
+        disposed
+        || !navigator.onLine
+        || ticketRequestInFlight
+        || socket?.readyState === WebSocket.CONNECTING
+        || socket?.readyState === WebSocket.OPEN
+      ) return;
+      ticketRequestInFlight = true;
       try {
         const { ticket } = await createRecruitmentSocketTicket(applicationId);
         if (disposed) return;
-        socket = new WebSocket(getRecruitmentWsUrl(applicationId, ticket));
-        socketRef.current = socket;
-        socket.onmessage = (event) => {
+        const currentSocket = new WebSocket(getRecruitmentWsUrl(applicationId, ticket));
+        socket = currentSocket;
+        socketRef.current = currentSocket;
+        readyRef.current = false;
+        currentSocket.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data as string) as IncomingFrame;
             if (payload.type === "ready") {
               reconnectAttempt = 0;
+              readyRef.current = true;
               setLive(true);
               handlers.current.onReady?.();
             } else if (payload.type === "ping") {
-              if (!sendFrame({ type: "pong" })) socket?.close();
+              if (!sendFrame({ type: "pong" })) currentSocket.close();
             } else if (payload.type === "message" && payload.message) {
               handlers.current.onMessage(payload.message);
             } else if (payload.type === "message_ack" && payload.message && payload.client_message_id) {
@@ -132,16 +144,30 @@ export function useRecruitmentChatSocket({
             // A malformed remote frame cannot alter local state.
           }
         };
-        socket.onclose = (event) => {
-          if (socketRef.current === socket) socketRef.current = null;
-          setLive(false);
-          rejectPending("Realtime connection closed before acknowledgement");
-          if (![4401, 4403, 4429].includes(event.code)) scheduleReconnect();
+        currentSocket.onclose = (event) => {
+          if (socket === currentSocket) socket = null;
+          if (socketRef.current === currentSocket) {
+            socketRef.current = null;
+            readyRef.current = false;
+            setLive(false);
+            rejectPending("Realtime connection closed before acknowledgement");
+            if (![4401, 4403, 4429].includes(event.code)) scheduleReconnect();
+          }
         };
-        socket.onerror = () => socket?.close();
+        // A WebSocket error is followed by a close event. Calling close()
+        // here while the handshake is pending creates a misleading browser
+        // warning and can abort an otherwise recoverable connection.
+        currentSocket.onerror = () => {
+          if (socketRef.current === currentSocket) {
+            readyRef.current = false;
+            setLive(false);
+          }
+        };
       } catch {
         setLive(false);
         scheduleReconnect();
+      } finally {
+        ticketRequestInFlight = false;
       }
     }
 
@@ -153,8 +179,17 @@ export function useRecruitmentChatSocket({
       window.removeEventListener("online", reconnectOnline);
       if (retryTimer) clearTimeout(retryTimer);
       rejectPending("Conversation closed");
-      socket?.close();
-      if (socketRef.current === socket) socketRef.current = null;
+      readyRef.current = false;
+      const currentSocket = socket;
+      socket = null;
+      if (currentSocket?.readyState === WebSocket.CONNECTING) {
+        // Let the handshake finish, then close. Calling close() during
+        // CONNECTING is what produces "closed before ... established".
+        currentSocket.onopen = () => currentSocket.close(1000, "Conversation closed");
+      } else if (currentSocket?.readyState === WebSocket.OPEN) {
+        currentSocket.close(1000, "Conversation closed");
+      }
+      if (socketRef.current === currentSocket) socketRef.current = null;
     };
   }, [applicationId, rejectPending, sendFrame]);
 

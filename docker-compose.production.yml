@@ -42,3 +42,8 @@ services:
       ACCESS_TOKEN_COOKIE_SECURE: "true"
       GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"
       LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"
+
+networks:
+  default:
+    name: coditent_network
+    external: true

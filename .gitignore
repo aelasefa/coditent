@@ -188,3 +188,4 @@ ansible/**/vault.yml
 !docs/operations/aws-ec2-vault-operations.md
 !docs/shared-vault.md
 !deploy/vault-server/README.md
+!monitoring/README.md

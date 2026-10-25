@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getApiBaseUrl,
@@ -19,11 +19,13 @@ import { stageLabel } from "@/components/candidate/application-stage";
 import styles from "@/components/candidate/chat-workspace.module.css";
 import { useRecruitmentChatSocket } from "@/hooks/use-recruitment-chat-socket";
 import { recruitmentChatErrorMessage } from "@/lib/recruitment-chat-error";
+import { confirmOptimisticMessage, createOptimisticMessage, markOptimisticMessageFailed, retryOptimisticMessage } from "@/lib/optimistic-chat";
 
 export default function RecruitmentChatPage({ params }: { params: Promise<{ applicationId: string }> }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const markingReadRef = useRef(false);
+  const [pendingSendCount, setPendingSendCount] = useState(0);
   const { applicationId } = use(params);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
@@ -48,13 +50,12 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
   const {
     live: recruitmentLive,
     markMessagesRead: markRealtimeMessagesRead,
-    sendMessage: sendRealtimeMessage,
   } = useRecruitmentChatSocket({
     applicationId,
     onMessage: handleRealtimeMessage,
     onMessagesRead: handleMessagesRead,
     onReady: () => {
-      void qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
+      if (pendingSendCount === 0) void qc.invalidateQueries({ queryKey: ["recruitment-chat", applicationId] });
       void qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
   });
@@ -62,7 +63,9 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
   const chatQuery = useQuery({
     queryKey: ["recruitment-chat", applicationId],
     queryFn: () => getRecruitmentChat(applicationId),
-    refetchInterval: recruitmentLive ? false : 3000,
+    refetchInterval: recruitmentLive || pendingSendCount > 0 ? false : 3000,
+    refetchOnReconnect: !recruitmentLive && pendingSendCount === 0,
+    refetchOnWindowFocus: !recruitmentLive && pendingSendCount === 0,
     retry: false,
   });
   const ctx = chatQuery.data;
@@ -112,18 +115,57 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
   }, [applicationId, ctx?.chat_enabled, handleMessagesRead, markRealtimeMessagesRead, unreadIncomingKey]);
 
   const sendMut = useMutation({
-    mutationFn: async (text: string) => {
-      const realtime = ctx?.chat_enabled ? sendRealtimeMessage(text) : null;
-      if (realtime) return realtime;
-      return sendRecruitmentMessage(applicationId, text);
+    // Persist outgoing messages over HTTP. The socket remains responsible for
+    // incoming live updates, while the optimistic bubble keeps sending instant.
+    mutationFn: ({ text }: { text: string; clientMessageId: string }) => sendRecruitmentMessage(applicationId, text),
+    onMutate: async ({ text, clientMessageId }) => {
+      setPendingSendCount((count) => count + 1);
+      await qc.cancelQueries({ queryKey: ["recruitment-chat", applicationId], exact: true });
+      const optimistic = createOptimisticMessage({
+        applicationId,
+        clientMessageId,
+        content: text,
+        receiverId: ctx?.peer?.id ?? "pending-peer",
+        senderId: me?.id ?? "optimistic-self",
+      });
+      qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+        ...previous,
+        messages: previous.messages.some((message) => message.id === optimistic.id)
+          ? retryOptimisticMessage(previous.messages, optimistic.id)
+          : [...previous.messages, optimistic],
+      } : previous);
+      return { optimisticId: optimistic.id };
     },
-    onSuccess: (created) => {
-      handleRealtimeMessage(created);
+    onSuccess: (created, _text, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+          ...previous,
+          messages: confirmOptimisticMessage(previous.messages, mutationContext.optimisticId, created),
+        } : previous);
+      } else {
+        handleRealtimeMessage(created);
+      }
       qc.invalidateQueries({ queryKey: ["my-recruitment-chats"] });
       qc.invalidateQueries({ queryKey: ["conversation-inbox"] });
     },
-    onError: () => toast("Message failed to send", { description: "Retry.", variant: "error" }),
+    onError: (_error, _variables, mutationContext) => {
+      if (mutationContext) {
+        qc.setQueryData<RecruitmentChatContext>(["recruitment-chat", applicationId], (previous) => previous ? {
+          ...previous,
+          messages: markOptimisticMessageFailed(previous.messages, mutationContext.optimisticId),
+        } : previous);
+      }
+      toast("Message failed to send", { description: "Retry from the message bubble.", variant: "error" });
+    },
+    onSettled: () => setPendingSendCount((count) => Math.max(0, count - 1)),
   });
+
+  const retryMessage = (message: ChatMessage) => {
+    const clientMessageId = message.id.startsWith("optimistic:")
+      ? message.id.slice("optimistic:".length)
+      : crypto.randomUUID();
+    sendMut.mutate({ text: message.content, clientMessageId });
+  };
 
   const peerName = ctx?.peer?.full_name ?? "recruiter";
   const peerRole = me?.role === "CANDIDATE" ? "Recruiter" : "Candidate";
@@ -200,11 +242,12 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
             <MessageList
               messages={ctx.messages}
               myId={me?.id}
+              onRetry={retryMessage}
             />
             <Composer
               peerName={peerName}
-              pending={sendMut.isPending}
-              onSend={(text) => sendMut.mutateAsync(text).then(() => undefined)}
+              pending={false}
+              onSend={(text) => sendMut.mutate({ text, clientMessageId: crypto.randomUUID() })}
             />
           </>
         )}

@@ -88,6 +88,12 @@
 .threadNotice strong { color: var(--foreground); font-size: 0.95rem; }
 .threadNotice p { max-width: 38ch; margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.55; }
 .threadNotice button { margin-top: 0.4rem; color: var(--primary); font-size: 0.8rem; font-weight: 750; }
+.optimisticMessage { animation: optimistic-message-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes optimistic-message-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 /* Keep the full chat width on smaller screens; the non-modal panel overlays it. */
 @media (max-width: 1099px) {
@@ -143,4 +149,5 @@
 @media (prefers-reduced-motion: reduce) {
   .searchWrap, .filters button, .conversationRow, .welcome a, .workspace, .profileSlot, .profilePanel, .profileBackdrop, .profileIconButton { transition: none; }
   .welcome a:hover { transform: none; }
+  .optimisticMessage { animation: none; }
 }
