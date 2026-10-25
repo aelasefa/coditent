@@ -189,3 +189,6 @@ ansible/**/vault.yml
 !docs/operations/aws-ec2-vault-operations.md
 !docs/shared-vault.md
 !deploy/vault-server/README.md
+
+# Supabase CLI local project metadata
+/supabase/.temp/
