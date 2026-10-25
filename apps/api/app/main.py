@@ -97,19 +97,19 @@ app.include_router(support.router, tags=["Support"])
 
 @app.on_event("startup")
 async def on_startup():
-    from app.core.vault import vault_client
+    from app.core.runtime_secrets import runtime_secrets_client
 
     # Eagerly preload all secrets so every request is served from the
-    # in-process cache rather than making per-request Vault HTTP calls.
-    vault_client.preload()
+    # in-process cache rather than making per-request HTTP calls.
+    runtime_secrets_client.preload()
 
-    if vault_client.enabled and vault_client.health_check():
-        secret_count = len(vault_client.read_secrets())
-        logger.info("hashicorp_vault_connected", extra={"secrets_loaded": secret_count})
+    if runtime_secrets_client.enabled and runtime_secrets_client.health_check():
+        secret_count = len(runtime_secrets_client.read_secrets())
+        logger.info("supabase_runtime_secrets_connected", extra={"secrets_loaded": secret_count})
     else:
         logger.info(
-            "hashicorp_vault_offline_using_env_fallback",
-            extra={"vault_addr": vault_client.vault_addr or "(not set)"},
+            "supabase_runtime_secrets_offline_using_env_fallback",
+            extra={"endpoint": runtime_secrets_client.endpoint or "(not set)"},
         )
 
 @app.get("/metrics")

@@ -183,5 +183,8 @@ ansible/**/vault.yml
 !docs/security/
 !docs/security/**
 !docs/operations/ecr-ssm-deployment.md
+!docs/operations/frontend-implementation-handoff.md
+!docs/operations/local-project-usage.md
+!docs/operations/aws-ec2-vault-operations.md
 !docs/shared-vault.md
 !deploy/vault-server/README.md

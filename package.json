@@ -6,5 +6,8 @@
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "start": "pnpm --filter web start"
+  },
+  "devDependencies": {
+    "supabase": "^2.122.0"
   }
 }

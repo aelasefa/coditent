@@ -81,6 +81,10 @@ jobs:
   ci-api:
     name: CI - Test Backend
     runs-on: ubuntu-latest
+    env:
+      SECRET_SOURCE: environment
+      RUNTIME_SECRETS_REQUIRED: "false"
+      APP_ENV: test
     services:
       postgres:
         image: postgres:16-alpine
@@ -125,6 +129,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
+      - name: Test Vault launcher and shell syntax
+        working-directory: .
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_vault*.py' -v
+          bash -n vault/init.sh scripts/vault-env.sh scripts/run_project.sh scripts/run_project_teammate.sh scripts/deploy-production-image.sh
+
       - name: Generate ephemeral CI-only signing keys
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
@@ -135,17 +145,17 @@ jobs:
           print(f"CI_EMAIL_OUTBOX_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
           PY
 
-      - name: Sanity check imports (Supabase-only, no local DB)
+      - name: Sanity check imports with isolated CI credentials
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           TOTP_ENCRYPTION_KEY: ${{ env.CI_TOTP_ENCRYPTION_KEY }}
           EMAIL_OUTBOX_ENCRYPTION_KEY: ${{ env.CI_EMAIL_OUTBOX_ENCRYPTION_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REDIS_URL: ${{ secrets.REDIS_URL || 'redis://localhost:6380/0' }}
-          FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
+          GEMINI_API_KEY: ci-placeholder
+          REDIS_URL: redis://localhost:6379/0
+          FRONTEND_URL: http://localhost:3000
         run: |
-          python -c "import app.main; print('API app loaded successfully (Supabase URL validated)')"
+          python -c "import app.main; print('API app loaded successfully with CI settings')"
 
       - name: Run deterministic API regression suites
         env:
@@ -354,6 +364,7 @@ jobs:
               "cd /opt/coditent",
               "command -v aws >/dev/null",
               "command -v docker >/dev/null",
+              "command -v python3 >/dev/null",
               "chown -R ubuntu:ubuntu /opt/coditent",
               "fetch_ok=false; for attempt in 1 2 3 4; do if sudo -u ubuntu git -c http.version=HTTP/1.1 fetch --prune origin main; then fetch_ok=true; break; fi; sleep 15; done; $fetch_ok",
               ("sudo -u ubuntu git cat-file -e " + $commit + "^{commit}"),

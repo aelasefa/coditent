@@ -1,0 +1,3 @@
+[functions.coditent-runtime-secrets]
+# This endpoint has its own per-teammate token check in the handler.
+verify_jwt = false
