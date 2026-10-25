@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.core.vault import VaultClient
+from app.core.runtime_secrets import RuntimeSecretsClient
 
 
 def _repository_root() -> Path | None:
@@ -20,25 +20,30 @@ def _repository_root() -> Path | None:
     )
 
 
-def test_vault_is_disabled_without_injected_credentials(monkeypatch) -> None:
-    monkeypatch.delenv("VAULT_ADDR", raising=False)
-    monkeypatch.delenv("VAULT_TOKEN", raising=False)
+def test_runtime_secrets_are_disabled_without_injected_credentials(monkeypatch) -> None:
+    for key in (
+        "SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_RUNTIME_TOKEN",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
-    client = VaultClient()
-
+    client = RuntimeSecretsClient()
     assert client.enabled is False
-    assert client.vault_addr == ""
-    assert client.vault_token == ""
+    assert client.endpoint == ""
+    assert client.access_token == ""
 
 
-def test_vault_requires_both_address_and_token(monkeypatch) -> None:
-    monkeypatch.setenv("VAULT_ADDR", "https://vault.example.invalid")
-    monkeypatch.delenv("VAULT_TOKEN", raising=False)
-    assert VaultClient().enabled is False
+def test_runtime_secrets_require_project_url_publishable_key_and_token(monkeypatch) -> None:
+    monkeypatch.delenv("SECRET_SOURCE", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test")
+    monkeypatch.delenv("SUPABASE_RUNTIME_TOKEN", raising=False)
+    assert RuntimeSecretsClient().enabled is False
 
-    monkeypatch.delenv("VAULT_ADDR", raising=False)
-    monkeypatch.setenv("VAULT_TOKEN", "injected-at-runtime")
-    assert VaultClient().enabled is False
+    monkeypatch.setenv("SUPABASE_RUNTIME_TOKEN", "teammate-runtime-token")
+    assert RuntimeSecretsClient().enabled is True
 
 
 @pytest.mark.parametrize(
@@ -61,19 +66,27 @@ def test_runtime_rejects_weak_or_placeholder_signing_keys(
         )
 
 
-def test_compose_has_no_default_vault_root_credential() -> None:
+def test_compose_uses_vault_injected_environment() -> None:
     repo_root = _repository_root()
     if repo_root is None:
         pytest.skip("repository-level Compose files are not mounted in API container")
 
     compose = (repo_root / "docker-compose.yml").read_text()
-    development_override = (
-        repo_root / "docker-compose.dev-vault.yml"
-    ).read_text()
 
-    assert "VAULT_DEV_ROOT_TOKEN_ID" not in compose
-    assert "profiles: [\"dev-vault\"]" in development_override
-    assert "VAULT_DEV_ROOT_TOKEN_ID:?" in development_override
-    assert '"127.0.0.1:8200:8200"' in development_override
-    assert "coditent-vault-token-secret" not in compose
-    assert "coditent-vault-token-secret" not in development_override
+    assert "image: hashicorp/vault:1.21.4" in compose
+    assert "SECRET_SOURCE: environment" in compose
+    assert 'RUNTIME_SECRETS_REQUIRED: "false"' in compose
+    assert "JWT_SECRET: ${JWT_SECRET:-}" in compose
+    assert "vault_data:/vault/file" in compose
+
+
+def test_launcher_injected_secrets_are_loaded_without_hosted_broker(monkeypatch) -> None:
+    monkeypatch.setenv("SECRET_SOURCE", "environment")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://runtime.invalid/app")
+    monkeypatch.setenv("JWT_SECRET", "a" * 48)
+    monkeypatch.setenv("GEMINI_API_KEY", "injected-provider-key")
+    monkeypatch.setenv("SUPABASE_RUNTIME_TOKEN", "stale-broker-token")
+    assert RuntimeSecretsClient().enabled is False
+    settings = Settings(_env_file=None)
+    assert settings.secret_key == "a" * 48
+    assert settings.gemini_api_key == "injected-provider-key"

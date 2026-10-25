@@ -7,7 +7,7 @@ APP_DIR="${APP_DIR:-/opt/coditent}"
 IMAGE_URI="${1:-}"
 EXPECTED_COMMIT="${2:-}"
 AWS_REGION="${3:-}"
-COMPOSE_SERVICES=(redis api worker ai-dispatcher)
+COMPOSE_SERVICES=(vault redis api worker ai-dispatcher)
 IMAGE_SERVICES=(api worker ai-dispatcher)
 ENV_FILE="$APP_DIR/.env"
 PREVIOUS_IMAGE_FILE="$APP_DIR/.previous-api-image"
@@ -41,6 +41,13 @@ if [[ ! -s "$ENV_FILE" ]]; then
   echo "ERROR: $ENV_FILE is missing; production secrets must already exist" >&2
   exit 4
 fi
+
+# Fail before changing the release image or host ingress if Vault is not ready.
+source scripts/vault-env.sh
+vault_load_env --production
+export CODITENT_API_IMAGE="$IMAGE_URI"
+export COMPOSE_FILE="docker-compose.yml:docker-compose.production.yml"
+docker compose config --quiet
 
 reconcile_nginx_waf() {
   local backup=""

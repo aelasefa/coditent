@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
@@ -13,8 +14,8 @@ from pydantic_settings import (
 )
 
 
-class VaultSettingsSource(EnvSettingsSource):
-    """Pydantic settings source that pulls secrets from HashiCorp Vault KV v2.
+class RuntimeSecretsSettingsSource(EnvSettingsSource):
+    """Pydantic settings source that pulls secrets from Supabase Vault.
 
     Secret fields are populated only from the Vault cache. Nonsecret runtime
     configuration continues to come from environment variables and defaults.
@@ -22,9 +23,9 @@ class VaultSettingsSource(EnvSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         # Lazy import avoids circular dependency at module load time.
-        from app.core.vault import vault_client  # noqa: PLC0415
+        from app.core.runtime_secrets import runtime_secrets_client  # noqa: PLC0415
 
-        vault_secrets = vault_client.read_secrets()
+        runtime_secrets = runtime_secrets_client.read_secrets()
 
         data: dict[str, Any] = {}
 
@@ -44,17 +45,17 @@ class VaultSettingsSource(EnvSettingsSource):
                     candidates.append(validation_alias.upper())
 
             for candidate in candidates:
-                if candidate in vault_secrets:
+                if candidate in runtime_secrets:
                     # Use the alias when the field has one; pydantic only
                     # accepts aliased fields under their alias names.
                     key = candidate if field_info.validation_alias is not None else field_name
-                    data[key] = vault_secrets[candidate]
+                    data[key] = runtime_secrets[candidate]
                     break
 
         return data
 
 
-_VAULT_ONLY_FIELDS = {
+_RUNTIME_SECRET_FIELDS = {
     "database_url",
     "supabase_url",
     "supabase_service_key",
@@ -70,14 +71,14 @@ _VAULT_ONLY_FIELDS = {
 }
 
 
-def _remove_vault_only_values(source: PydanticBaseSettingsSource) -> None:
-    """Prevent .env and container environment values overriding Vault keys."""
+def _remove_runtime_secret_values(source: PydanticBaseSettingsSource) -> None:
+    """Prevent .env and container environment values overriding hosted secrets."""
     values = getattr(source, "env_vars", None)
     if not isinstance(values, dict):
         return
-    blocked = {name.upper() for name in _VAULT_ONLY_FIELDS}
+    blocked = {name.upper() for name in _RUNTIME_SECRET_FIELDS}
     blocked.update({"JWT_SECRET", "SECRET_KEY"})
-    blocked.update(name.upper() for name in _VAULT_ONLY_FIELDS)
+    blocked.update(name.upper() for name in _RUNTIME_SECRET_FIELDS)
     for key in tuple(values):
         if key.upper() in blocked:
             values.pop(key, None)
@@ -274,12 +275,14 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Load credentials from Vault; keep environment for nonsecret config."""
-        _remove_vault_only_values(env_settings)
-        _remove_vault_only_values(dotenv_settings)
+        """Use launcher-injected Vault values or the existing hosted broker."""
+        if os.getenv("SECRET_SOURCE") == "environment":
+            return (init_settings, env_settings)
+        _remove_runtime_secret_values(env_settings)
+        _remove_runtime_secret_values(dotenv_settings)
         return (
             init_settings,
-            VaultSettingsSource(settings_cls),
+            RuntimeSecretsSettingsSource(settings_cls),
             env_settings,
             dotenv_settings,
         )

@@ -1,30 +1,20 @@
-services:
-  # ──────────────────────────────────────────────────────────────────────────
-  # Persistent local Vault. Initialize and unseal it before starting the app.
-  # ──────────────────────────────────────────────────────────────────────────
-  vault:
-    profiles: ["local-vault"]
-    image: hashicorp/vault:1.17
-    container_name: coditent-vault
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8200:8200"
-    cap_add:
-      - IPC_LOCK
-    environment:
-      VAULT_ADDR: http://127.0.0.1:8200
-    command: vault server -config=/vault/config/config.hcl
-    volumes:
-      - ./vault/config.hcl:/vault/config/config.hcl:ro
-      - ./vault/policies:/vault/policies:ro
-      - vault_data:/vault/file
-    healthcheck:
-      test: ["CMD-SHELL", "vault status -address=http://127.0.0.1:8200 >/dev/null 2>&1"]
-      interval: 3s
-      timeout: 5s
-      retries: 4
-      start_period: 5s
+# Vault-backed startup exports the bundle before Compose interpolates service environments.
+x-vault-secrets: &vault-secrets
+  SECRET_SOURCE: environment
+  RUNTIME_SECRETS_REQUIRED: "false"
+  DATABASE_URL: ${DATABASE_URL:-}
+  JWT_SECRET: ${JWT_SECRET:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID:-}
+  LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+  EMAIL_OUTBOX_ENCRYPTION_KEY: ${EMAIL_OUTBOX_ENCRYPTION_KEY:-}
 
+services:
   api:
     image: coditent-api:local
     build:
@@ -34,11 +24,10 @@ services:
     cap_drop:
       - ALL
     environment:
-      # AppRole is read-only and can only access secret/data/coditent.
-      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
-      VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
-      VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
-      VAULT_REQUIRED: "true"
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      <<: *vault-secrets
       # ── Non-secret infrastructure config ────────────────────────────────
       REDIS_URL: redis://redis:6379/0
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
@@ -63,9 +52,6 @@ services:
       sh -c "alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port 8001 --no-access-log"
     depends_on:
-      vault:
-        condition: service_healthy
-        required: false
       redis:
         condition: service_healthy
     healthcheck:
@@ -85,18 +71,15 @@ services:
     cap_drop:
       - ALL
     depends_on:
-      vault:
-        condition: service_healthy
-        required: false
       api:
         condition: service_started
       redis:
         condition: service_healthy
     environment:
-      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
-      VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
-      VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
-      VAULT_REQUIRED: "true"
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      <<: *vault-secrets
       REDIS_URL: redis://redis:6379/0
       # Each prefork process runs one AI job at a time, but a running job
       # needs a second connection for lease heartbeats and the final
@@ -125,18 +108,15 @@ services:
     cap_drop:
       - ALL
     depends_on:
-      vault:
-        condition: service_healthy
-        required: false
       api:
         condition: service_started
       redis:
         condition: service_healthy
     environment:
-      VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
-      VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
-      VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
-      VAULT_REQUIRED: "true"
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      <<: *vault-secrets
       REDIS_URL: redis://redis:6379/0
       DB_POOL_SIZE: "1"
       DB_MAX_OVERFLOW: "0"
@@ -176,8 +156,8 @@ services:
         NEXT_PUBLIC_API_URL: /api-proxy
         NEXT_PUBLIC_OAUTH_API_URL: ${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}
         BACKEND_PROXY_URL: http://api:8001
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
     cap_drop:
       - ALL
     depends_on:
@@ -187,8 +167,8 @@ services:
       NEXT_PUBLIC_API_URL: /api-proxy
       NEXT_PUBLIC_OAUTH_API_URL: ${NEXT_PUBLIC_OAUTH_API_URL:-http://localhost:8001}
       BACKEND_PROXY_URL: http://api:8001
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
     expose:
       - "3000"
     healthcheck:
@@ -221,6 +201,20 @@ services:
       interval: 10s
       timeout: 15s
       retries: 10
+
+  vault:
+    image: hashicorp/vault:1.21.4
+    # The image entrypoint already loads /vault/config; do not load it twice.
+    command: server
+    restart: unless-stopped
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports:
+      - "127.0.0.1:${VAULT_PORT:-8200}:8200"
+    volumes:
+      - vault_data:/vault/file
+      - ./vault/config.hcl:/vault/config/config.hcl:ro
 
 networks:
   default:
