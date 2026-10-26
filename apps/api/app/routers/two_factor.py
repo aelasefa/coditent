@@ -286,7 +286,6 @@ async def two_factor_verify_challenge(
 
     final_token = issue_access_token(user)
     set_access_cookie(response, final_token)
-    from datetime import timedelta
     from app.config import settings
 
     trusted_device_token = create_trusted_device_token(

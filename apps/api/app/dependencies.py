@@ -80,6 +80,15 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
+    try:
+        ensure_account_can_authenticate(user)
+        ensure_credential_matches_account(payload, user)
+    except AuthenticationRejected as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is not active",
+        ) from exc
+
     # Fail closed: accepting requests during a Redis outage would bypass
     # logout-all revocation checks.
     try:
@@ -107,14 +116,6 @@ async def get_current_user(
                 detail="Session revoked. Please log in again.",
             ) from exc
 
-    try:
-        ensure_account_can_authenticate(user)
-        ensure_credential_matches_account(payload, user)
-    except AuthenticationRejected as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account is not active",
-        ) from exc
     return user
 
 

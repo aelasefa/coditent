@@ -464,6 +464,8 @@ def test_application_images_run_as_unprivileged_users() -> None:
     assert "USER 10001:10001" in web_dockerfile
     assert "npm run build" in web_dockerfile
     assert 'CMD ["node", "server.js"]' in web_dockerfile
+    assert compose.count("security_opt:") >= 4
+    assert compose.count("no-new-privileges:true") >= 4
     assert compose.count("cap_drop:") >= 3
 
 

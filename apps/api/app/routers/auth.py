@@ -1235,6 +1235,8 @@ async def logout_all_devices(
             detail="Could not revoke sessions because session storage is unavailable.",
         ) from exc
 
+    # The durable account version invalidates every credential even if Redis
+    # is later flushed, while the marker rejects already-issued tokens now.
     current_user.auth_version = (current_user.auth_version or 0) + 1
     await db.commit()
     clear_auth_cookies(response)

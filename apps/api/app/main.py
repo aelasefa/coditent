@@ -14,27 +14,7 @@ from app.health import router as health_router
 from app.limiter import limiter
 from app.models import User
 from app.observability import configure_logging, get_logger, record_request_metrics, render_metrics, route_label
-from app.routers import (
-    account_recovery,
-    admin,
-    applications,
-    auth,
-    audit,
-    candidates,
-    chat,
-    companies,
-    friends,
-    gdpr,
-    institutions,
-    missions,
-    notifications,
-    offers,
-    invitations,
-    recommendations,
-    requests,
-    support,
-    two_factor,
-)
+from app.routers import account_recovery, admin, applications, auth, audit, candidates, chat, companies, friends, gdpr, institutions, missions, notifications, offers, invitations, recommendations, requests, support, two_factor
 
 
 
@@ -85,13 +65,13 @@ app.include_router(applications.router, prefix="/applications", tags=["Applicati
 app.include_router(audit.router, prefix="/audit", tags=["Audit"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(two_factor.router, prefix="/auth/2fa", tags=["Two-Factor Authentication"])
-app.include_router(gdpr.router, prefix="/auth/gdpr", tags=["GDPR Data Rights"])
 app.include_router(friends.router, prefix="/friends", tags=["Friends"])
 app.include_router(missions.router, prefix="/missions", tags=["Practice Missions"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(institutions.router, prefix="/institutions", tags=["Institutions"])
 app.include_router(health_router, tags=["Health"])
 app.include_router(support.router, tags=["Support"])
+app.include_router(gdpr.router, prefix="/auth/gdpr", tags=["GDPR Data Rights"])
 
 
 

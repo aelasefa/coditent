@@ -21,6 +21,8 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     restart: on-failure
+    security_opt:
+      - no-new-privileges:true
     cap_drop:
       - ALL
     environment:
@@ -32,20 +34,20 @@ services:
       REDIS_URL: redis://redis:6379/0
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
-      ACCESS_TOKEN_COOKIE_SECURE: "${ACCESS_TOKEN_COOKIE_SECURE:-false}"
+      ACCESS_TOKEN_COOKIE_SECURE: "${ACCESS_TOKEN_COOKIE_SECURE:-true}"
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8001/auth/sso/google/callback}
       LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI:-http://localhost:8001/auth/sso/linkedin/callback}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
       RESEND_FROM_NAME: ${RESEND_FROM_NAME:-CODITENT}
       # ── DB pool bounds (service-specific) ───────────────────────────────
+      # Supabase session mode on the development plan allows only 15 clients.
+      # Keep API capacity bounded and leave room for workers and admin tools.
       DB_POOL_SIZE: "2"
       DB_MAX_OVERFLOW: "0"
       DB_POOL_TIMEOUT_SECONDS: "15"
       DB_POOL_RECYCLE_SECONDS: "300"
       READINESS_CHECK_TIMEOUT_SECONDS: "${READINESS_CHECK_TIMEOUT_SECONDS:-10}"
       WORKER_HEARTBEAT_TTL_SECONDS: "${WORKER_HEARTBEAT_TTL_SECONDS:-30}"
-    volumes:
-      - ./apps/api:/app
     ports:
       - "127.0.0.1:8001:8001"
     command: >
@@ -68,6 +70,8 @@ services:
   worker:
     image: coditent-api:local
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     cap_drop:
       - ALL
     depends_on:
@@ -105,6 +109,8 @@ services:
   ai-dispatcher:
     image: coditent-api:local
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     cap_drop:
       - ALL
     depends_on:
@@ -158,6 +164,8 @@ services:
         BACKEND_PROXY_URL: http://api:8001
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+    security_opt:
+      - no-new-privileges:true
     cap_drop:
       - ALL
     depends_on:
@@ -216,9 +224,9 @@ services:
       - vault_data:/vault/file
       - ./vault/config.hcl:/vault/config/config.hcl:ro
 
-volumes:
-  vault_data:
-
 networks:
   default:
     name: coditent_network
+
+volumes:
+  vault_data:
