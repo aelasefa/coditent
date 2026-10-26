@@ -1219,7 +1219,9 @@ async def login(
 @limiter.limit("5/minute")
 async def logout_all_devices(
     request: Request,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Revoke all active JWT access tokens across all devices for the current user."""
     from app.cache import get_async_redis
@@ -1232,6 +1234,13 @@ async def logout_all_devices(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not revoke sessions because session storage is unavailable.",
         ) from exc
+
+    # The durable account version invalidates every credential even if Redis
+    # is later flushed, while the marker rejects already-issued tokens now.
+    current_user.auth_version = (current_user.auth_version or 0) + 1
+    await db.commit()
+    clear_auth_cookies(response)
+
     logger.info("logout_all_devices_success", user_id=str(current_user.id))
     return {"detail": "Logged out of all devices successfully."}
 
