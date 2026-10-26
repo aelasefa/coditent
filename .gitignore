@@ -176,6 +176,7 @@ ansible/**/vault.yml
 # 8. Markdown Notes & Documentation
 # ==========================================
 *.md
+!CONSOLE_AUDIT_REPORT.md
 !/README.md
 !audit-reports/MODULE_POINTS.md
 !/CHANGES_LOG.md

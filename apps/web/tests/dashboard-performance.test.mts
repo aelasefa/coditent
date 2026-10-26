@@ -26,6 +26,18 @@ test("global font loading does not add a render-blocking Google stylesheet", asy
   assert.doesNotMatch(globalCss, /fonts\.googleapis\.com|@import\s+url/);
 });
 
+test("root not-found styles stay in the global stylesheet to avoid unused CSS preloads", async () => {
+  const [notFound, globalCss] = await Promise.all([
+    readSource("src/app/not-found.tsx"),
+    readSource("src/app/globals.css"),
+  ]);
+
+  assert.doesNotMatch(notFound, /not-found\.module\.css/);
+  assert.match(notFound, /className="notFoundPage"/);
+  assert.match(globalCss, /\.notFoundPage\s*\{/);
+  assert.match(globalCss, /\.notFoundPrimaryAction\s*\{/);
+});
+
 test("dashboard company logos opt into responsive image optimization", async () => {
   const [jobCard, avatar] = await Promise.all([
     readSource("src/components/candidate/job-card.tsx"),
