@@ -3,12 +3,11 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from fastapi.security import HTTPAuthorizationCredentials
 
 from app import cache
 from app.dependencies import get_current_user
 from app.services import device_security
-from app.utils.jwt import create_access_token
+from app.utils.jwt import create_access_token, verify_token
 
 
 class FakeRedis:
@@ -64,20 +63,29 @@ class FakeDB:
         return SimpleNamespace(scalar_one_or_none=lambda: self.user)
 
 
+def authenticated_user(user_id):
+    return SimpleNamespace(
+        id=user_id,
+        is_active=True,
+        is_approved=True,
+        role=SimpleNamespace(value="CANDIDATE"),
+        company_id=None,
+        company_role=None,
+        auth_version=0,
+    )
+
+
 @pytest.mark.asyncio
 async def test_revoked_token_is_rejected_and_redis_error_fails_closed(monkeypatch):
     user_id = uuid4()
-    user = SimpleNamespace(id=user_id)
+    user = authenticated_user(user_id)
     fake_redis = FakeRedis()
     fake_redis.values[f"user:{user_id}:revoked_before"] = "100.0"
     monkeypatch.setattr(cache, "get_async_redis", lambda: fake_redis)
-    credentials = HTTPAuthorizationCredentials(
-        scheme="Bearer",
-        credentials=create_access_token({"sub": str(user_id), "iat": 100}),
-    )
+    payload = {"sub": str(user_id), "iat": 100, "auth_version": 0}
 
     with pytest.raises(HTTPException) as revoked:
-        await get_current_user(FakeDB(user), credentials, None)
+        await get_current_user(FakeDB(user), payload)
     assert revoked.value.status_code == 401
 
     async def unavailable(_key):
@@ -85,21 +93,19 @@ async def test_revoked_token_is_rejected_and_redis_error_fails_closed(monkeypatc
 
     fake_redis.get = unavailable
     with pytest.raises(HTTPException) as unavailable_error:
-        await get_current_user(FakeDB(user), credentials, None)
+        await get_current_user(FakeDB(user), payload)
     assert unavailable_error.value.status_code == 503
 
 
 @pytest.mark.asyncio
 async def test_token_newer_than_revocation_marker_remains_valid(monkeypatch):
     user_id = uuid4()
-    user = SimpleNamespace(id=user_id)
+    user = authenticated_user(user_id)
     token = create_access_token({"sub": str(user_id)})
-    from app.utils.jwt import verify_token
-
-    token_iat = float(verify_token(token)["iat"])
+    payload = verify_token(token)
+    token_iat = float(payload["iat"])
     fake_redis = FakeRedis()
     fake_redis.values[f"user:{user_id}:revoked_before"] = str(token_iat - 0.001)
     monkeypatch.setattr(cache, "get_async_redis", lambda: fake_redis)
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-    assert await get_current_user(FakeDB(user), credentials, None) is user
+    assert await get_current_user(FakeDB(user), payload) is user
