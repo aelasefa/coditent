@@ -38,7 +38,8 @@ Work is split into product milestones: identity and profiles, company workflows,
 
 ```text
 Chrome -> nginx + ModSecurity -> Next.js 16
-                           \-> FastAPI -> SQLAlchemy/Alembic -> Supabase PostgreSQL
+                           \-> FastAPI backend
+                                      -> SQLAlchemy/Alembic -> Supabase PostgreSQL
                                       -> Supabase private object storage
                                       -> Redis -> Celery worker / AI dispatcher
                                       -> Resend and Google Gemini

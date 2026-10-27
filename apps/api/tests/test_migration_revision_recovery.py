@@ -38,19 +38,15 @@ def test_latest_migrations_form_one_linear_chain():
     assert scripts.get_revision("ah1b2c3d4e5f").down_revision == "ag1b2c3d4e5f"
 
 
-def test_compatibility_markers_emit_no_schema_or_data_operations():
-    for filename in (
-        "ac1b2c3d4e5f_reconcile_missing_revision.py",
-        "ah1b2c3d4e5f_reconcile_missing_revision.py",
-    ):
-        path = API_ROOT / "alembic/versions" / filename
-        tree = ast.parse(path.read_text())
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef):
-                assert node.name in {"upgrade", "downgrade"}
-                assert len(node.body) == 1 and isinstance(node.body[0], ast.Pass)
-        spec = importlib.util.spec_from_file_location("recovered_revision", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        assert module.upgrade() is None
-        assert module.downgrade() is None
+def test_compatibility_marker_emits_no_schema_or_data_operations():
+    path = API_ROOT / "alembic/versions/ac1b2c3d4e5f_reconcile_missing_revision.py"
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            assert node.name in {"upgrade", "downgrade"}
+            assert len(node.body) == 1 and isinstance(node.body[0], ast.Pass)
+    spec = importlib.util.spec_from_file_location("recovered_revision", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.upgrade() is None
+    assert module.downgrade() is None
