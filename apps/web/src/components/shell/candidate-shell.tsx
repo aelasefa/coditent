@@ -3,10 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { endPresence, getMe, getPresenceConnectionId, logoutSession } from "@/lib/api";
+import { getMe } from "@/lib/api";
 import { candidateOnboardingQuery } from "@/lib/candidate-onboarding";
 import { CandidatePresence } from "@/components/candidate/candidate-presence";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { logoutAndRedirect } from "@/lib/logout-flow";
 import { PageContainer } from "./page-container";
 import { CandidateTopShell } from "./candidate-top-shell";
 
@@ -19,11 +20,7 @@ export function CandidateShell({ children }: { children: React.ReactNode }) {
     enabled: me?.role === "CANDIDATE",
   });
   const onboarding = onboardingQuery.data;
-  const logout = async () => {
-    await endPresence(getPresenceConnectionId()).catch(() => undefined);
-    await logoutSession().catch(() => undefined);
-    router.replace("/login");
-  };
+  const logout = () => logoutAndRedirect({ endCandidatePresence: true });
 
   useEffect(() => {
     if (onboarding && !onboarding.onboarding_completed) router.replace("/get-started");
