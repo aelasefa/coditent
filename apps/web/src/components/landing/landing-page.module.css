@@ -13,6 +13,7 @@
   --primary: #194d38;
   --primary-hover: #123e2d;
   --primary-foreground: #ffffff;
+  --headline-edit: #6f9d80;
   --focus-ring: #8a4d2e;
   color-scheme: light;
   background: var(--background);
@@ -464,6 +465,18 @@
   margin-inline: auto;
   padding-top: 18px;
 }
+.homeHeader[data-entrance-ready="false"] {
+  opacity: 0;
+  transform: translateY(calc(-100% - 18px));
+}
+.homeHeader[data-entrance-ready="true"] {
+  animation: home-header-enter 620ms var(--nav-ease) both;
+}
+.homeHeader:focus-within {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
 .homeNav {
   position: relative;
   isolation: isolate;
@@ -528,6 +541,11 @@
 
 @keyframes home-menu-enter {
   from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes home-header-enter {
+  from { opacity: 0; transform: translateY(calc(-100% - 18px)); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -630,6 +648,7 @@
   .homeHeaderScrolled .homeNav, .homeHeaderScrolled .homeBrand, .homeHeaderScrolled .homeActions,
   .homeCta:hover, .primaryButton:hover, .lightButton:hover, .textButton:hover, .inlineLink:hover { transform: none; }
   .homeMobilePanel:not([hidden]) { animation: none; }
+  .homeHeader[data-entrance-ready] { opacity: 1; transform: none; animation: none; }
   .landingRoot[data-reveal-ready="true"] [data-scroll-reveal] { opacity: 1; transform: none; transition: none; }
 }
 

@@ -1,11 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
+import { HeroEntrance } from "@/components/ui/hero-entrance";
 import { TwinklingStars } from "@/components/ui/twinkling-stars";
 import { HeroDemo, ScrollTextReveals, StorySteps } from "./landing-interactions";
 import { LandingFinalArtwork } from "./landing-final-artwork";
+import { HeroHeadline } from "./hero-headline";
+import { CompanyInterestDialog } from "./company-interest-dialog";
 import { SiteHeader } from "./site-header";
 import styles from "./landing-page.module.css";
+import entrance from "@/components/ui/hero-entrance.module.css";
 
 const CAPABILITIES = [
   { label: "Discover", detail: "Relevant jobs and internships" },
@@ -29,17 +33,17 @@ export function LandingPage() {
       <SiteHeader variant="home" />
       <main id="main" tabIndex={-1}>
         <section aria-labelledby="hero-title" className={styles.hero}>
-          <div className={styles.heroInner}>
+          <HeroEntrance className={styles.heroInner}>
             <div className={styles.heroCopy}>
-              <p className={styles.eyebrow}>A clearer way forward</p>
-              <h1 id="hero-title" className={styles.heroTitle}>
-                Your career is more than a <em>CV.</em>
-              </h1>
-              <p className={styles.heroDescription}>
+              <HeroHeadline
+                className={`${styles.heroTitle} ${entrance.item}`}
+                eyebrowClassName={`${styles.eyebrow} ${entrance.item}`}
+              />
+              <p className={`${styles.heroDescription} ${entrance.item}`} data-entrance-step="2">
                 Discover relevant jobs and internships, demonstrate your capabilities through practical
                 evaluations, and connect with recruiters based on more than a CV.
               </p>
-              <div className={styles.heroActions}>
+              <div className={`${styles.heroActions} ${entrance.item}`} data-entrance-step="3">
                 <Link href="/offers/all" className={styles.primaryButton}>
                   Find opportunities <span aria-hidden="true">↗</span>
                 </Link>
@@ -47,10 +51,10 @@ export function LandingPage() {
                   Explore hiring for companies <span aria-hidden="true">↗</span>
                 </Link>
               </div>
-              <p className={styles.heroFootnote}>Browse open roles before creating an account.</p>
+              <p className={`${styles.heroFootnote} ${entrance.item}`} data-entrance-step="3">Browse open roles before creating an account.</p>
             </div>
             <div className={styles.heroVisual}>
-              <div className={styles.heroImage}>
+              <div className={`${styles.heroImage} ${entrance.item}`} data-entrance-step="4">
                 <Image
                   src="/images/landing/career-network-seamless.png"
                   alt="Professionals connected through a branching career network"
@@ -63,7 +67,7 @@ export function LandingPage() {
               </div>
               <HeroDemo />
             </div>
-          </div>
+          </HeroEntrance>
         </section>
 
         <section aria-label="What Coditent helps you do" className={styles.capabilitySection}>
@@ -137,9 +141,7 @@ export function LandingPage() {
                 Publish roles, review candidates with match context, coordinate interviews, and move people
                 through a clear pipeline.
               </p>
-              <Link href="/register" className={styles.lightButton} data-scroll-reveal data-reveal-delay="3">
-                Start hiring <span aria-hidden="true">↗</span>
-              </Link>
+              <CompanyInterestDialog className={styles.lightButton} />
             </div>
             <div className={styles.companyPanel}>
               <TwinklingStars className={styles.companyStars} />

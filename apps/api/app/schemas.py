@@ -239,6 +239,7 @@ class CompanyInviteCreateRequest(APIModel):
     company_name: str = Field(min_length=2, max_length=150)
     contact_name: str | None = Field(default=None, max_length=100)
     contact_role: str | None = Field(default=None, max_length=100)
+    interest_request_id: uuid.UUID | None = None
 
     @field_validator("company_name", "contact_name", "contact_role", mode="before")
     @classmethod

@@ -12,9 +12,9 @@ import { TableSkeleton } from "@/components/company/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { inviteCompany, listCompanyInvitations, resendCompanyInvitation, revokeCompanyInvitation } from "@/lib/api";
-import type { CompanyInvitation } from "@/lib/types";
-import { FiMail, FiPlus } from "react-icons/fi";
+import { dismissCompanyInterest, inviteCompany, listCompanyInterest, listCompanyInvitations, resendCompanyInvitation, revokeCompanyInvitation } from "@/lib/api";
+import type { CompanyInterestRequest, CompanyInvitation } from "@/lib/types";
+import { FiInbox, FiMail, FiPlus } from "react-icons/fi";
 
 function dateLabel(iso?: string | null): string {
   if (!iso) return "—";
@@ -26,16 +26,22 @@ export default function AdminCompanyInvitationsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const invitesQ = useQuery({ queryKey: ["admin-company-invites"], queryFn: listCompanyInvitations });
+  const interestQ = useQuery({ queryKey: ["admin-company-interest"], queryFn: listCompanyInterest });
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
+  const [interestRequestId, setInterestRequestId] = useState<string>();
   const [revokeTarget, setRevokeTarget] = useState<CompanyInvitation | null>(null);
   const [form, setForm] = useState({ company_name: "", email: "", contact_name: "", contact_role: "" });
   const [formError, setFormError] = useState<string | undefined>(undefined);
   const [issuedUrls, setIssuedUrls] = useState<Record<string, string>>({});
 
   const invites = useMemo(() => invitesQ.data?.invitations ?? [], [invitesQ.data]);
+  const pendingInterest = useMemo(
+    () => (interestQ.data?.requests ?? []).filter((request) => request.status === "pending"),
+    [interestQ.data]
+  );
   const filtered = useMemo(() => {
     let list = invites;
     if (statusFilter !== "all") list = list.filter((i) => i.status === statusFilter);
@@ -53,11 +59,14 @@ export default function AdminCompanyInvitationsPage() {
         email: form.email.trim(),
         contact_name: form.contact_name.trim() || undefined,
         contact_role: form.contact_role.trim() || undefined,
+        interest_request_id: interestRequestId,
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["admin-company-invites"] });
+      qc.invalidateQueries({ queryKey: ["admin-company-interest"] });
       if (res.invitation_url) setIssuedUrls((m) => ({ ...m, [res.invitation_id]: res.invitation_url }));
       setModalOpen(false);
+      setInterestRequestId(undefined);
       setForm({ company_name: "", email: "", contact_name: "", contact_role: "" });
       setFormError(undefined);
       const queued = ["pending", "processing", "retry"].includes(res.delivery_status);
@@ -72,6 +81,29 @@ export default function AdminCompanyInvitationsPage() {
       toast("Invite failed", { description: String(msg), variant: "error" });
     },
   });
+
+  const dismissInterestMut = useMutation({
+    mutationFn: (id: string) => dismissCompanyInterest(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-company-interest"] });
+      toast("Company request dismissed", { variant: "success" });
+    },
+    onError: () => toast("Could not dismiss request", { variant: "error" }),
+  });
+
+  function openInvite(request?: CompanyInterestRequest) {
+    setInterestRequestId(request?.id);
+    setForm({ company_name: "", email: request?.email ?? "", contact_name: "", contact_role: "" });
+    setFormError(undefined);
+    setModalOpen(true);
+  }
+
+  function closeInvite() {
+    setModalOpen(false);
+    setInterestRequestId(undefined);
+    setForm({ company_name: "", email: "", contact_name: "", contact_role: "" });
+    setFormError(undefined);
+  }
 
   const resendMut = useMutation({
     mutationFn: (id: string) => resendCompanyInvitation(id),
@@ -128,11 +160,55 @@ export default function AdminCompanyInvitationsPage() {
           subtitle="Invite organizations to create their CODITENT company workspace."
           badge={<span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-foreground-secondary">{invites.length} total</span>}
           actions={
-            <Button size="sm" onClick={() => setModalOpen(true)}>
+            <Button size="sm" onClick={() => openInvite()}>
               <FiPlus aria-hidden className="h-3.5 w-3.5" /> Invite company
             </Button>
           }
         />
+
+        <section className="rounded-xl border border-border-subtle bg-surface p-4" aria-labelledby="company-interest-title">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-secondary text-primary"><FiInbox aria-hidden /></span>
+            <div className="min-w-0 flex-1">
+              <h2 id="company-interest-title" className="text-sm font-semibold text-foreground">Company access requests</h2>
+              <p className="text-xs text-muted-foreground">Emails submitted from the public landing page.</p>
+            </div>
+            <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-foreground-secondary">{pendingInterest.length} pending</span>
+          </div>
+
+          {interestQ.isLoading ? (
+            <div className="mt-4 h-14 animate-pulse rounded-lg bg-surface-secondary" aria-label="Loading company requests" />
+          ) : interestQ.isError ? (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger-background px-3 py-2" role="alert">
+              <p className="text-xs font-medium text-danger">Could not load company requests.</p>
+              <Button size="sm" variant="outline" onClick={() => interestQ.refetch()}>Retry</Button>
+            </div>
+          ) : pendingInterest.length === 0 ? (
+            <p className="mt-4 rounded-lg bg-surface-secondary px-3 py-3 text-xs text-muted-foreground">No company requests are waiting for review.</p>
+          ) : (
+            <ul className="mt-4 divide-y divide-border-subtle" aria-label="Pending company access requests">
+              {pendingInterest.map((request) => (
+                <li key={request.id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{request.email}</p>
+                    <p className="text-[11px] text-muted-foreground">Requested {dateLabel(request.created_at)}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openInvite(request)}>Review and invite</Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      loading={dismissInterestMut.isPending && dismissInterestMut.variables === request.id}
+                      onClick={() => dismissInterestMut.mutate(request.id)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
@@ -164,7 +240,7 @@ export default function AdminCompanyInvitationsPage() {
             icon={FiMail}
             title={invites.length === 0 ? "No company invitations yet" : "No invitations match filters"}
             description="Invite first organization to create its workspace."
-            primaryAction={invites.length === 0 ? { label: "Invite company", onClick: () => setModalOpen(true) } : undefined}
+            primaryAction={invites.length === 0 ? { label: "Invite company", onClick: () => openInvite() } : undefined}
           />
         ) : (
           <ul className="space-y-2" aria-label="Company invitations">
@@ -220,12 +296,12 @@ export default function AdminCompanyInvitationsPage() {
 
         <Modal
           isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
+          onClose={closeInvite}
           title="Invite company"
           subtitle="Organization receives a secure single-use link."
           footer={
             <>
-              <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
+              <Button variant="ghost" onClick={closeInvite}>Cancel</Button>
               <Button
                 loading={inviteMut.isPending}
                 onClick={() => {
