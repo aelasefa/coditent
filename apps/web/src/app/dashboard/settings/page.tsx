@@ -4,6 +4,7 @@ import axios from "axios";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
+import { LogoutAllDevices } from "@/components/security/logout-all-devices";
 import { AccountDataControls } from "@/components/security/account-data-controls";
 import { PageContainer, PageHeader } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,7 @@ export default function CandidateSettingsPage() {
         </form>
 
         <TwoFactorSecurity />
+        <LogoutAllDevices />
         <AccountDataControls />
       </div>
     </PageContainer>

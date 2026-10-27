@@ -1,6 +1,8 @@
 # Frontend implementation: log out of all devices
 
-The backend feature is implemented, but the frontend does not expose it yet. Add a **Log out of all devices** action to the signed-in user's account or security settings.
+The backend and frontend integration are implemented. **Log out of all devices** is available beside two-factor controls in candidate account settings, company Security settings, and admin settings.
+
+The shared UI is `apps/web/src/components/security/logout-all-devices.tsx`; the API helper is `logoutAllDevices` in `apps/web/src/lib/api.ts`. Focused behavior tests are in `apps/web/tests/logout-all-devices.test.mjs`.
 
 ## API contract
 

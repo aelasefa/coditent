@@ -18,6 +18,7 @@ import { can } from "@/lib/permissions";
 import type { Company } from "@/lib/types";
 import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiShield } from "react-icons/fi";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
+import { LogoutAllDevices } from "@/components/security/logout-all-devices";
 import { AccountDataControls } from "@/components/security/account-data-controls";
 
 // Mirrors apps/api/app/core/permissions.py via lib/permissions.ts. Backend remains authority.
@@ -428,7 +429,7 @@ export default function SettingsPage() {
             {
               id: "security",
               label: "Security",
-              content: <div className="space-y-5"><TwoFactorSecurity /><AccountDataControls /></div>,
+              content: <div className="space-y-5"><TwoFactorSecurity /><LogoutAllDevices /><AccountDataControls /></div>,
             },
           ]}
         />
