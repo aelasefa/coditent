@@ -281,12 +281,17 @@ def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
     production = (
         REPO_ROOT / "ansible" / "inventory" / "group_vars" / "production.yml"
     ).read_text()
+    production_vars = yaml.safe_load(production)
 
     assert "34.205.255.37" not in next_config
     assert "34.205.255.37" not in api_client
     assert 'server_name: "api.coditent.app"' in production
     assert 'frontend_url: "https://coditent.app"' in production
-    assert 'cors_origins: "https://coditent.app,https://www.coditent.app"' in production
+    assert set(production_vars["cors_origins"].split(",")) == {
+        "https://coditent.app",
+        "https://www.coditent.app",
+        "https://admin.coditent.app",
+    }
     for config in (root_vercel, web_vercel):
         assert config["env"]["NEXT_PUBLIC_API_URL"] == (
             "https://api.coditent.app/api-proxy"
