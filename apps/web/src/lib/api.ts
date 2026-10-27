@@ -658,6 +658,32 @@ export interface CompanyInvitationPayload {
   email: string;
   contact_name?: string;
   contact_role?: string;
+  interest_request_id?: string;
+}
+
+export async function submitCompanyInterest(email: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>(
+    "/company-interest",
+    { email },
+    skipAuthRedirectConfig
+  );
+  return data;
+}
+
+export async function listCompanyInterest(): Promise<{
+  requests: import("@/lib/types").CompanyInterestRequest[];
+}> {
+  const { data } = await api.get("/admin/company-interest");
+  return data;
+}
+
+export async function dismissCompanyInterest(
+  requestId: string
+): Promise<import("@/lib/types").CompanyInterestRequest> {
+  const { data } = await api.patch(`/admin/company-interest/${requestId}`, {
+    status: "dismissed",
+  });
+  return data;
 }
 
 export async function inviteCompany(payload: CompanyInvitationPayload): Promise<{

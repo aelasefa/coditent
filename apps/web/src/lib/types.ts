@@ -195,6 +195,14 @@ export interface CompanyInvitation {
   email_delivery_status?: "pending" | "processing" | "retry" | "sent" | "failed" | null;
 }
 
+export interface CompanyInterestRequest {
+  id: string;
+  email: string;
+  status: "pending" | "invited" | "dismissed";
+  created_at: string;
+  reviewed_at?: string | null;
+}
+
 export interface AdminActivity {
   id: string;
   action: string;

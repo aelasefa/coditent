@@ -751,6 +751,34 @@ class CompanyInvitation(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class CompanyInterestRequest(Base):
+    """Public company contact requests awaiting platform-admin review."""
+
+    __tablename__ = "company_interest_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'invited', 'dismissed')",
+            name="ck_company_interest_requests_status",
+        ),
+        Index("ix_company_interest_requests_created_at", "created_at"),
+        Index(
+            "uq_company_interest_requests_pending_email",
+            text("lower(email)"),
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class EmployeeInvitation(Base):
     """Metadata mapping for the SQL-driven employee invitation workflow."""
 

@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { offerLogoSrc } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { getMe, offerLogoSrc } from "@/lib/api";
+import { isLoggedIn } from "@/lib/auth";
+import { getAuthenticatedDestination } from "@/lib/auth-redirect";
 import { categories, type CategorySlug } from "@/lib/categories";
+import { getOfferDiscoverPath, getOfferLoginPath } from "@/lib/offer-navigation";
 import type { Offer } from "@/lib/types";
 import { SiteHeader } from "@/components/landing/site-header";
 import { Avatar } from "@/components/ui/avatar";
@@ -33,7 +37,29 @@ export default function OffersClient({ categorySlug, initialOffers, initialLoadE
   const loadError = initialLoadError;
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [hasStoredSession, setHasStoredSession] = useState<boolean | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const meQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: getMe,
+    enabled: hasStoredSession === true,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const currentUser = hasStoredSession && !meQuery.isError ? meQuery.data : undefined;
+  const authPending = hasStoredSession === null || (hasStoredSession && meQuery.isLoading);
+
+  useEffect(() => {
+    const syncSession = () => setHasStoredSession(isLoggedIn());
+    syncSession();
+    window.addEventListener("storage", syncSession);
+    return () => window.removeEventListener("storage", syncSession);
+  }, []);
+
+  useEffect(() => {
+    if (meQuery.isError && !isLoggedIn()) setHasStoredSession(false);
+  }, [meQuery.isError]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -42,8 +68,6 @@ export default function OffersClient({ categorySlug, initialOffers, initialLoadE
       `${o.title} ${o.company} ${o.region} ${o.field} ${o.required_skills ?? ""}`.toLowerCase().includes(q)
     );
   }, [offers, search]);
-
-  const returnPath = `/offers/${category.slug}`;
 
   return (
     <div className="candidate-theme bg-background text-foreground">
@@ -133,6 +157,8 @@ export default function OffersClient({ categorySlug, initialOffers, initialLoadE
             {visible.map((o) => {
               const expanded = expandedId === o.id;
               const salary = salaryLabel(o);
+              const discoverPath = getOfferDiscoverPath(o.id);
+              const isCandidate = currentUser?.role === "CANDIDATE";
               return (
                 <li key={o.id} className="overflow-hidden border-b border-border-subtle bg-surface last:border-b-0">
                   <button
@@ -167,20 +193,51 @@ export default function OffersClient({ categorySlug, initialOffers, initialLoadE
                         {o.deadline && <span>Apply by {new Date(o.deadline).toLocaleDateString()}</span>}
                       </div>
                       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <Link
-                          href={`/login?next=${encodeURIComponent(returnPath)}`}
-                          className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
-                        >
-                          Sign in to apply
-                        </Link>
-                        <Link
-                          href={`/register`}
-                          className="inline-flex h-11 items-center justify-center rounded-xl border border-border-strong px-5 text-sm font-semibold hover:bg-surface-secondary"
-                        >
-                          Create account
-                        </Link>
+                        {authPending ? (
+                          <span
+                            role="status"
+                            className="inline-flex h-11 items-center justify-center rounded-xl bg-primary/70 px-5 text-sm font-semibold text-primary-foreground"
+                          >
+                            Checking account…
+                          </span>
+                        ) : isCandidate ? (
+                          <Link
+                            href={discoverPath}
+                            className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+                          >
+                            View and apply
+                          </Link>
+                        ) : currentUser ? (
+                          <Link
+                            href={getAuthenticatedDestination(currentUser)}
+                            className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+                          >
+                            Open your workspace
+                          </Link>
+                        ) : (
+                          <>
+                            <Link
+                              href={getOfferLoginPath(o.id)}
+                              className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+                            >
+                              Sign in to apply
+                            </Link>
+                            <Link
+                              href="/register"
+                              className="inline-flex h-11 items-center justify-center rounded-xl border border-border-strong px-5 text-sm font-semibold hover:bg-surface-secondary"
+                            >
+                              Create account
+                            </Link>
+                          </>
+                        )}
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground">Applying needs an account. You return here after signing in.</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {isCandidate
+                          ? "Continue in Discover to review your match and apply."
+                          : currentUser
+                            ? "Applications are available from candidate accounts."
+                            : "Sign in to continue to this role in Discover."}
+                      </p>
                     </div>
                   )}
                 </li>

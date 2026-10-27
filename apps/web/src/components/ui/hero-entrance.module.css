@@ -1,0 +1,39 @@
+/* Wrap the hero in HeroEntrance, then add item and data-entrance-step="0"
+   through "5" to its children. The client-ready state starts the sequence
+   after the first painted frame, so loading work cannot consume the motion. */
+.item { --entrance-delay: 100ms; }
+
+.root[data-entrance-ready="false"] .item {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.root[data-entrance-ready="true"] .item {
+  animation: hero-enter 500ms cubic-bezier(0.22, 1, 0.36, 1) var(--entrance-delay) both;
+}
+
+.item[data-entrance-step="1"] { --entrance-delay: 200ms; }
+.item[data-entrance-step="2"] { --entrance-delay: 300ms; }
+.item[data-entrance-step="3"] { --entrance-delay: 400ms; }
+.item[data-entrance-step="4"] { --entrance-delay: 500ms; }
+.item[data-entrance-step="5"] { --entrance-delay: 600ms; }
+
+/* Keyboard navigation should never land on an invisible action. */
+.root .item:focus-within {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+@keyframes hero-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root .item {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}

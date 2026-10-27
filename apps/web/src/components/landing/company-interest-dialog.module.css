@@ -1,0 +1,73 @@
+.dialogContent { display: grid; gap: 1.25rem; }
+.form { display: grid; gap: 1rem; }
+.privacyNote { margin: 0; color: #617369; font-size: 0.76rem; line-height: 1.55; }
+.formActions { display: flex; justify-content: flex-end; gap: 0.65rem; padding-top: 0.25rem; }
+
+.submitButton,
+.cancelButton,
+.doneButton {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  transition: background-color 240ms cubic-bezier(0.22, 1, 0.36, 1), transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.submitButton,
+.doneButton { background: #194d38; color: #fff; }
+.submitButton { display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem; }
+.submitButton:hover,
+.doneButton:hover { background: #123e2d; }
+.submitButton:active,
+.cancelButton:active,
+.doneButton:active { transform: scale(0.98); }
+.submitButton:disabled { cursor: wait; opacity: 0.65; }
+.cancelButton { color: #40584b; }
+.cancelButton:hover { background: #edf1e9; }
+.error { margin: 0; color: #a53a2b; font-size: 0.8rem; font-weight: 600; }
+
+.success {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 0.45rem 0 0.15rem;
+  text-align: center;
+}
+
+.successMark { width: 64px; height: 64px; overflow: visible; }
+.successRing,
+.successCheck {
+  fill: none;
+  stroke: #2f6a4b;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.successRing {
+  stroke-width: 2;
+  stroke-dasharray: 176;
+  stroke-dashoffset: 176;
+  animation: draw-ring 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.successCheck {
+  stroke-width: 3;
+  stroke-dasharray: 44;
+  stroke-dashoffset: 44;
+  animation: draw-check 380ms 330ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.success h3 { margin: 0; color: #192b23; font-family: Georgia, "Times New Roman", serif; font-size: 1.55rem; font-weight: 400; }
+.success p { max-width: 35ch; margin: 0; color: #53665a; font-size: 0.9rem; line-height: 1.6; }
+.doneButton { margin-top: 0.35rem; }
+
+@keyframes draw-ring { to { stroke-dashoffset: 0; } }
+@keyframes draw-check { to { stroke-dashoffset: 0; } }
+
+@media (max-width: 480px) {
+  .formActions { align-items: stretch; flex-direction: column-reverse; }
+  .submitButton, .cancelButton { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .successRing, .successCheck { animation: none; stroke-dashoffset: 0; }
+  .submitButton, .cancelButton, .doneButton { transition: none; }
+}

@@ -22,11 +22,13 @@ const LINKS = [
 export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "home" | "floating" }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [entranceReady, setEntranceReady] = useState(false);
   const [hasStoredSession, setHasStoredSession] = useState<boolean | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuId = useId();
   const floating = variant === "home" || variant === "floating";
+  const entranceEnabled = variant === "home";
   const meQuery = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
@@ -45,6 +47,12 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
     window.addEventListener("storage", syncSession);
     return () => window.removeEventListener("storage", syncSession);
   }, []);
+
+  useEffect(() => {
+    if (!entranceEnabled) return;
+    const frame = window.requestAnimationFrame(() => setEntranceReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [entranceEnabled]);
 
   useEffect(() => {
     // A 401 response clears the saved token in the API interceptor.
@@ -96,6 +104,7 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
     <header
       ref={headerRef}
       className={floating ? `${styles.homeHeader} ${scrolled ? styles.homeHeaderScrolled : ""}` : "sticky top-0 z-40 border-b border-border-subtle bg-background/95 backdrop-blur-md"}
+      data-entrance-ready={entranceEnabled ? (entranceReady ? "true" : "false") : undefined}
       onBlurCapture={(event) => {
         if (floating && open && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}

@@ -18,7 +18,7 @@ from app.core.audit import log_audit
 from app.core.permissions import VALID_COMPANY_ROLES, can
 from app.database import get_db
 from app.dependencies import get_current_user, require_company_admin, require_platform_admin
-from app.models import Company, EmailDelivery, User, UserRole
+from app.models import Company, CompanyInterestRequest, EmailDelivery, User, UserRole
 from app.schemas import (
     CompanyInviteAcceptRequest,
     CompanyInviteCreateRequest,
@@ -319,6 +319,17 @@ async def invite_company(
     company_name = data.company_name.strip()
     contact_name = data.contact_name
     contact_role = data.contact_role
+    interest_request: CompanyInterestRequest | None = None
+    if data.interest_request_id is not None:
+        interest_request = await db.scalar(
+            select(CompanyInterestRequest)
+            .where(CompanyInterestRequest.id == data.interest_request_id)
+            .with_for_update()
+        )
+        if interest_request is None or interest_request.status != "pending":
+            raise HTTPException(status_code=409, detail="Company request was already reviewed")
+        if interest_request.email.lower() != email:
+            raise HTTPException(status_code=400, detail="Invitation email must match the company request")
     # Prevent accidental duplicates: one live pending invite per email
     dup = await db.execute(
         text("SELECT id, expires_at FROM company_invitations WHERE email=:email AND status='pending'"),
@@ -358,6 +369,10 @@ async def invite_company(
         )
     except EmailOutboxUnavailable:
         delivery_configuration_error = True
+    if interest_request is not None:
+        interest_request.status = "invited"
+        interest_request.reviewed_at = datetime.utcnow()
+        interest_request.reviewed_by = current_user.id
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_CREATED", actor=current_user, resource_type="company_invitation", details=email)
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"

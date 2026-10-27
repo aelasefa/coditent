@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import styles from "./landing-page.module.css";
+import entrance from "@/components/ui/hero-entrance.module.css";
 
 const HERO_STATES = [
   { label: "Discover", title: "Relevant opportunities", detail: "Roles aligned to your field and goals." },
@@ -54,7 +55,7 @@ export function HeroDemo() {
   }, []);
 
   return (
-    <div ref={ref} className={styles.heroDemo} aria-hidden="true">
+    <div ref={ref} className={`${styles.heroDemo} ${entrance.item}`} data-entrance-step="5" aria-hidden="true">
       <div className={styles.demoTopline}>
         <span>YOUR PATH</span>
         <span>0{active + 1} / 03</span>
