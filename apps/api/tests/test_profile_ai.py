@@ -23,7 +23,7 @@ async def test_headline_uses_supplied_facts_when_provider_is_unavailable(
         }
     )
 
-    assert headline == "Software Engineering Candidate | Python, FastAPI, React"
+    assert headline == "Software Engineering • Python • FastAPI • React"
     assert len(headline) <= 120
 
 
@@ -39,7 +39,7 @@ async def test_headline_falls_back_when_provider_output_is_too_short(monkeypatch
         {"skills": ["Python"], "field_of_study": None}
     )
 
-    assert headline == "Python Candidate | Python"
+    assert headline == "Candidate • Python"
 
 
 @pytest.mark.asyncio
@@ -58,7 +58,7 @@ async def test_bio_falls_back_when_provider_output_fails_quality_check(monkeypat
     )
 
     assert "Software Engineering" in bio
-    assert "Python, FastAPI, React" in bio
+    assert "Python, FastAPI, and React" in bio
     assert len(bio) >= 80
     assert bio.count(".") >= 2
 
