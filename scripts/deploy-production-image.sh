@@ -118,12 +118,30 @@ set_image_in_env() {
   mv "$temporary" "$ENV_FILE"
 }
 
-set_image_in_env "$IMAGE_URI"
-export CODITENT_API_IMAGE="$IMAGE_URI"
-export COMPOSE_FILE="docker-compose.yml:docker-compose.production.yml"
+reclaim_docker_space() {
+  echo "=== Reclaiming Docker space before the image pull ==="
+  # The current release images are protected by their running containers.
+  # Remove only stopped containers, build cache, and images unused by any
+  # remaining container. Never prune volumes because they may contain durable
+  # application data.
+  docker container prune --force
+  docker builder prune --all --force
+  docker image prune --all --force
+  docker system df || true
+  df -h / || true
+}
+
+reclaim_docker_space
 
 echo "=== Pulling the tested API image ==="
 docker compose pull "${IMAGE_SERVICES[@]}"
+
+# Persist the release only after its image is present locally. A failed pull
+# therefore leaves both the running containers and the configured release on
+# the last known-good image.
+set_image_in_env "$IMAGE_URI"
+export CODITENT_API_IMAGE="$IMAGE_URI"
+export COMPOSE_FILE="docker-compose.yml:docker-compose.production.yml"
 
 echo "=== Starting production backend services without building ==="
 docker compose up -d --no-build --remove-orphans --force-recreate "${COMPOSE_SERVICES[@]}"

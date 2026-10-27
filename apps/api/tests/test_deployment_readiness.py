@@ -116,6 +116,22 @@ def test_image_deployment_reconciles_and_safely_reloads_host_waf() -> None:
     assert "restoring previous configuration" in script
 
 
+def test_image_deployment_reclaims_space_safely_before_pull() -> None:
+    script = (REPO_ROOT / "scripts" / "deploy-production-image.sh").read_text()
+
+    assert "docker container prune --force" in script
+    assert "docker builder prune --all --force" in script
+    assert "docker image prune --all --force" in script
+    assert "docker volume prune" not in script
+    assert script.index("reclaim_docker_space\n") < script.index(
+        'docker compose pull "${IMAGE_SERVICES[@]}"'
+    )
+    assert script.index('docker compose pull "${IMAGE_SERVICES[@]}"') < script.index(
+        'set_image_in_env "$IMAGE_URI"',
+        script.index('docker compose pull "${IMAGE_SERVICES[@]}"'),
+    )
+
+
 def test_ci_builds_immutable_api_image_and_deploys_without_ssh() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text()
 
