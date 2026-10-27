@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFriendSocketTicket, getFriendWsUrl } from "@/lib/api";
-import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type { ChatMessage } from "@/lib/types";
 
 type IncomingFrame = {
@@ -70,7 +69,6 @@ export function useFriendChatSocket({
   }, [sendFrame]);
 
   useEffect(() => {
-    if (!localStorage.getItem(AUTH_TOKEN_KEY)) return;
     let disposed = false;
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;

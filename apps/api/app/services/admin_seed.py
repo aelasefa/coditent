@@ -37,6 +37,7 @@ async def seed_admin_user(
     updated = False
     if user.role != UserRole.PLATFORM_ADMIN:
         user.role = UserRole.PLATFORM_ADMIN
+        user.auth_version = (user.auth_version or 0) + 1
         updated = True
     if not user.is_approved:
         user.is_approved = True

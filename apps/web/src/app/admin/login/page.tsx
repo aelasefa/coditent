@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { adminLogin, verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
+import { safeAdminNextDestination } from "@/lib/auth-redirect";
 
 function AdminLoginPageInner() {
   const router = useRouter();
@@ -22,13 +23,12 @@ function AdminLoginPageInner() {
 
   function finishLogin(data: import("@/lib/types").TokenResponse) {
     if (data.trusted_device_token) saveTrustedDevice(data.trusted_device_token);
-    if (data.user.role !== "ADMIN" && data.user.role !== "PLATFORM_ADMIN") {
-      setErrorMessage("This account is not an admin."); return;
+    if (data.user.role !== "PLATFORM_ADMIN") {
+      setErrorMessage("Invalid admin credentials."); return;
     }
     saveToken(data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
-    const nextParam = searchParams.get("next");
-    const nextPath = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : null;
+    const nextPath = safeAdminNextDestination(searchParams.get("next"));
     router.push(nextPath ?? "/admin");
   }
 
@@ -48,6 +48,8 @@ function AdminLoginPageInner() {
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         setErrorMessage("Invalid admin credentials.");
+      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        setErrorMessage("Administrator MFA must be enrolled before sign-in.");
       } else {
         setErrorMessage("Something went wrong. Please try again.");
       }

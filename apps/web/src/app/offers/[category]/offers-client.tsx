@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getMe, offerLogoSrc } from "@/lib/api";
-import { isLoggedIn } from "@/lib/auth";
 import { getAuthenticatedDestination } from "@/lib/auth-redirect";
 import { categories, type CategorySlug } from "@/lib/categories";
 import { getOfferDiscoverPath, getOfferLoginPath } from "@/lib/offer-navigation";
@@ -37,29 +36,16 @@ export default function OffersClient({ categorySlug, initialOffers, initialLoadE
   const loadError = initialLoadError;
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [hasStoredSession, setHasStoredSession] = useState<boolean | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const meQuery = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
-    enabled: hasStoredSession === true,
     retry: false,
     staleTime: 60_000,
   });
-  const currentUser = hasStoredSession && !meQuery.isError ? meQuery.data : undefined;
-  const authPending = hasStoredSession === null || (hasStoredSession && meQuery.isLoading);
-
-  useEffect(() => {
-    const syncSession = () => setHasStoredSession(isLoggedIn());
-    syncSession();
-    window.addEventListener("storage", syncSession);
-    return () => window.removeEventListener("storage", syncSession);
-  }, []);
-
-  useEffect(() => {
-    if (meQuery.isError && !isLoggedIn()) setHasStoredSession(false);
-  }, [meQuery.isError]);
+  const currentUser = !meQuery.isError ? meQuery.data : undefined;
+  const authPending = meQuery.isLoading;
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();

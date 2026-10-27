@@ -1,31 +1,30 @@
 import { AUTH_TOKEN_KEY } from "@/lib/constants";
 
-const oneWeekInSeconds = 60 * 60 * 24 * 7;
+const LEGACY_AUTH_TOKEN_KEY = "coditent_token";
 const TRUSTED_DEVICE_KEY = "coditent_trusted_device";
 
-export function saveToken(token: string): void {
-  if (typeof window === "undefined") {
-    return;
+export function saveToken(_token: string): void {
+  void _token;
+  // Browser sessions are carried exclusively by the Secure, HttpOnly cookie
+  // issued by the API. Keep this compatibility hook while callers migrate.
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   }
-
-  localStorage.setItem(AUTH_TOKEN_KEY, token);
-  document.cookie = `${AUTH_TOKEN_KEY}=${token}; path=/; max-age=${oneWeekInSeconds}; samesite=lax`;
 }
 
 export function getToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return localStorage.getItem(AUTH_TOKEN_KEY);
+  return null;
 }
 
-export function saveTrustedDevice(token: string): void {
-  if (typeof window !== "undefined") localStorage.setItem(TRUSTED_DEVICE_KEY, token);
+export function saveTrustedDevice(_token: string): void {
+  void _token;
+  // Trusted-device credentials are HttpOnly cookies and are never exposed to JS.
+  if (typeof window !== "undefined") localStorage.removeItem(TRUSTED_DEVICE_KEY);
 }
 
 export function getTrustedDevice(): string | null {
-  return typeof window === "undefined" ? null : localStorage.getItem(TRUSTED_DEVICE_KEY);
+  return null;
 }
 
 export function removeTrustedDevice(): void {
@@ -38,9 +37,13 @@ export function removeToken(): void {
   }
 
   localStorage.removeItem(AUTH_TOKEN_KEY);
-  document.cookie = `${AUTH_TOKEN_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
+  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+  // Remove only the legacy JavaScript-created cookie. HttpOnly session cookies
+  // are cleared by the backend logout endpoint.
+  document.cookie = `${LEGACY_AUTH_TOKEN_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
 }
 
 export function isLoggedIn(): boolean {
-  return Boolean(getToken());
+  // HttpOnly cookies are intentionally unreadable from browser JavaScript.
+  return false;
 }
