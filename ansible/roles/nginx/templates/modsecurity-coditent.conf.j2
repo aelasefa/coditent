@@ -20,6 +20,17 @@ SecRule REQUEST_METHOD "@streq GET" \
     SecRule REQUEST_FILENAME "@rx ^/api-proxy/auth/sso/(?:google|linkedin)/callback$" \
         "ctl:ruleEngine=Off"
 
+# Candidate headlines commonly use a vertical bar as a visual separator (for
+# example, "Backend Engineer | Python"). CRS rule 932105 interprets that text
+# as a shell pipeline. Exclude only the stored, length-limited headline field
+# on the exact profile update route; keep RCE inspection enabled for every
+# other field and endpoint. libModSecurity may expose a top-level JSON field
+# under either name depending on its JSON parser version, so cover both names.
+SecRule REQUEST_METHOD "@streq PUT" \
+    "id:1000004,phase:1,pass,nolog,chain"
+    SecRule REQUEST_FILENAME "@streq /api-proxy/candidates/profile" \
+        "t:none,ctl:ruleRemoveTargetById=932105;ARGS:headline,ctl:ruleRemoveTargetById=932105;ARGS:json.headline"
+
 # Debian's owasp-crs.load is an Apache-oriented loader and uses
 # an optional-include directive that ModSecurity-nginx does not support. Load
 # the same required CRS configuration and rules directly.
