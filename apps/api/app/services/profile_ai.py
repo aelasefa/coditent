@@ -32,9 +32,9 @@ def _fallback_headline(data: dict[str, Any]) -> str:
         if str(value).strip()
     ]
     field = str(data.get("field_of_study") or "").strip()
-    focus = field or skills[0]
-    headline = f"{focus} Candidate | {', '.join(skills[:3])}"
-    return headline[:120].rstrip(" ,|")
+    parts = [field or "Candidate", *skills[:3]]
+    unique_parts = list(dict.fromkeys(part for part in parts if part))
+    return " • ".join(unique_parts)[:120].rstrip(" ,•")
 
 
 def _fallback_bio(data: dict[str, Any]) -> str:
@@ -44,11 +44,20 @@ def _fallback_bio(data: dict[str, Any]) -> str:
         if str(value).strip()
     ]
     field = str(data.get("field_of_study") or "").strip()
-    focus = f"a candidate in {field}" if field else "a motivated job candidate"
-    skill_text = ", ".join(skills[:3])
+    focus = (
+        f"I am building my career in {field}"
+        if field
+        else "I am a motivated candidate"
+    )
+    selected_skills = skills[:3]
+    if len(selected_skills) > 1:
+        skill_text = f"{', '.join(selected_skills[:-1])}, and {selected_skills[-1]}"
+    else:
+        skill_text = selected_skills[0]
     return (
-        f"I am {focus} with skills in {skill_text}. "
-        "I am looking for opportunities where I can apply these skills and continue growing professionally."
+        f"{focus}, with skills in {skill_text}. "
+        "I am seeking opportunities to apply my knowledge, contribute to meaningful projects, "
+        "and continue growing professionally."
     )[:500]
 
 
