@@ -4,7 +4,7 @@
 
 - Replaced the local Vault development-mode setup with a file-backed Vault service and persistent `vault_data` volume in Docker Compose.
 - Added Vault health checks and startup dependencies so the API, worker, and AI dispatcher wait for Vault and Redis.
-- Updated the API configuration and Vault client to authenticate through AppRole and load application secrets from `secret/data/coditent`. The API fails closed when Vault is required but unavailable.
+- Updated the API configuration and Vault client to authenticate through AppRole and load application secrets from `secret/data/ft_transcendence`. The API fails closed when Vault is required but unavailable.
 - Added the `coditent-app` read policy and limited admin read/edit policies.
 - Added `scripts/run_project.sh` to start Vault first, wait for it to be initialized and unsealed, and check the AppRole settings before starting the full project. Its status message distinguishes an initialized, sealed Vault from one that has never been initialized.
 - Updated `scripts/vault_init_secrets.py` to support a protected token file, skip Vault bootstrap values and non-secret config, and print secret names rather than values.

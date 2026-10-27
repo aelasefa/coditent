@@ -1284,16 +1284,3 @@ class CVMetaOut(APIModel):
     content_type: str | None = None
     size_bytes: int | None = None
 
-
-class GDPRDeleteRequest(APIModel):
-    password: str = Field(min_length=1, max_length=128)
-    confirmation: str = Field(pattern="^DELETE MY ACCOUNT$")
-
-
-class GDPRExportOut(APIModel):
-    exported_at: str
-    user_info: UserOut
-    candidate_profile: dict | None = None
-    applications: list[dict] = []
-    audit_logs: list[dict] = []
-

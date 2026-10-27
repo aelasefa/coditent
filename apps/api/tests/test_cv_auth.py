@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
-from jose import jwt
+import jwt
 from sqlalchemy import select
 
 from app.config import settings

@@ -132,7 +132,7 @@ unset VAULT_ADDR
 
 The script will:
 1. Enable the `kv-v2` secrets engine at `secret/`.
-2. Write the `coditent-app` policy (read-only on `secret/data/coditent`).
+2. Write the `coditent-app` policy (read-only on `secret/data/ft_transcendence`).
 3. Enable AppRole authentication.
 4. Create the `coditent-app` role (`token_ttl=1h`, `token_max_ttl=4h`).
 5. Print the `VAULT_ROLE_ID`.

@@ -9,8 +9,8 @@ pydantic-settings
 passlib[argon2,bcrypt]
 argon2-cffi==23.1.0
 bcrypt==4.0.1
-python-jose[cryptography]
-cryptography==46.0.3
+PyJWT==2.15.0
+cryptography==50.0.0
 httpx
 google-genai==2.26.0
 python-dotenv
@@ -20,8 +20,11 @@ redis
 celery
 prometheus-client
 structlog
-pypdf
+pypdf==6.21.2
 python-docx
 pyotp
 qrcode[pil]
 user-agents
+pillow==13.0.0
+certifi==2026.10.19
+opentelemetry-api==1.45.1

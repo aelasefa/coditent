@@ -83,10 +83,11 @@ In Python web applications, how your application server is started dictates how 
 ## 4. Quickstart: Startup & Shutdown
 
 ### Starting Monitoring
-To start Prometheus, Grafana, and Node Exporter:
+To load the Grafana administrator password from Vault and then start Prometheus,
+Grafana, and Node Exporter:
 ```bash
-cd /opt/coditent/monitoring   # or local repo path
-docker compose up -d
+cd /opt/coditent              # or local repo path
+./scripts/run_monitoring.sh
 ```
 
 ### Stopping Monitoring
@@ -125,6 +126,10 @@ docker compose logs prometheus
 ## 6. Authentication & Admin Credentials
 
 - **Anonymous Access**: `GF_AUTH_ANONYMOUS_ENABLED=false`. All users must log in.
+- **Administrator credential**: `GF_SECURITY_ADMIN_PASSWORD` is required by
+  `monitoring/compose.yml` and loaded by `scripts/run_monitoring.sh` from the same
+  Vault bundle as the application secrets. The launcher rejects values shorter than
+  16 characters. Never place this credential in `.env` or Git.
 - **Admin Password Reset**:
   Grafana's environment variable `GF_SECURITY_ADMIN_PASSWORD` only takes effect when initializing an *empty* database on the very first container run. Once `/var/lib/grafana/grafana.db` exists, changing that variable in `compose.yml` does **not** change the existing admin account password.
   To reset the Grafana admin password on an existing installation:
@@ -276,4 +281,3 @@ bash ansible/deploy.sh monitoring production --private-key ~/.ssh/your-aws-key.p
 > 1. Ensure you pass your EC2 private key with `--private-key /path/to/key.pem` or set `ansible_ssh_private_key_file` in `ansible/inventory/hosts.ini`.
 > 2. Alternatively, append your local public key (`~/.ssh/id_ed25519.pub`) into `/home/ubuntu/.ssh/authorized_keys` on the EC2 server.
 > 3. For local development on your Ubuntu machine, always use `--limit local`.
-

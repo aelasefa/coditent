@@ -1,1236 +1,203 @@
-*This project was created as part of the 42 curriculum by the CODITENT team.*
+*This project has been created as part of the 42 curriculum by ayelasef, iel-asef, abelahse, maelmahf, ahabibi-.*
 
 # CODITENT
 
-CODITENT is a recruitment workflow for candidates, company teams, and platform administrators. Candidates build profiles, upload CVs, discover opportunities, apply, and communicate with recruiters. Company teams publish offers, review applications, coordinate interviews, move candidates through hiring stages, and manage their organization with role-based permissions.
+## Description
 
-## Submission score
+CODITENT is a recruitment platform for candidates, company teams, and platform administrators. Candidates create profiles, upload CVs, discover offers, apply, follow their application pipeline, and communicate with recruiters. Company teams publish offers, assess applicants, schedule interviews, and collaborate through organization roles. Administrators supervise accounts, organizations, content, and audit activity.
 
-- **Raw implemented score:** 22 points
-- **Official counted score:** **19 / 19**
-- **Buffer above the counted cap:** 3 points
-- **Claimed modules:** 16
+The application is a Next.js frontend backed by a FastAPI API and PostgreSQL. Redis supports background jobs, shared presence, rate state, and multi-instance realtime fan-out. Supabase provides PostgreSQL and private object storage. The containerized deployment includes nginx/ModSecurity, HashiCorp Vault, Prometheus, and Grafana.
 
-The subject requires 14 points and counts at most five bonus points. OAuth is implemented but remains unclaimed until a real configured-provider login is demonstrated. Accessibility, extra-browser, monitoring, advanced notification, game, blockchain, and custom modules are not included in the score.
+## Team, roles, and responsibilities
 
-The authoritative module ownership, justification, evidence, and live demonstration steps are in [audit-reports/MODULE_POINTS.md](audit-reports/MODULE_POINTS.md).
+| Member | 42 login | Role | Main responsibilities and contributions |
+| --- | --- | --- | --- |
+| Ayman Elasefar | `ayelasef` | Product Owner and DevOps developer | Product priorities and acceptance criteria; Docker, CI/CD, Ansible, nginx/TLS, monitoring; OAuth deployment integration |
+| Ilyas El Asefar | `iel-asef` | Frontend developer | Company workspace, jobs/offers views, candidate pipeline and assessment UI, responsive frontend behavior |
+| Ayman Belahsen | `abelahse` | Technical Lead and frontend developer | Frontend architecture and review; design system, navigation, CV experience, chat and optimistic-message UX |
+| Mohammed Elmahfoudi | `maelmahf` | Project Manager and backend developer | Delivery coordination; FastAPI services, database/migrations, recruitment workflows, realtime messaging and backend tests |
+| Abderrahmane Habibi Ihlane | `ahabibi-` | Security developer | Vault migration, 2FA and session/device security, GDPR account controls, security headers and container hardening |
 
-## Current architecture
+All five members are developers and are responsible for understanding, testing, reviewing, and documenting the whole submission, not only their primary area.
 
-```mermaid
-flowchart LR
-    Browser[Browser] --> Ingress[nginx TLS ingress]
-    Ingress --> Web[Next.js 16 / React 19]
-    Ingress --> API[FastAPI]
-    Web -->|same-origin /api-proxy| API
-    API --> PG[(Supabase PostgreSQL)]
-    API --> Storage[(Supabase private storage)]
-    API --> Redis[(Redis)]
-    API --> Outbox[(PostgreSQL AI/email outboxes)]
-    Dispatcher[AI dispatcher] --> Outbox
-    Dispatcher --> Redis
-    Worker[Celery worker] --> Redis
-    Worker --> PG
-    Worker --> Gemini[Google Gemini]
-    API --> Resend[Resend]
-    API <-->|Redis fan-out + socket tickets| Browser
+### Project-management process and communication
+
+Work is split into product milestones: identity and profiles, company workflows, applications and messaging, security/privacy, then deployment and observability. The Product Owner defines the expected user outcome, the Project Manager turns it into small deliverables, and the Technical Lead reviews architecture and cross-layer impact. Feature branches and pull requests provide the asynchronous record; GitHub issues and PR discussions carry tasks, review comments, and acceptance evidence. The team uses regular live sync calls for blockers and integration decisions. A change is complete only after review, relevant tests, and documentation are updated.
+
+### Individual challenges
+
+| Member | Challenge addressed |
+| --- | --- |
+| Ayman Elasefar | Keeping local, CI, and EC2 deployment behavior consistent while adding TLS, a WAF, immutable images, and a separately deployed monitoring stack |
+| Ilyas El Asefar | Turning dense recruitment data and AI assessments into responsive company workflows without mock-only production paths |
+| Ayman Belahsen | Keeping shared frontend behavior consistent while improving CV and chat UX, including optimistic delivery and invalidation behavior |
+| Mohammed Elmahfoudi | Preserving database integrity and authorization across application-stage transitions, migrations, async jobs, and realtime messaging |
+| Abderrahmane Habibi Ihlane | Moving secrets and security-sensitive account flows to Vault-backed, revocable mechanisms without exposing credentials in Git |
+
+## Architecture and technical choices
+
+```text
+Chrome -> nginx + ModSecurity -> Next.js 16
+                           \-> FastAPI -> SQLAlchemy/Alembic -> Supabase PostgreSQL
+                                      -> Supabase private object storage
+                                      -> Redis -> Celery worker / AI dispatcher
+                                      -> Resend and Google Gemini
+
+FastAPI /metrics -> Prometheus -> provisioned Grafana dashboards and alerts
+Runtime credentials <- HashiCorp Vault KV v2 + AppRole
 ```
 
-The backend is a modular FastAPI application backed by SQLAlchemy and Alembic. Supabase PostgreSQL is the persistent database, and Supabase private buckets store candidate CVs, avatars, and company logos. Redis supplies Celery transport, shared rate/admission state, presence, and cross-process realtime fan-out. Durable PostgreSQL outboxes protect AI dispatch and transactional email delivery from process restarts.
+- **Next.js 16 and React 19:** App Router, server-rendered public offer pages, route groups, reusable components, and a production PWA.
+- **FastAPI:** typed request/response validation, async endpoints, dependency-based authentication and authorization, and OpenAPI documentation.
+- **PostgreSQL with SQLAlchemy/Alembic:** relational integrity, transactions, an async ORM, and versioned schema migrations.
+- **Redis and Celery:** asynchronous AI work, cache/admission state, presence, and cross-process realtime delivery.
+- **Supabase Storage:** private CV, avatar, and company-logo objects; application authorization remains in FastAPI.
+- **nginx/ModSecurity and Vault:** strict request filtering plus encrypted, isolated runtime secret storage.
+- **Prometheus/Grafana:** application and host metrics, custom dashboards, alert rules, retention limits, and authenticated loopback-only administration behind TLS.
 
-Docker Compose starts six required services:
+### Database schema
 
-| Service | Responsibility |
-|---|---|
-| `api` | HTTP API, authentication, authorization, migrations, health/readiness |
-| `web` | Next.js application and server-rendered public opportunity pages |
-| `worker` | Celery jobs and worker heartbeat |
-| `ai-dispatcher` | Claims durable AI outbox rows and enqueues work |
-| `redis` | Broker, shared cache/admission state, presence, realtime fan-out |
-| `proxy` | Local reverse proxy, WAF, HTTPS test endpoint, public route mapping |
+The authoritative schema is in `apps/api/app/models.py` and `apps/api/alembic/versions/`.
 
-Production uses an Ansible-managed host nginx ingress with a trusted certificate, HTTP-to-HTTPS redirect, HSTS, same-origin API/WebSocket routing, and private upstream ports. The container proxy provides loopback-only HTTP on `localhost:3001` for local development and self-signed HTTPS on `localhost:8443` for TLS checks.
+| Table/domain | Important data | Relationships |
+| --- | --- | --- |
+| `users` | UUID, email, password hash, account role, status, 2FA and session-security state | Parent of profiles, friendships, messages, applications, memberships and audit actors |
+| `candidate_profiles` | identity, biography, skills, experience, education, CV/avatar paths | One-to-one with a candidate user |
+| `companies` | organization details, logo, archive/approval state | Has members, invitations, offers and subscriptions |
+| company membership/invitations | company role, invite token hash, status and expiry | Connect users to one organization and authorize scoped actions |
+| `opportunities` | title, description, requirements, location/type, owner and status | Belongs to a company; has applications |
+| `applications` | candidate, offer, stage/version, responsible recruiter, AI state | Unique candidate/offer workflow; owns interviews and recruitment chat |
+| friendships/direct messages | request state, sender/receiver, ordered messages and receipts | Connect candidate users and enforce approved-friend chat |
+| recruitment chat messages | application, sender, body, timestamps and delivery state | Scoped to an eligible application and its participants |
+| AI/email outboxes | job type, payload, attempts, lease and delivery status | Durable work and retry records |
+| privacy/deletion records | request state, grace period, retries and completion | Drives cancelable account erasure and confirmations |
+| audit/activity records | actor, action, target and timestamp | Security and administrative traceability |
 
-## Roles and account creation
+## Implemented features
 
-Public registration always creates a **candidate** account after email OTP verification. Company accounts are invitation-only. Platform administrator accounts are managed internally.
+- Email-OTP registration, password login, configured Google/LinkedIn OAuth, current-user lookup, TOTP 2FA, recovery codes, trusted devices, and session revocation.
+- Candidate profile/CV/avatar management, offer discovery, combined search/filter/sort, pagination, AI match context, applications, interviews, and stage tracking.
+- Company creation and archival, invitations, membership roles, offers, candidate review, guarded pipeline transitions, analytics, and recruitment chat.
+- Friend requests, friend removal, presence/last-seen, persistent direct messaging, delivery/read state, and multi-instance WebSocket fan-out.
+- Private file upload with client/server extension, MIME, magic-byte, and size checks; progress, preview/download, replacement, and deletion.
+- JSON/CSV/XML export, validated JSON profile import, reauthenticated deletion request, seven-day cancellation, anonymization, and durable confirmation email.
+- Public Privacy Policy and Terms of Service pages linked from public/authentication UI.
+- PWA manifest, install icons, service worker, versioned cache, and offline fallback.
+- Liveness/readiness probes, metrics, logs, dashboards, alerts, backups, and documented restore/rollback operations.
 
-Company members have one of these roles:
-
-- `OWNER`: organization, membership, subscription, offers, candidates, and hiring workflow
-- `ADMIN`: organization, membership, offers, candidates, and hiring workflow
-- `HR`: offers, applications, interviews, stage changes, and recruitment chat
-- `RECRUITER`: offers, applications, evaluation, and recruitment chat
-- `HIRING_MANAGER`: application review, evaluation, analytics, and stage changes
-
-Authorization is checked from the current database row on every protected request. Password, email, two-factor, membership, and administrative security changes increment durable account authorization state and revoke existing HTTP sessions, socket tickets, and open sockets.
-
-## Main workflows
-
-### Candidate
-
-1. Register and verify the email OTP, or sign in through a configured OAuth provider.
-2. Complete the profile and optionally upload an avatar and CV.
-3. Browse server-rendered public offers or authenticated recommendations.
-4. Filter, sort, and paginate opportunities; request AI-supported match context.
-5. Apply using a versioned CV snapshot.
-6. Follow application stages, interviews, notifications, and recruitment chat.
-7. Manage friends, direct messages, two-factor authentication, data export/import, and account deletion.
-
-### Company
-
-1. A platform administrator creates or invites the company owner.
-2. The owner or company administrator invites team members and assigns scoped roles.
-3. Authorized members create offers and assign a responsible recruiter.
-4. Candidates apply; the durable AI job workflow generates screening context.
-5. Authorized members move the application through the guarded stage machine.
-6. Candidate and recruiter exchange ordered realtime messages at eligible stages.
-7. Owners can archive the company while preserving anonymized recruitment integrity records.
-
-### Platform administration
-
-Platform administrators manage users, companies, invitations, offers, missions, institutions, support requests, and audit activity. Administrative actions use explicit permission gates and are recorded in the audit log.
-
-## Privacy and legal behavior
-
-The public [Privacy Policy](apps/web/src/app/privacy/page.tsx) (`/privacy`) and [Terms of Service](apps/web/src/app/terms/page.tsx) (`/terms`) are linked from the landing page, authentication pages, and each other. They describe the implemented account types, Supabase storage/database processing, Gemini AI processing, Resend email delivery, OAuth providers, seven-day deletion grace period, anonymized retained workflow records, and the deployed `coditent.app` contact.
-
-Authenticated account controls provide:
-
-- JSON, CSV, and XML data export;
-- validated JSON profile import;
-- reauthenticated account-deletion scheduling;
-- a seven-day cancellation window;
-- private-file deletion followed by direct-field removal and integrity-record anonymization; and
-- durable confirmation email delivery.
-
-## One-command local deployment
+## Instructions
 
 ### Prerequisites
 
-- Docker Engine and Docker Compose
-- a Supabase project and database connection
-- Supabase service credentials for private storage
-- generated JWT, TOTP, and email-outbox encryption keys
-- a Google Gemini API key
-- Resend credentials when exercising real email delivery
+- Bash 5.2 or newer
+- Docker Engine 24 or newer and Docker Compose 2.20 or newer
+- Python 3.12 for local backend development
+- Node.js 22 and pnpm 10.5.2 for local frontend development
+- A Supabase PostgreSQL project and private storage buckets
 
-Create the root environment file:
+### Configure secrets
 
 ```bash
 cp .env.example .env
 ```
 
-Initialize and seed HashiCorp Vault as described in
-[`docs/shared-vault.md`](docs/shared-vault.md). Put only the four Vault connection
-and AppRole settings in the root `.env`, then start the full stack:
+Initialize Vault by following `docs/shared-vault.md`, then store the complete secret bundle at `secret/data/ft_transcendence`. It must include database, JWT, storage, AI, encryption, email/OAuth credentials when used, and a unique `GF_SECURITY_ADMIN_PASSWORD` of at least 16 characters. Never commit real credentials.
+
+### Run the application
 
 ```bash
 ./scripts/run_project.sh
 ```
 
-Local endpoints:
+The local application is available at `http://localhost:3001`; the self-signed TLS check endpoint is `https://localhost:8443`. API liveness and readiness are exposed on loopback at `http://localhost:8001/health` and `http://localhost:8001/ready`.
 
-| Endpoint | Purpose |
-|---|---|
-| `http://localhost:3001` | local browser UI through the loopback proxy |
-| `https://localhost:8443` | self-signed local TLS endpoint |
-| `http://localhost:8001/docs` | loopback-only OpenAPI documentation |
-| `http://localhost:8001/ready` | direct component readiness |
-
-Verify the deployment:
+Start monitoring with its Vault-loaded administrator password:
 
 ```bash
-# API — requires Supabase DATABASE_URL, no local DB needed
-cd apps/api && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt
-alembic upgrade head          # creates schema in Supabase
-uvicorn app.main:app --reload --port 8001
-# Web
-cd apps/web && npm ci && npm run dev -- --port 3000
+./scripts/run_monitoring.sh
 ```
 
-### Migrations
-
-`alembic upgrade head` applies the full schema to Supabase (19 version files under `apps/api/alembic/versions/`). New schema change: `alembic revision --autogenerate -m "desc"` → commit → `alembic upgrade head` (locally + CI + prod). Rollback playbook exists (`ansible/playbooks/rollback.yml`) but per-migration downgrade testing is not evident — TO-VERIFY before relying on it.
-
----
-
-## Technical stack
-
-- **Frontend:** Next.js 16.3.8 (React 19.3, App Router), Tailwind CSS + CSS Modules, axios, `@tanstack/react-query`, `react-hook-form` + `zod`, `@supabase/ssr` (session refresh only).
-- **Backend:** FastAPI (Python 3.12), SQLAlchemy 2 async (`asyncpg`) + Alembic, `python-jose` (JWT HS256), `passlib[bcrypt]`, `slowapi` (rate limits), `structlog` + `prometheus-client` (observability), Celery + Redis 7 (async jobs), `google-generativeai`, `supabase` (Storage admin only), `pypdf` / `python-docx` (CV text), Resend via stdlib `urllib` (email).
-- **Database:** **Supabase PostgreSQL** — sole persistent store. No local Postgres container, no SQLite, no localhost fallback (rejected at startup in `apps/api/app/database.py:9-33` and `apps/api/app/config.py:47-56`).
-- **Storage:** Supabase Storage, private buckets `candidate-cvs` and `company-logos` (backend service-role key only).
-- **Infra:** Docker Compose (`api`, `worker`, `redis`, `web`, `proxy`), HashiCorp Vault KV v2/AppRole for shared secrets, host nginx `:80/443`, GitHub Actions CI/CD + Ansible to EC2, Vercel-ready frontend (`vercel.json`, `/api-proxy` rewrite).
-
-## Technical-choice justification
-
-- **FastAPI + Next.js:** previous module claim "Web Major: Framework front+back" (TO-VERIFY points); in practice FastAPI gives async SQLAlchemy + Pydantic validation + OpenAPI docs for free, Next.js App Router gives SSR + route groups + edge middleware for role redirects.
-- **Supabase Postgres (not self-hosted):** zero DB ops, connection pooler for prod, Storage included so CVs/logos need no second vendor. Direct `asyncpg` (not PostgREST) keeps SQLAlchemy/Alembic workflow; RLS is bypassed by design and all authorization lives in FastAPI (`dependencies.py` + `core/permissions.py`) — see [Security](#security-architecture).
-- **Custom JWT over Supabase Auth:** app identity predates/overlaps Supabase adoption; authority is `public.users` so roles/company membership are read from the DB row, never from token claims. Cost: no refresh/revocation, no password reset (both NOT IMPLEMENTED).
-- **Celery + Redis:** recommendation ranking and application screening call Gemini with 120 s budgets — too slow for request/response. Jobs + polling keep the UI responsive; Redis doubles as result cache.
-- **Gemini `gemini-3-flash-preview` single provider:** one SDK for ranking, screening, CV extraction; deterministic heuristic fallback only where a degraded answer is acceptable (bulk ranking), never where a fake score would mislead (screening, per-offer match).
-- **No conversation table:** one `applications` row = one logical recruitment conversation (`chat_messages.application_id`), making duplicate conversations impossible by construction (`services/recruitment_chat.py:115-144`).
-
----
-
-## Architecture
-
-```mermaid
-flowchart TD
-    Browser[Browser] --> Web[Next.js 16 - apps/web - :3001 local]
-    Web --> MW[middleware.ts - edge role redirects + Supabase cookie refresh]
-    Web --> APIClient[lib/api.ts - axios + Bearer + /api-proxy fallback]
-    APIClient --> ProxyRewrite[/api-proxy/:path* rewrite - next.config.mjs/]
-    ProxyRewrite --> API[FastAPI - apps/api/app/main.py - :8001]
-    API --> CORS[CORS - frontend origins + allow_credentials]
-    API --> RL[slowapi - auth/OTP rate limits]
-    API --> AuthZ[get_current_user - Bearer first + access_token cookie fallback]
-    AuthZ --> Gates[require_* gates + can role,action matrix]
-    Gates --> Routers[Auth, candidate, company, hiring, messaging, and admin routers]
-    Routers --> Services[Services: ai/screening/cv_parser/cv_extraction/cv_storage/company_logo/email/recruitment_chat/match_scoring/recommendation_jobs]
-    Services --> PG[(Supabase Postgres - SQLAlchemy asyncpg - PgBouncer-safe)]
-    Services --> CVStore[(Storage bucket candidate-cvs - private)]
-    Services --> LogoStore[(Storage bucket company-logos - private)]
-    Routers --> Redis[(Redis 7 - rec cache + job keys - app/cache.py)]
-    Redis --> Worker[Celery worker - app/tasks.py]
-    Worker --> Gemini[Gemini gemini-3-flash-preview - ranking/screening/extraction]
-    Web --> BioAI[POST /api/ai/generate-bio - frontend-only Gemini REST]
-    BioAI --> Gemini
-    Routers --> WS[WS /chat/recruitment -app-/ws?token=JWT - in-memory fan-out]
-    WS --> Browser
-    Routers --> Resend[Resend email - OTP + invites only - services/email.py]
-    API --> Metrics[GET /metrics Prometheus + structlog]
-    Launcher --> Vault[HashiCorp Vault KV v2 via AppRole]
-    Launcher --> API
-```
-
-Request lifecycle:
-
-```text
-Frontend request (lib/api.ts: Bearer from coditent_token, withCredentials)
-    ↓  same-origin /api-proxy/* rewrite in prod (mixed-content avoidance)
-Backend route (app/routers/*, prefix mounted in app/main.py:45-56)
-    ↓  get_current_user (app/dependencies.py:20-48: Bearer→cookie→sub→UUID→users row)
-Authorization (require_* gate + can(company_role, action) + same-company / same-candidate scoping; miss-or-foreign → 404 to avoid leaks)
-    ↓  Pydantic validation (app/schemas.py; 422 on failure; sanitized text via app/utils/sanitizer.py)
-Business logic (app/services/*; Celery enqueue for Gemini work)
-    ↓  Database (AsyncSession per request from app/database.py:54-56)
-Response (response_model) → Audit log (app/core/audit.py → admin_activity_logs, failure swallowed)
-    ↓  Frontend (react-query cache update / invalidate, toasts, 401 → logout + ?next= redirect)
-```
-
----
-
-## Project structure
-
-```text
-CODITENT/
-├── apps/
-│   ├── api/                    # FastAPI backend
-│   │   ├── app/
-│   │   │   ├── main.py         # app factory, routers, CORS, rate-limit, health/readiness, metrics
-│   │   │   ├── config.py       # pydantic-settings, Supabase-only guard, OAuth both-or-neither
-│   │   │   ├── database.py     # async engine (statement_cache_size=0), sessions, URL normalizer
-│   │   │   ├── db.py           # Supabase admin client factory (backend-only)
-│   │   │   ├── models.py       # 10 ORM tables
-│   │   │   ├── schemas.py      # Pydantic DTOs (357 lines)
-│   │   │   ├── dependencies.py # get_current_user + require_* gates + pagination
-│   │   │   ├── core/permissions.py  # VALID_COMPANY_ROLES + PERMISSIONS matrix + can()
-│   │   │   ├── core/audit.py   # log_audit() → admin_activity_logs
-│   │   │   ├── core/runtime_secrets.py # Optional legacy broker; bypassed by Vault launcher
-│   │   │   ├── utils/jwt.py    # create/verify HS256 tokens, 60-min default
-│   │   │   ├── utils/sanitizer.py   # input text sanitization for validators
-│   │   │   ├── routers/        # 12 routers (89 route decorators)
-│   │   │   ├── services/       # ai, screening, cv_*, company_logo, email, recruitment_chat, ...
-│   │   │   ├── tasks.py        # Celery app + 3 tasks
-│   │   │   ├── cache.py        # lazy sync/async Redis singletons
-│   │   │   ├── limiter.py      # slowapi Limiter
-│   │   │   └── observability.py# structlog + Prometheus metrics
-│   │   ├── alembic/            # 19 migration versions, async env
-│   │   ├── tests/              # 47 pytest files (live-DB + offline mix)
-│   │   ├── requirements.txt    # 22 deps
-│   │   └── Dockerfile
-│   ├── web/                    # Next.js frontend
-│   │   ├── src/
-│   │   │   ├── app/            # App Router pages (auth, admin, company, dashboard, offers, ...)
-│   │   │   ├── components/     # admin, auth, candidate, company, landing, ui, onboarding, shell
-│   │   │   ├── lib/            # api.ts (627 lines), auth.ts, permissions.ts, types.ts, ...
-│   │   │   ├── utils/supabase/ # SSR/middleware Supabase clients (session refresh only)
-│   │   │   └── middleware.ts   # edge protection + role redirects
-│   │   ├── next.config.mjs     # /api-proxy rewrite, image hosts
-│   │   └── package.json        # Next 16.3.8, React 19.3.0, axios, React Query, zod
-│   └── apps/web/               # nested legacy copy — TO-VERIFY (appears unused; do not rely on it)
-├── docker-compose.yml          # api/worker/redis/web/proxy
-├── nginx/                      # reverse-proxy build
-├── ansible/                    # EC2 provisioning/deploy/rollback, nginx role
-├── .github/workflows/deploy.yml# CI (web lint+build, api imports) + CD (Ansible on push to main)
-├── .env.example                # Supabase-only env template
-├── SUPABASE.md / DESIGN.md / UX-CONTRACT.md / CODITENT_BACKEND_ARCHITECTURE.md
-└── vercel.json
-```
-
-| Directory | Contains | Why it exists | Used by / connects to |
-| --------- | -------- | ------------- | --------------------- |
-| `apps/api/app/routers/` | 19 mounted routers | HTTP layer | Mounted by `main.py`; call `dependencies.py`, `core/permissions.py`, `services/*` |
-| `apps/api/app/services/` | AI, screening, CV, logo, email, chat rules, jobs | Reusable business logic + external I/O | Routers + Celery tasks |
-| `apps/api/app/core/` | permissions matrix, audit writer, runtime secrets | Centralized policy + side effects | Every write path |
-| `apps/api/alembic/` | 42 version files | Schema history for Supabase | `api` container runs `alembic upgrade head` on boot |
-| `apps/api/tests/` | 47 test files | Regression + security coverage | CI import check; manual `pytest` runs |
-| `apps/web/src/app/` | Route groups + pages | User-facing screens per role | Calls `lib/api.ts` helpers |
-| `apps/web/src/components/` | Reusable UI (incl. `ui/avatar.tsx`, `company/CompanyLogoSection.tsx`) | Consistent design system | Pages |
-| `apps/web/src/lib/` | API client, auth, types, permissions mirror | Single frontend↔backend contract | All pages/components |
-| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `./scripts/run_project.sh`; push-to-main deploys |
-
----
-
-## Frontend architecture
-
-- **Framework:** Next.js 16.3.8 (App Router), React 19.3.0, Tailwind + CSS Modules, `axios`, `@tanstack/react-query`, `react-hook-form` + `zod` (`apps/web/package.json`).
-- **Routing:** App Router groups — `(auth)/login`, `(auth)/register`, `admin/`, `company/`, `dashboard/`, `offers/`, `profile/`, `chat/`, `invite/`, `requests/`, `recruiter/`, `get-started/`, `verify-email/`, `choose-role/`, `accept-invitation/`, `api/ai/generate-bio/`.
-- **Layouts:** role shells (`components/company/AppShell.tsx`, `components/shell/*`) + route protection in `src/middleware.ts` (token presence + JWT `role` claim decode → redirects + `?next=`).
-- **API communication:** `src/lib/api.ts` — `getApiBaseUrl()` (HTTPS page + `http://` backend → `/api-proxy`; else `NEXT_PUBLIC_API_URL`), axios `withCredentials:true`, request interceptor injects `Bearer <coditent_token>`, response interceptor clears token + redirects protected paths on 401 (`lib/api.ts:18-90`).
-- **State:** `@tanstack/react-query` (`lib/query-provider.tsx`) + local component state; logo mutations invalidate `["company", id]` / `["company-profile", id]` (`CompanyLogoSection.tsx:72-73`).
-- **Forms/validation:** `react-hook-form` + `zod` on auth/onboarding; file validation duplicated client-side (`validateCompanyLogoFile` in `lib/api.ts:518-526`) — backend re-validates, never trusted.
-- **Realtime:** recruitment WS via `getRecruitmentWsUrl()` (`lib/api.ts:620-627`) with 3 s polling fallback in chat components.
-
-Important pages (representative; all call `lib/api.ts` helpers over the axios client):
-
-```text
-Page: Candidate login | Route: /login | Main file: src/app/(auth)/login/page.tsx
-Purpose: email login, route by user.role | API: POST /auth/login, GET /auth/me
-Auth: public (redirects away when token present) | Components: auth/*, social-login-buttons.tsx
-```
-
-```text
-Page: Register + verify | Route: /register, /verify-email | Purpose: OTP registration
-API: POST /auth/register → POST /auth/verify-email → token → /profile
-```
-
-```text
-Page: Candidate dashboard | Route: /dashboard | Purpose: recommendations, match scores, next actions
-API: GET /recommendations, POST /recommendations/generate, GET /recommendations/jobs/{id},
-     POST /recommendations/score/{offer_id} | Components: candidate/*, match-score.tsx
-```
-
-```text
-Page: Offers browse + detail | Route: /offers, /offers/[id]
-Purpose: public offer list, candidate-facing detail with company branding
-API: GET /offers, GET /offers/{id} | Components: candidate/job-card.tsx, candidate/job-details.tsx, offer-card.tsx
-```
-
-```text
-Page: Profile builder | Route: /profile | Purpose: headline/bio/skills/education/links/avatar/CV + bio AI button
-API: GET/PUT /candidates/profile, /candidates/cv*, POST /candidates/cv/parse,
-     PUT /auth/me/avatar, POST /api/ai/generate-bio (frontend-only)
-```
-
-```text
-Page: Company workspace | Route: /company/* | Purpose: offers, applications, pipeline, team, settings/logo
-API: /companies/* (incl. /logo), /offers/*, /applications*, /invites/employee/*, /chat/recruitment*
-Components: company/AppShell.tsx, CompanyLogoSection.tsx, CandidateCard.tsx, RecruitmentThread.tsx
-```
-
-```text
-Page: Admin | Route: /admin/* | Purpose: stats, users, offers, pending recruiters, activity, impersonation
-API: /admin/*, /audit | Components: admin/*
-```
-
-```text
-Page: Chat | Route: /chat/* | Purpose: recruitment conversations (stage-gated) + legacy direct inbox
-API: /chat/recruitment*, WS .../ws?token=, legacy /chat/send /with/{uid} /conversations
-Components: candidate/chat-workspace.tsx, chat-view.tsx
-```
-
----
-
-## Backend architecture
-
-- **Framework/entry:** FastAPI (`apps/api/app/main.py`, `title="CODITENT API"`), Python 3.12 (`apps/api/Dockerfile`, CI `setup-python 3.12`). Start: `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001`. `GET /health` is process liveness only; Compose and deployment gates poll `GET /ready`, which checks PostgreSQL, Redis, and a TTL-backed Celery worker heartbeat with bounded timeouts.
-- **Routers:** FastAPI routers are mounted in `main.py` for authentication, candidates, offers, recommendations, companies, requests, invitations, applications, audit, chat, notifications, missions, institutions, and administration.
-- **AuthN:** `get_current_user` (`dependencies.py:20-48`) — `HTTPBearer(auto_error=False)` first, `access_token` cookie fallback; `sub`→UUID→`users` row. OpenAPI Bearer scheme so Swagger "Authorize" works.
-- **AuthZ gates** (`dependencies.py:51-177`): `require_platform_admin`, `require_company_user`, `require_company_owner`, `require_company_admin` (OWNER/ADMIN), `require_company_member` (all 5 company roles), `require_candidate`, `require_candidate_account` (strict), `require_recruiter` (COMPANY_USER-approved or legacy), `require_admin` (PLATFORM_ADMIN + legacy ADMIN compat). Write paths double-gate (dependency + `can()`).
-- **Validation:** Pydantic `schemas.py` (357 lines) + `sanitize_input_text` validators on profile/offer text; UUID parsing; `401` unauthenticated only, `403` wrong role/scope/approval, `404` miss *or deliberate isolation* (same "not found" to avoid leaking cross-company existence).
-- **Services** (`services/`): `ai.py` (ranking + single-match), `screening.py`, `cv_parser.py`, `cv_extraction.py`, `cv_storage.py` (bucket `candidate-cvs`), `company_logo.py` (bucket `company-logos`), `email.py` + `email_verification.py` (Resend via `urllib`), `oauth_service.py`, `recruitment_chat.py` (rules), `recommendation_jobs.py` (cache key + fallback + generation), `match_scoring.py` (per-offer lifecycle), `admin_seed.py`.
-- **Background:** Celery `coditent` app, JSON only (`tasks.py:15-20`) — 3 tasks: `recommendations.generate`, `recommendations.score_single`, `applications.screen`. Each builds a fresh event loop + `engine.dispose()` first (fork-pool loop-binding fix, `tasks.py:40-51`). No beat/scheduler — no periodic jobs; expiry is lazy everywhere.
-- **Realtime:** WS ` /chat/recruitment/{application_id}/ws?token=JWT` (`routers/chat.py:469`), in-memory fan-out (single replica; code comment flags Redis pub/sub need).
-- **Observability:** `structlog` loggers, Prometheus `/metrics` (`main.py:79-81`, `observability.py`), `/protected` auth probe. The launcher requires an unsealed Vault at startup and injects its secrets into API, worker, and dispatcher containers.
-
----
-
-## How frontend and backend communicate
-
-1. **Base URL** (`lib/api.ts` and `next.config.mjs`): production browsers use same-origin `/api-proxy`, so browser traffic stays on `https://coditent.app`. Vercel forwards those requests over HTTPS to the EC2 ingress through `BACKEND_PROXY_URL=https://api.coditent.app/api-proxy`; the EC2-hosted Compose frontend continues to use the private `http://api:8001` upstream.
-2. **Credentials:** `withCredentials:true` + `Authorization: Bearer <localStorage coditent_token>` per request (`lib/api.ts:31-67`). Backend accepts Bearer first, `access_token` HttpOnly cookie fallback (cookie is only set on SSO flows — `routers/auth.py:153-161` — so email-login users rely on Bearer).
-3. **CORS** (`main.py:29-41`): explicit frontend origins (`settings.frontend_url`, `localhost:3000/3001` + `127.0.0.1` variants), `allow_credentials=True`, all methods/headers.
-4. **Protected endpoints:** `require_*` dependency → 401 (missing/bad/expired token, vanished user) or 403 (wrong role/scope/approval). Frontend 401 interceptor clears token and redirects protected paths to `/login?next=` or `/admin/login?next=` (`lib/api.ts:69-90`).
-5. **Errors:** `HTTPException` + global `Exception→500` (`main.py:95-98`), slowapi 429, Pydantic 422. Typed CV/AI errors: 400 file errors, 422 no-text, 502 upstream AI/mail/storage, 503 unconfigured SSO/storage-missing, 504 AI timeout, 413 oversized logo, 409 OTP race, 410 deprecated `POST /companies/{id}/join`.
-6. **Realtime:** socket-ticket endpoints issue short-lived, single-use tickets. On the production HTTPS origin, both URL builders produce `wss://coditent.app/api-proxy/...`; the UI retains a polling fallback when an upstream proxy does not preserve the WebSocket upgrade.
-7. **Avatar/logo note:** `PUT /auth/me/avatar` stores a URL string; company logos upload bytes to `POST /companies/{id}/logo` and expose only the storage path + scoped stream.
-
-Real example — "User clicks Apply":
-
-```text
-User clicks "Apply" on candidate/job-details.tsx
-        ↓  api.post("/applications", { opportunity_id }) — Bearer injected (lib/api.ts)
-POST /applications (routers/applications.py:289 — require_candidate_account equivalent, CANDIDATE only)
-        ↓  UUID + offer-exists + duplicate check (400 "Already applied"; UQ backstop uq_applications_candidate_opportunity)
-INSERT applications (company_id derived from offer — never client input)
-        ↓  audit APPLICATION_CREATED + queue applications.screen (failure swallowed)
-Backend response { application } → frontend invalidates queries, shows stage + ai_status=pending
-        ↓  Celery worker: applications.screen → Gemini → ai_score/ai_report + ai_status completed|failed
-Recruiter sees score via GET /applications (company join, view_applications gate)
-```
-
----
-
-## Database architecture
-
-- **Provider:** Supabase-hosted PostgreSQL — sole persistent DB. No local container, no SQLite.
-- **Library:** SQLAlchemy 2 async + `asyncpg` (`database.py:41-46`: `statement_cache_size=0`, `prepared_statement_cache_size=0`, `pool_pre_ping=True` for PgBouncer 5432/6543 compat). `DeclarativeBase` (`database.py:50-56`), per-request `AsyncSession` (`get_db`).
-- **Connection:** `DATABASE_URL` normalized (`postgresql://`→`postgresql+asyncpg://`) and local markers rejected (`database.py:9-33`, `config.py:47-56`).
-- **Migrations:** 20 Alembic versions (`apps/api/alembic/versions/`), async env, auto-applied on container start. Dead trace: `friendships` + `users.last_seen` created then dropped.
-- **Conventions:** UUID PKs (`default=uuid4`), naive `created_at default=utcnow` everywhere, mostly `NO ACTION` FKs (deletes blocked/orphan — no soft-delete), free-text status/role columns (DB can't constrain them).
-- **Raw-SQL tables (no ORM model):** `company_invitations`, `employee_invitations`, `pending_registrations` — used by `routers/invitations.py` and auth OTP endpoints; drift risk (no relationships).
-
-| Table/Model | Purpose | Primary key | Important fields | Relationships |
-| ----------- | ------- | ----------- | ---------------- | ------------- |
-| `users` (`models.py:61-88`) | Identity for candidates, company users, platform admins | UUID `id` | `email` UNIQUE, `password_hash`, `role` enum (default CANDIDATE), `is_approved`, `full_name`, `oauth_provider/oauth_id` (no unique), `avatar_url`, `company_id` FK NULL, `company_role` free String, `created_at` | M2O `company`; 1-1 `profile`; 1-M `offers` (via `recruiter_id`); 1-M `recommendations` |
-| `candidate_profiles` (`models.py:91-122`) | 1-1 CV extension | UUID `id` | `user_id` FK UNIQUE; all content NULL: city/phone/headline/bio/field/university/study_level/skills/years/linkedin/portfolio/languages/`cv_url`/desired_*/onboarding_*/overall_score/validated_skills | 1-1 `user` |
-| `offers` (`models.py:125-171`) | Unified offer/opportunity (legacy `company` text + new `company_id` FK) | UUID `id` | `recruiter_id` FK NOT NULL (legacy owner); `title/company/region/field/type/description/requirements` NOT NULL; `company_id/created_by/responsible_hr_id` NULL; location/work_mode/required_*/salary/deadline NULL; `opportunity_status` free String default `active`; `active` bool; `posted_at` | M2O recruiter/responsible_hr/company_obj; 1-M recommendations/applications |
-| `saved_recommendations` (`models.py:174-197`) | Cached candidate↔offer AI match | UUID `id` | `candidate_id/offer_id` NOT NULL; `ai_score` NOT NULL; `ai_reasoning` NOT NULL; `status` (`pending/processing/completed/failed`, default `pending`); `error`; UQ pair | M2O candidate + offer |
-| `companies` (`models.py:206-227`) | Tenant | UUID `id` | `name` UNIQUE NOT NULL; `logo_url` NULL; industry/location/website/company_size/contact_*/region/description NULL; `status` default `active`; `owner_id` FK NULL | 1-M `recruiters` (users); M2O `owner` |
-| `candidate_requests` (`models.py:230-247`) | Company→candidate outreach | UUID `id` | `candidate_id` CASCADE, `company_id` CASCADE, `recruiter_id` SET NULL; `message`; `status` enum default `pending` (no pair-unique — duplicates possible) | M2O candidate/company/recruiter |
-| `chat_messages` (`models.py:250-289`) | All messages; `application_id` NULL = legacy general chat | UUID `id` | `sender_id/receiver_id` CASCADE; `application_id` CASCADE NULL; `content` Text | M2O sender/receiver/application |
-| `applications` (`models.py:292-316`) | Candidate application + AI screening result | UUID `id` | `candidate_id` CASCADE, `opportunity_id` CASCADE, `company_id` NULL; `status` free String default `applied`; `cv_url/cover_letter` NULL; `ai_score/ai_report` NULL; `ai_status` default `pending`; UQ pair | M2O candidate/opportunity/company |
-| `admin_activity_logs` (`models.py:341-351`) | Append-only audit | UUID `id` | `action(80)`, `admin_id` FK, `admin_email` (denormalized), `target_user_id` UUID NULL **no FK** (can dangle), `target_user_email`, `details` | M2O admin only |
-| `company_invitations` (raw SQL) | Platform→company invites | `id` | email, company_name, token_hash UNIQUE, status, invited_by, company_id NULL, expires_at (7 d), accepted/revoked_at | No ORM relations |
-| `employee_invitations` (raw SQL) | Owner→employee invites | `id` | email, company_id NOT NULL CASCADE, role NOT NULL, token_hash UNIQUE, expires_at (72 h) | No ORM relations |
-| `pending_registrations` (raw SQL) | OTP register staging | `id` | email UNIQUE, full_name, password_hash, otp_hash, otp_expires_at, otp_attempts, last_otp_sent_at | Isolated (no FKs) |
-
-Per-model relationship sketches:
-
-```text
-User
- ├── Company (company_id → companies.id; company_role free String, validated by can())
- ├── CandidateProfile (1-1 via profile.user_id UNIQUE)
- ├── Offer (1-M via offers.recruiter_id — legacy owner link)
- └── SavedRecommendation (1-M via candidate_id)
-Company
- ├── User (1-M members via users.company_id) + owner (owner_id → users.id)
- ├── Offer (1-M via offers.company_id, nullable)
- └── Application (1-M via applications.company_id, nullable)
-Offer
- ├── SavedRecommendation (1-M) + Application (1-M via opportunity_id)
- └── responsible_hr (→ users.id; fallback created_by → recruiter_id)
-Application (= one logical recruitment conversation)
- ├── ChatMessage (1-M via application_id)
- └── CandidateRequest is separate (company→candidate outreach, not application-bound)
-```
-
----
-
-## ER diagram
-
-```mermaid
-erDiagram
-    USER ||--o{ CANDIDATE_PROFILE : "has 1-1"
-    USER ||--o{ OFFER : "owns via recruiter_id"
-    COMPANY ||--o{ USER : "employs"
-    USER }o--|| COMPANY : "owner_id nullable"
-    COMPANY ||--o{ OFFER : "publishes nullable"
-    USER ||--o{ SAVED_RECOMMENDATION : "receives"
-    OFFER ||--o{ SAVED_RECOMMENDATION : "ranked in"
-    USER ||--o{ CANDIDATE_REQUEST : "targeted"
-    COMPANY ||--o{ CANDIDATE_REQUEST : "sends"
-    USER ||--o{ APPLICATION : "submits"
-    OFFER ||--o{ APPLICATION : "receives"
-    COMPANY ||--o{ APPLICATION : "scoped nullable"
-    APPLICATION ||--o{ CHAT_MESSAGE : "conversation"
-    USER ||--o{ CHAT_MESSAGE : "sends"
-    APPLICATION ||--o{ ASSESSMENT : "assessed by"
-    USER ||--o{ ASSESSMENT : "takes"
-    USER ||--o{ ADMIN_ACTIVITY_LOG : "audited"
-```
-
-FK map (verified in `models.py`; `*` nullable, `C` cascade, `N` set-null, `-` no action):
-
-```text
-companies.owner_id(*,-) → users | users.company_id(*,-) → companies
-candidate_profiles.user_id(1-1 UNIQUE,-) → users
-offers.recruiter_id(-)/.created_by(*,-)/.responsible_hr_id(*,-) → users; offers.company_id(*,-) → companies
-saved_recommendations [UQ pair](-,-) → users + offers
-candidate_requests → users(C) + companies(C); recruiter_id(*,N) → users
-applications [UQ pair] → users(C) + offers(C); company_id(*,-) → companies
-chat_messages → users(C) + users(C) + applications(C, nullable)
-admin_activity_logs.admin_id(-) → users; target_user_id: no FK
-```
-
----
-
-## API documentation
-
-Base: `NEXT_PUBLIC_API_URL` (local `http://localhost:8001`; prod via `/api-proxy`). Auth column: `PUB` = public, otherwise the `require_*` gate. Company endpoints additionally enforce same-company scoping (foreign → `404`) and `can()` checks noted in Roles. Total documented: **89 router endpoints + 3 system = 92**.
-
-### System
-
-| Method | Endpoint | Purpose | Auth | Frontend usage |
-| ------ | -------- | ------- | ---- | -------------- |
-| GET | `/health` | Process liveness; never probes dependencies | PUB | orchestration |
-| GET | `/ready` | Bounded PostgreSQL, Redis, and worker readiness; returns safe component states and `503` when unavailable | PUB | compose/deploy gate |
-| GET | `/metrics` | Prometheus metrics (`observability.py`) | PUB | ops |
-| GET | `/protected` | Auth probe (returns id/email/role) | any user | debug |
-
-### Authentication (`apps/api/app/routers/auth.py`, prefix `/auth`)
-
-| Method | Endpoint | Purpose | Auth | Notes |
-| ------ | -------- | ------- | ---- | ----- |
-| GET | `/auth/sso/providers` | List configured SSO providers | PUB | login UI |
-| GET | `/auth/sso/{provider}/start` | Authorize redirect with signed state | PUB | `social-login-buttons.tsx` |
-| GET | `/auth/sso/{provider}/callback` | Code exchange, link-or-onboard, JWT + HttpOnly cookie | PUB | proxied by Next rewrites |
-| POST | `/auth/oauth/complete-registration` | Finish SSO onboarding (candidate-only roles) | onboarding cookie | choose-role flow |
-| POST | `/auth/oauth/handoff/exchange` | Exchange handoff code for JWT (popup flow) | PUB + code | `oauth-popup.ts`, `test_oauth_popup.py` |
-| POST | `/auth/register` → 202 | CANDIDATE-only (`Literal["CANDIDATE"]`, `auth.py:396-397`); creates `pending_registrations` + OTP email; mail failure deletes row → 502 | PUB, 10/min | register page |
-| POST | `/auth/verify-email` | OTP check (`FOR UPDATE` lock, 5 attempts, expiry) → creates `users` + `CandidateProfile`, returns `TokenResponse` | PUB | verify-email page |
-| POST | `/auth/resend-verification` → 202 | New OTP invalidates old, 60 s cooldownGuard, 429 + `retry_after_seconds` | PUB, 5/min | verify-email resend |
-| POST | `/auth/login` → `TokenResponse` | bcrypt check; legacy unapproved RECRUITER → 403; JSON token only (no cookie) | PUB, 5/min | login pages |
-| PUT | `/auth/me/avatar` | Set avatar URL string (`AvatarUpdate`, ≤5M chars) | any user | profile avatar |
-| GET | `/auth/me` | Current user + embedded profile | any user | session bootstrap |
-
-No logout / refresh / password-reset endpoints — NOT IMPLEMENTED (frontend clears storage, `lib/auth.ts:22-29`).
-
-### Candidates (`routers/candidates.py`, prefix `/candidates`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/candidates/onboarding` | Onboarding state | candidate account |
-| PUT | `/candidates/onboarding/step` | Save step 1-6 (`OnboardingStepUpdate`) | candidate account |
-| POST | `/candidates/onboarding/complete` | Mark onboarding done | candidate account |
-| GET | `/candidates/profile` | Own profile | candidate |
-| PUT | `/candidates/profile` | Partial `ProfileUpdate` (city/phone/headline/bio/field/university/level/skills/exp/linkedin/portfolio) | candidate |
-| POST | `/candidates/cv` → 201 | Upload CV: pdf/docx allowlist + magic bytes (`%PDF`, `PK\x03\x04`) + 5 MB cap (413); deletes previous; path `{uid}/{uuid}_{safe}.{ext}` in `candidate-cvs` | candidate |
-| GET | `/candidates/cv/meta` | CV pointer metadata | candidate |
-| GET | `/candidates/cv` | Attachment stream (own CV) | candidate |
-| DELETE | `/candidates/cv` → 204 | Remove file + clear `cv_url` (clears DB even on storage miss) | candidate |
-| POST | `/candidates/cv/parse` | Extract text (`pypdf`/`python-docx`, <20 chars → `CV_NO_TEXT`, 20k cap) → Gemini structured extract → returns `{extracted,warnings,has_cv,meta}`; **persists nothing** (suggest-don't-overwrite) | candidate |
-
-### Companies (`routers/companies.py`, prefix `/companies`)
-
-| Method | Endpoint | Purpose | Auth | Roles |
-| ------ | -------- | ------- | ---- | ----- |
-| GET | `/companies` | List (with `recruiter_count`) | PUB | — |
-| GET | `/companies/{id}` | Get one (`CompanyOut` incl. `logo_url`) | PUB | — |
-| POST | `/companies` | Legacy create (caller becomes OWNER). Invitation flow preferred | `require_recruiter` | any recruiter — known risk B3 |
-| POST | `/companies/{id}/join` | Always `410 Gone` (invitation-only) | `require_recruiter` | — |
-| GET | `/companies/{id}/recruiters` | Recruiter list (+`members` alias) | any user; COMPANY_USER scoped to own | — |
-| GET | `/companies/{id}/members` | Members ordered by join | company member, same company | — |
-| PATCH | `/companies/{id}` | Whitelisted update (`name/region/description/logo_url/industry/location/website/company_size/contact_*`) + audit | member, same company | `edit_company` (OWNER/ADMIN) |
-| GET | `/companies/{id}/logo` | **Public** logo stream for candidate pages; re-resolves DB path, enforces company-prefix, `Cache-Control: max-age=3600`; missing → 404 | PUB | — |
-| POST | `/companies/{id}/logo` → 201 | Upload/replace logo (2 MB, png/jpg/webp + magic bytes, unique path, deletes old first) + audit | member, same company | `edit_company` |
-| DELETE | `/companies/{id}/logo` → 204 | Remove logo (storage + `logo_url=None`) + audit | member, same company | `edit_company` |
-| PATCH | `/companies/{id}/members/{user_id}` | Role change (ADMIN/HR/RECRUITER/HIRING_MANAGER only; never OWNER) + audit | `require_company_admin`, same company | `change_employee_roles` |
-| DELETE | `/companies/{id}/members/{user_id}` → 204 | Remove member (not self/OWNER) + audit | `require_company_admin`, same company | `remove_employees` |
-| GET | `/companies/{id}/subscription` | `{company_id,status,owner_id}` | member, same company | `manage_subscription` (OWNER) |
-
-### Invitations (`routers/invitations.py`, prefix `/invites`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| POST | `/invites/company/invite` | Platform invites company (one live pending/email, 7-day expiry, branded email with `/company/invite/accept?token=`; returns URL + `email_sent`) | platform admin |
-| GET | `/invites/company/invitations` | List company invites | platform admin |
-| GET | `/invites/company/invitations/{id}` | Get one | platform admin |
-| POST | `/invites/company/invitations/{id}/revoke` | Revoke | platform admin |
-| POST | `/invites/company/invitations/{id}/resend` | Revoke old + insert new | platform admin |
-| GET | `/invites/company-invitations/validate` | Public validate + lazy-expire | PUB |
-| POST | `/invites/company/accept` | Public accept: one commit creates `Company(active)` + `User(COMPANY_USER/OWNER/approved)` + marks accepted | PUB + token |
-| POST | `/invites/employee/invite` | Owner invites employee (roles ADMIN/HR/RECRUITER/HIRING_MANAGER; OWNER rejected; no self/same-company/live-duplicate; 72 h) | OWNER/ADMIN + `invite_employees` |
-| GET | `/invites/employee/invitations` | List (same-company) | OWNER/ADMIN |
-| GET | `/invites/employee/validate` | Public validate + lazy-expire | PUB |
-| POST | `/invites/employee/invitations/{id}/revoke` | Revoke (same-company) | OWNER/ADMIN |
-| POST | `/invites/employee/resend` | Resend with rotation | OWNER/ADMIN |
-| POST | `/invites/employee/accept` | New-user accept (email-taken → use existing flow) | PUB + token |
-| POST | `/invites/employee/accept-existing` | Existing-user accept (email must match, cross-company blocked, CANDIDATE→COMPANY_USER, role from invite) | authed + token |
-
-### Offers (`routers/offers.py`, prefix `/offers`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/offers` | Public active-only list (filter region/field/type) | PUB |
-| POST | `/offers` | Create (`company_id` forced from caller; `responsible_hr_id` defaults to creator); busts `recommendations:*` cache; audit | member + `create_offers` |
-| GET | `/offers/mine` | Own-company offers | member — Implemented, no frontend caller found |
-| PATCH | `/offers/{id}/responsible-hr` | Reassign to same-company COMPANY_USER | OWNER/ADMIN + audit |
-| PATCH | `/offers/{id}/toggle` | Flip `active` + cache bust, no audit | any member — **missing `can()` check (known issue B1)** |
-| GET | `/offers/{id}` | Role-branched detail (admin/candidate wide, company scoped) | PUB/role-branched |
-| PUT | `/offers/{id}` | Full `OfferCreate` update + audit (no PATCH semantics) | admin wide / company + `edit_offers` |
-| DELETE | `/offers/{id}` → 204 | Delete + audit (blocked by child rows — no cascade) | company + `delete_offers` |
-
-### Applications (`routers/applications.py`, prefix `/applications`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/applications` | 3 role shapes: candidate (own + `ai_status` only), company (join + scores, `view_applications`, same company), admin (wide) | role-branched |
-| GET | `/applications/{id}` | Detail (candidate sees own; company same-company + scores) | role-branched |
-| GET | `/applications/{id}/cv` | Application CV stream | scoped (candidate owner / same-company / admin) |
-| POST | `/applications` | Apply `{opportunity_id, cv_url?, cover_letter?}` → 400 "Already applied" on dup (UQ backstop); `company_id` from offer; audit + queue `applications.screen`. No withdraw endpoint | CANDIDATE only (403 else) |
-| POST | `/applications/{id}/screen` | Reset to pending + requeue screening (`processing` short-circuits) | COMPANY_USER + `evaluate_candidates` same-company; PLATFORM_ADMIN |
-| PATCH | `/applications/{id}` | Versioned stage transition through `applied → under_review → shortlisted → interview → accepted/rejected`; interview scheduling evidence is required; audit + candidate notification | PLATFORM_ADMIN wide or COMPANY_USER + `move_recruitment_stage` same-company; CANDIDATE always 403 |
-
-### Recommendations (`routers/recommendations.py`, prefix `/recommendations`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| POST | `/recommendations/generate` | Cache lookup (`recommendations:{candidate}:{sha(criteria)}`); miss → `job:{id}=pending` (TTL 3600) + `recommendations.generate` task | candidate (own rows) |
-| GET | `/recommendations/jobs/{job_id}` | Poll `pending/running/completed/failed` (ownership-checked) | candidate owner-only |
-| POST | `/recommendations/score/{offer_id}` | Move pending/failed → processing + queue `recommendations.score_single` (Celery or inline fallback) | candidate owner |
-| GET | `/recommendations/by-offer/{offer_id}` | Single match row | candidate owner |
-| GET | `/recommendations/config-status` | AI provider configured? (no secret leakage) | candidate |
-| GET | `/recommendations` | Ranked `SavedRecommendation`s; auto-inserts `ai_score=0` **pending placeholder** rows for unscored active offers | candidate (own rows) |
-
-### Chat (`routers/chat.py`, prefix `/chat`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| POST | `/chat/send` | Legacy general message (gated by accepted `CandidateRequest` on send) | any user |
-| GET | `/chat/with/{user_id}` | Legacy 1-1 thread — **no peer/relationship check (known issue B2)** | any user |
-| GET | `/chat/conversations` | Legacy inbox threads | any user |
-| GET | `/chat/recruitment` | Enabled-only recruitment list (HR filtered to own `responsible_hr`) | stage-gated |
-| GET | `/chat/recruitment/{application_id}` | Context + ≤100 messages (`[]` if disabled) + `company_logo_url` | `can_access_recruitment_chat` |
-| POST | `/chat/recruitment/{application_id}` | Send (receiver derived server-side; 2000-char cap) | `can_access_recruitment_chat` |
-| WS | `/chat/recruitment/{application_id}/ws?token=` | Realtime frames (`ready/message/error`), close codes 4401/4403/4404, in-memory fan-out | JWT query + full re-check per message |
-
-### Requests (`routers/requests.py`, prefix `/requests`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| POST | `/requests` | Company→candidate outreach (`{company_id, recruiter_id?, message?}`) | company member |
-| GET | `/requests` | List (role-branched) | role-branched |
-| PATCH | `/requests/{request_id}` | Accept/reject — **403s PLATFORM_ADMIN (legacy `ADMIN` check, known issue B4)** | candidate/company |
-
-### Audit (`routers/audit.py`, prefix `/audit`)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/audit` | Admin: last 50; company: filtered 50 (substring match on `details` — known issue B5); others: empty | role-branched |
-
-### Admin (`routers/admin.py`, no prefix)
-
-| Method | Endpoint | Purpose | Auth |
-| ------ | -------- | ------- | ---- |
-| GET | `/admin/recruiters/pending` | Pending legacy recruiters | platform admin |
-| PATCH | `/admin/recruiters/{id}/approve` | Approve | platform admin |
-| PATCH | `/admin/recruiters/{id}/reject` | Reject | platform admin |
-| GET | `/admin/stats` | 9 fields (`AdminStatsOut`: users/candidates/recruiters/offers/companies/active/pending-invites/expired/active-offers) | platform admin |
-| GET | `/admin/users` | Paginated users | platform admin |
-| GET | `/admin/offers` | Paginated offers | platform admin |
-| GET | `/admin/activity` | Activity log (returns `[]` on DB error — masks failure, known issue B6) | platform admin |
-| POST | `/admin/impersonate/{user_id}` | Mint JWT for user + audit | platform admin |
-
----
-
-## Authentication flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant W as Next.js (lib/api.ts)
-    participant A as FastAPI (routers/auth.py)
-    participant D as Supabase Postgres (users + pending_registrations)
-    U->>W: Register (email, password, full_name)
-    W->>A: POST /auth/register
-    A->>D: INSERT pending_registrations (OTP sha256, expiry, attempts=0)
-    A->>U: OTP email via Resend (failure deletes row → 502)
-    A-->>W: 202 {detail, email, expires_in_seconds}
-    U->>W: Enter OTP
-    W->>A: POST /auth/verify-email
-    A->>D: Row FOR UPDATE → checks → INSERT users(CANDIDATE, approved) + candidate_profiles → DELETE pending
-    A-->>W: TokenResponse {token, user}
-    W->>W: localStorage coditent_token → role-based redirect
-    U->>W: Login
-    W->>A: POST /auth/login (5/min)
-    A->>D: bcrypt verify → legacy unapproved RECRUITER 403
-    A-->>W: TokenResponse (no cookie; SSO flows also set HttpOnly cookie)
-    W->>A: GET /auth/me (Bearer) → session bootstrap
-```
-
-- **Authority is `public.users`, not Supabase `auth.users`.** `get_current_user` parses `sub`→UUID and loads the DB row (`dependencies.py:20-48`); role/company checks read the row, never the JWT `role` claim. Supabase is Postgres hosting + Storage; `middleware.ts` only refreshes Supabase cookies.
-- **JWT** (`utils/jwt.py`): HS256, claims `{sub, email, role}`, 60-min default (`config.py:22`). Errors → `ValueError` → 401.
-- **Bearer-first, cookie fallback** (`dependencies.py:26-32`): `HTTPBearer(auto_error=False)`; else HttpOnly `access_token` cookie. Missing → 401 "Missing bearer token". Quirk: backend sets the cookie only on SSO flows (`auth.py:153-161`); email login returns token JSON only.
-- **Frontend:** login routes by `user.role`; register → `/verify-email?email=`; verify → token → `/profile`. Axios injects Bearer (`lib/api.ts:55-64`, `withCredentials:true`); WS uses `?token=` (`lib/api.ts:620-627`). Edge middleware (`middleware.ts:39-81`) redirects by decoded JWT role. **No frontend user-ID trust on writes**: candidate/company/receiver IDs are derived server-side (`applications.py:289` create endpoint, `chat.py` receiver derivation, `offers.py:74-78` company enforcement).
-- **SSO** (`/auth/sso/*`): authorize redirect with signed state → callback exchanges code server-side, verifies email, links by email (+profile backfill) or issues onboarding cookie → `POST /oauth/complete-registration` (candidate-only). OAuth never creates company roles. Popup handoff via `/auth/oauth/handoff/exchange` (`oauth-popup.ts`, `test_oauth_popup.py`).
-
----
-
-## Roles and permissions
-
-Platform roles (`models.py:11-16`): `CANDIDATE`, `COMPANY_USER`, `PLATFORM_ADMIN`, legacy `RECRUITER` / `ADMIN` ("do not create", still readable). Company roles (`models.py:31-36`, free String validated by `VALID_COMPANY_ROLES`): `OWNER ADMIN HR RECRUITER HIRING_MANAGER`.
-
-Real matrix (`app/core/permissions.py:18-33`, mirrored in `web/src/lib/permissions.ts:3-20`):
-
-| Action | OWNER | ADMIN | HR | RECRUITER | HIRING_MANAGER |
-| ------ | :---: | :---: | :-: | :-------: | :------------: |
-| view_company | ✓ | ✓ | ✓ | ✓ | ✓ |
-| edit_company | ✓ | ✓ | — | — | — |
-| invite_employees | ✓ | ✓ | — | — | — |
-| change_employee_roles | ✓ | ✓ | — | — | — |
-| remove_employees | ✓ | ✓ | — | — | — |
-| create_offers | ✓ | ✓ | ✓ | ✓ | — |
-| edit_offers | ✓ | ✓ | ✓ | ✓ | ✓ |
-| delete_offers | ✓ | ✓ | — | — | — |
-| view_applications | ✓ | ✓ | ✓ | ✓ | ✓ |
-| evaluate_candidates | ✓ | ✓ | ✓ | ✓ | ✓ |
-| move_recruitment_stage | ✓ | ✓ | ✓ | ✓ | ✓ |
-| company_analytics | ✓ | ✓ | ✓ | ✓ | ✓ |
-| manage_subscription | ✓ | — | — | — | — |
-
-Enforcement: `require_*` dependency (platform role + membership) **plus** `can(company_role, action)` in the handler; cross-company/cross-candidate access returns `404` (not 403) to avoid leaking existence. Backend authorization is the security boundary; frontend `lib/permissions.ts` is UX-only (hides buttons, never trusted).
-
----
-
-## Company + employee invitation flow
-
-```mermaid
-sequenceDiagram
-    participant PA as Platform admin
-    participant API as FastAPI (routers/invitations.py)
-    participant DB as Postgres (raw-SQL invite tables)
-    participant Mail as Resend
-    participant OW as Company owner
-    participant HR as Employee
-    PA->>API: POST /invites/company/invite (require_platform_admin)
-    API->>DB: INSERT company_invitations (token_hash UNIQUE, 7-day expiry)
-    API->>Mail: Branded email /company/invite/accept?token= (best-effort flag)
-    OW->>API: POST /invites/company/accept (public + token)
-    API->>DB: One commit: Company(active) + User(COMPANY_USER/OWNER/approved) + accepted
-    OW->>API: POST /invites/employee/invite (OWNER/ADMIN + invite_employees)
-    API->>DB: INSERT employee_invitations (role, 72h expiry)
-    API->>Mail: Employee email (best-effort)
-    HR->>API: POST /invites/employee/accept (new) or /accept-existing (email-match)
-    API->>DB: INSERT or convert User (CANDIDATE→COMPANY_USER, role from invite)
-```
-
-- No public company registration. Entry is (a) platform invite (above) or (b) legacy authenticated `POST /companies` (caller becomes OWNER — local-dev path, known risk B3).
-- States: `pending → accepted | revoked | expired` (resend revokes old + inserts new). Validate endpoints are public with lazy-expiry.
-- Employee accept: roles restricted to ADMIN/HR/RECRUITER/HIRING_MANAGER (OWNER rejected — ownership transfer NOT IMPLEMENTED); no self-invite, no same-company member, no live duplicate; existing-user path blocks same-company/another-company and requires invite-email == account-email.
-- Team ops: role change (never OWNER), remove (not self/OWNER), all same-company scoped (`companies.py:292-339`).
-
----
-
-## Recruitment workflow
-
-```mermaid
-flowchart TD
-    Create[Company creates offer - POST /offers] --> Store[(offers row - company_id forced)]
-    Store --> Discover[Candidate discovers - GET /offers or recommendations]
-    Discover --> Apply[Candidate applies - POST /applications]
-    Apply --> Screen[Celery applications.screen - Gemini - ai_score/ai_report]
-    Screen --> Review[Recruiter reviews - GET /applications - view_applications]
-    Review --> Stage[Stage change - PATCH /applications - move_recruitment_stage]
-    Stage --> Chat{Stage chat-enabled?}
-    Chat -->|shortlisted/interview/accepted| Talk[Recruitment chat - REST + WS]
-    Chat -->|applied/under_review/rejected| Locked[Chat locked]
-    Stage --> Interview[Interview scheduling and structured feedback]
-    Stage --> Hire[Accepted/rejected with candidate notification]
-```
-
-| Step | Frontend | API call | Backend | DB | State |
-| ---- | -------- | -------- | ------- | -- | ----- |
-| Create offer | company offers page | `createOffer()` → `POST /offers` | `offers.py:66` member + `create_offers`; `responsible_hr_id` = creator | INSERT `offers` | `active=true`, cache bust, audit |
-| Discover | `/offers`, `/dashboard` | `getOffers()` / `getRecommendations()` | public list / rec list + placeholders | read | — |
-| Apply | job-details apply | `POST /applications` (no `createApplication` helper — direct call) | `applications.py:289` CANDIDATE-only; 400 dup; UQ backstop | INSERT `applications` (`company_id` from offer) | `applied`, screening queued |
-| Screening | application detail (`ai_status`) | auto + `POST /applications/{id}/screen` | `screen_application_task` → `screening.py` | `ai_score/ai_report/ai_status` | `pending→processing→completed\|failed` |
-| Review | company candidates | `GET /applications` | join + scores, same-company | read | — |
-| Stage | pipeline UI | `PATCH /applications/{id}` | transition graph + optimistic version; audit | status update | applied/review/shortlist/interview/decision |
-| Chat | chat workspace / RecruitmentThread | `/chat/recruitment*` + WS | stage gate + responsible-HR gate | `chat_messages` rows | enabled after shortlisting and through accepted |
-| Hire/reject | pipeline | same PATCH → `accepted/rejected` | audit only | status update | no notifications |
-
-The backend enforces the transition graph and optimistic stage versions in the application router. Chat unlock is stage-derived (`CHAT_ENABLED_STATUSES`), not event-driven.
-
----
-
-## Chat system
-
-```mermaid
-flowchart TD
-    Stage[Application status] --> Gate{is_chat_enabled_for_status?}
-    Gate -->|applied/under_review/rejected| No[chat_enabled=false - [] + no peer]
-    Gate -->|shortlisted/interview/accepted| Auth{can_access_recruitment_chat}
-    Auth -->|CANDIDATE = application.candidate_id| PeerHR[peer = responsible_hr - offer.responsible_hr_id → created_by → recruiter_id]
-    Auth -->|COMPANY_USER = responsible HR + same company + view_applications| PeerC[peer = candidate]
-    Auth -->|anyone else incl. platform admins| Deny[deny - 404/403]
-    PeerHR --> REST[GET/POST /chat/recruitment -app- - receiver derived server-side]
-    PeerC --> REST
-    REST --> Persist[(chat_messages - ≤100 asc reads)]
-    REST --> WS[WS /ws?token= - ready/message/error - per-message re-auth - in-memory fan-out]
-    WS --> Poll[3s polling fallback in UI]
-```
-
-- Conversations are created implicitly: one application = one logical conversation (no conversation table; `get_or_create_recruitment_conversation` is a locked fetch, never an insert).
-- Message cap 2000 chars (`RecruitmentMessageCreate`, `ChatMessageCreate`).
-- Persistence: `chat_messages` rows. **No unread state, no read receipts, no typing indicators, no attachments.**
-- Legacy general chat (`POST /send`, `GET /with/{uid}`, `GET /conversations`) coexists; send is gated by accepted `CandidateRequest`, but `GET /with/{uid}` has no peer check (known issue B2).
-- A candidate CAN message the HR responsible for an offer, but only after the application reaches a chat-enabled stage, and only with the responsible HR (not any company member).
-
----
-
-## AI architecture
-
-Provider: Google Gemini only, model `gemini-3-flash-preview` at all three backend call sites (`services/ai.py:14`, `services/cv_extraction.py:71-77`, `services/screening.py:26-27`). Key from `GEMINI_API_KEY`.
-
-| Feature | Trigger | Frontend | Backend endpoint | Service | Input | Output / validation | Storage | Fallback | Failure |
-| ------- | ------- | -------- | ---------------- | ------- | ----- | ------------------- | ------- | -------- | ------- |
-| Bulk offer ranking | Celery via Generate | dashboard generate button → poll | `POST /recommendations/generate` → `GET /recommendations/jobs/{id}` | `services/ai.py:rank_offers` (French prompt, temp 0.2, 1000 tokens, no explicit timeout) | profile + criteria + ≤30 offers (type/field-ilike/region-ilike) | JSON array ≤10 `{offer_id,score,reasoning}`; fence/JSON/type checks | `SavedRecommendation` upsert (out-of-criteria preserved; inactive pruned; empty set deletes nothing) | **heuristic** (50 + field 25 + city 20 + skill hits, French "fallback applied" reasoning) | `[]` → fallback; error never surfaces, job still `completed` |
-| Per-offer match | Score button | match-score UI | `POST /recommendations/score/{offer_id}` → `recommendations.score_single` task (Celery or inline) | `services/ai.py:score_single_offer` (French prompt, temp 0.2, 600 tokens, 120 s) | profile + one offer | single `{score 0-100, reasoning FR}` strict (empty/unparseable/out-of-range → `None`) | row `completed` (score+reasoning) or `failed` (safe reason, **no fake score**) | none | `failed`, retryable |
-| Application screening | auto on apply + manual retry | recruiter application detail | `POST /applications/{id}/screen` → `applications.screen` task | `services/screening.py` (English prompt, temp 0.2, 2000 tokens, 120 s) | profile snapshot + CV excerpt ≤4000 chars (best-effort) + offer ≤1500 chars | single `{score 0-100, summary, strengths[], gaps[]}` strict | `Application.ai_score/ai_report/ai_status` | none | `failed`, retryable |
-| CV extraction | Parse button | profile CV section | `POST /candidates/cv/parse` | `services/cv_extraction.py` (temp 0.1, 8192-token budget, 30 s × 2 attempts, `finish_reason` check) | CV text ≤12000 (retry 6000) | exact-keys `{skills,years,study_level,city,phone,linkedin,portfolio,university}`, canonicalized | none (response only) | none | typed 422/502/504 |
-| Bio drafting | Profile form button | `POST /api/ai/generate-bio` (**frontend-only**, `apps/web/src/app/api/ai/generate-bio/route.ts`) | none (Next.js route → Gemini REST) | `lib/bio-utils.ts` (≤500-char trim, ≥8-word quality gate, 1 retry, 30 s) | skills + profile fields | bio text fills form | none | none | mapped 502 messages |
-
-Labels: **real AI** = Gemini paths above; **deterministic fallback** = bulk-ranking heuristic only; **placeholder** = `ai_score=0` rows (see below); **frontend-only AI** = bio route (never touches FastAPI).
-
----
-
-## Recommendation system
-
-```mermaid
-flowchart TD
-    Profile[Candidate profile] --> Criteria[Search criteria field/region/type]
-    Criteria --> Gen[POST /recommendations/generate]
-    Gen --> Cache{Redis recommendations:sha?}
-    Cache -->|hit| Instant[return cached:true]
-    Cache -->|miss| Job[job:id=pending TTL 3600 + Celery delay]
-    Job --> Poll[Frontend polls GET /recommendations/jobs/id]
-    Worker[Worker: fresh loop + engine.dispose] --> Filter[≤30 active offers - type + field ilike + region ilike]
-    Filter --> Gemini[Gemini rank_offers FR prompt]
-    Gemini --> Valid{valid non-empty list?}
-    Valid -->|yes| Upsert[Upsert per matched offer]
-    Valid -->|no| Heuristic[Fallback 50+25+20+skills]
-    Heuristic --> Upsert
-    Upsert --> CacheW[Result cached 900s + job completed]
-    CacheW --> List[GET /recommendations - ranked rows + 0-placeholders]
-```
-
-- Scores persist in DB (no regen on refresh; only a new Generate recomputes; offer create/toggle busts `recommendations:*` so the next Generate rescans).
-- **Why score `0` appears:** `GET /recommendations` (and `get_or_create_pending` in `match_scoring.py:68-74`) auto-inserts rows with `ai_score=0, ai_reasoning="Match analysis pending." / "en attente", status="pending"` for active offers with no analysis yet. `0` therefore means **"not yet scored"**, never a Gemini judgment — AI paths never write zeros (screening/match return `None` → `failed`). If Gemini is down, bulk ranking still returns heuristic scores (≥50), while per-offer rows stay `pending`/`failed` with `0` until scored.
-
----
-
-## Practice missions
-
-Practice missions are candidate-owned learning exercises and are separate from the hiring pipeline. Candidates can submit evidence, and authorized reviewers can review attempts and validate skills.
-
----
-
-## Company logo — Implemented
-
-**Status: Implemented** (backend + storage + frontend + tests all present and cross-verified).
-
-- **Database:** `companies.logo_url` NULLABLE String (`models.py:213`); `CompanyCreate.logo_url` / `CompanyOut.logo_url` optional (`schemas.py:237,251`); existing companies keep working with `NULL`.
-- **Migration note:** the column exists in the model and is returned by all company serializers; if your Supabase project predates it, run `alembic upgrade head` (or add the nullable `logo_url` column) — TO-VERIFY against your live `alembic_version`.
-- **Storage (reuses CV architecture, separate bucket):** `services/company_logo.py` — private bucket `company-logos` via `app/db.py` service-role client; path `build_logo_path()` = `{company_id}/{uuid4hex}.{ext}` (randomized, unique per upload); DB stores **path only**, never bytes (`LargeBinary` absent from `Company` block) and never raw bucket URLs (served via scoped stream).
-- **Validation (both sides, backend authoritative):**
-  - Frontend: `validateCompanyLogoFile` (`lib/api.ts:518-526`) + `accept="image/png,image/jpeg,image/webp"` (`CompanyLogoSection.tsx:188`).
-  - Backend: `validate_logo_file()` (extension allowlist `png/jpg/jpeg/webp`, content-type allowlist + `application/octet-stream` tolerance, empty reject, 2 MB cap) + `check_logo_magic_bytes()` (PNG `89 50 4E 47...`, JPEG `FF D8 FF`, WebP `RIFF....WEBP`) + router-level 413 re-check (`companies.py:225-230`).
-  - Errors: invalid type → `400 "Invalid file type. Only PNG, JPG, and WebP are supported"` / `"Invalid PNG/JPEG/WebP file"`; oversized → `400 "File too large..."` from validator and `413` from the router size gate; storage-missing → `503`; missing logo → `404` (never 500).
-- **Permissions:** `require_company_member` + same-company check (foreign → `404`) + `can(company_role, "edit_company")` (OWNER/ADMIN only, `403` otherwise) on upload/replace/delete (`companies.py:204-289`). HR/RECRUITER/HIRING_MANAGER see read-only note in UI.
-- **Endpoints:** `POST /companies/{id}/logo` → 201 `CompanyLogoMetaOut{logo_url(path),filename,content_type,size_bytes}` (deletes previous file first, best-effort, scope-enforced); `DELETE .../logo` → 204 (clears storage + `logo_url=None`); `GET .../logo` public stream (`StreamingResponse`, correct MIME via `CONTENT_TYPE_BY_EXT`, `Cache-Control: public, max-age=3600`) for candidate pages.
-- **UI:** `CompanyLogoSection.tsx` on the company settings/profile page — current logo (`Avatar xl`), Upload/Change label-button, Save-after-preview, Cancel, Remove (when logo exists), progress bar (`Uploading… %`), success (`Saved.` + toast), error (alert + toast), preview via `URL.createObjectURL` before saving, initials fallback text ("No logo yet — showing company initials").
-- **Fallback:** `ui/avatar.tsx` renders `<Image>` only when `src` exists, else `initials(name)` ("Atlas Systems" → "AS", single word → first 2 letters). Used by `candidate/job-card.tsx`, `candidate/job-details.tsx`, `candidate/application-card.tsx`, `company/AppShell.tsx` — no broken-image placeholders possible.
-- **Surfaces:** `CompanyOut.logo_url`, `OfferOut.company_logo_url` (offers list/detail), `ApplicationItem.opportunity.company_logo_url`, `RecruitmentChatContext/ListItem.company_logo_url`, `CompanyLogoMetaOut`; frontend resolvers `companyLogoSrc()` / `offerLogoSrc()` (`lib/api.ts:528-541`) build the scoped `/companies/{id}/logo` stream URL (null when no logo → initials).
-- **Tests:** `tests/test_company_logo.py` — 13 offline tests (valid png/jpg/webp, persist path, replace deletes old, remove nulls, invalid-type rejected both sides, 2 MB/413, RBAC OWNER/ADMIN-only, cross-company 404 + path-scope, nullable/404-clean, initials fallback, unique paths/no-bytes/path-only, logo exposure across offers/applications/recommendations/chat).
-
----
-
-## Running CODITENT
-
-### Prerequisites
-
-Docker + Compose, Node 22+, Python 3.12, Supabase project, Gemini key, Resend key (email).
-
-### Startup
+### Development and tests
 
 ```bash
-git clone <repo> && cd coditent
-cp .env.teammate.example .env
-# Fill the shared Supabase project settings and your unique runtime token.
-./scripts/run_project.sh
+# Backend
+cd apps/api
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+alembic upgrade head
+python -m pytest
+
+# Frontend
+cd apps/web
+pnpm install --frozen-lockfile
+pnpm run lint
+pnpm exec tsc --noEmit
+pnpm run test:unit
+pnpm run build
 ```
 
-Only commands that work with this repo are shown; there is no `db` service and no seed script (dev data via API: `POST /auth/register`, invitation flows, `POST /offers`).
-
-| Service | Technology | Internal port | Exposed port | Depends on |
-| ------- | ---------- | ------------: | -----------: | ---------- |
-| `api` | FastAPI/Uvicorn (`alembic upgrade head && uvicorn ... --port 8001`) | 8001 | `8001:8001` | PostgreSQL + Redis + worker readiness (`GET /ready`) |
-| `worker` | Celery (`celery -A app.tasks worker`) | — | — | `api` started, `redis` healthy |
-| `ai-dispatcher` | Durable AI job dispatcher | — | — | `api` started, `redis` healthy |
-| `redis` | `redis:7-alpine` | 6379 | loopback `6380` | — |
-| `web` | Next.js (`NEXT_PUBLIC_API_URL` build arg) | 3000 | internal only | `api` healthy |
-| `proxy` | nginx (`nginx/Dockerfile`) | 80/443 | loopback `3001/8443` | `web`, `api` healthy |
-
-Networks/volumes: default Compose network; no `db_data` volume (Supabase is the persistent store). Compose reads the single documented root `.env`. Production Ansible configures the EC2 ingress as `https://api.coditent.app`, allows the Vercel frontend origins (`https://coditent.app` and `https://www.coditent.app`), issues and renews a Let's Encrypt certificate, redirects HTTP with status 308, and keeps container upstreams loopback/private. Vercel keeps browser API/OAuth routes same-origin and proxies them to the EC2 ingress. CD rejects a non-HTTPS public URL and verifies both the redirect target and the certificate-backed `/ready` response.
-
----
-
-## Complete user flows
-
-### Candidate registration
-
-```mermaid
-sequenceDiagram
-    participant C as Candidate
-    participant W as Web
-    participant A as API
-    participant D as DB
-    participant M as Resend
-    C->>W: POST /auth/register (CANDIDATE only)
-    W->>A: register
-    A->>D: INSERT pending_registrations
-    A->>M: OTP email
-    C->>W: POST /auth/verify-email (OTP)
-    W->>A: verify
-    A->>D: INSERT users + candidate_profiles, DELETE pending
-    A-->>W: TokenResponse
-```
-
-Files: `app/(auth)/register/*`, `verify-email/*`, `routers/auth.py:476-705`, `services/email_verification.py`, raw table `pending_registrations`.
-
-### Company registration (invitation-only)
-
-```mermaid
-sequenceDiagram
-    participant PA as Platform admin
-    participant A as API
-    participant O as Owner
-    PA->>A: POST /invites/company/invite
-    A-->>O: Email /company/invite/accept?token=
-    O->>A: POST /invites/company/accept + password + name
-    A-->>O: {company_id} → login → /company/*
-```
-
-Files: `routers/invitations.py:119-300`, `app/company/invite/accept/*`, `app/invite/*`.
-
-### Company employee invitation
-
-See [Company + employee invitation flow](#company--employee-invitation-flow). Files: `routers/invitations.py:307-520`, `app/invite/employee/*`.
-
-### Login
-
-`POST /auth/login` → bcrypt → `TokenResponse`; middleware + interceptor route/clear (`middleware.ts`, `lib/api.ts:69-90`, `lib/auth-redirect.ts`).
-
-### Create offer
-
-Company page → `createOffer()` → `POST /offers` (`offers.py:66`) → INSERT + cache bust + audit → recruiter list / public browse.
-
-### Candidate application
-
-See [example in Frontend↔backend](#how-frontend-and-backend-communicate). Files: `candidate/job-details.tsx`, `routers/applications.py:289-318`, `tasks.py:120-155`.
-
-### Application stage change
-
-Pipeline UI → `PATCH /applications/{id}` (`applications.py:346`) → allowlist check → audit (+ chat-enabled audit on stage entry). No notifications.
-
-### Recommendation generation
-
-See [Recommendation system](#recommendation-system). Files: `dashboard/*`, `routers/recommendations.py:38-80`, `tasks.py:29-87`, `services/recommendation_jobs.py`, `services/ai.py`.
-
-### Recruiter ↔ candidate chat
-
-See [Chat system](#chat-system). Files: `candidate/chat-workspace.tsx`, `company/RecruitmentThread.tsx`, `routers/chat.py:274-529`, `services/recruitment_chat.py`.
-
-### Notifications
-
-NOT IMPLEMENTED as a product system: no notification table/channel/hooks for application/stage/screening/chat events. Only surfaces are audit rows, `chat_enabled` flags, WS `ready` frames, and OTP/invitation emails. Recruitment stage changes produce audit entries only.
-
----
-
-## Implemented features
-
-### Candidate features — Implemented
-
-Registration + OTP verify/resend, login, SSO (Google/LinkedIn), onboarding steps, profile builder, avatar, CV upload/meta/download/delete/parse, recommendations (generate/poll/score/by-offer/list), offer browse/detail, apply, application list/detail/CV view, stage + `ai_status` tracking, stage-gated chat (REST + WS + polling), requests inbox (accept/reject), and practice missions.
-
-### Company features — Implemented
-
-Invitation accept, employee invites + team list/role-change/remove, company CRUD + settings, **logo upload/replace/remove + public stream**, offer create/list/mine/toggle/update/delete + responsible-HR assignment, applications inbox with AI scores, pipeline stage moves, screening retry, recruitment chat (responsible HR only), candidate requests outreach, subscription read (OWNER), audit view (filtered).
-
-### Recruiter/HR features — Implemented
-
-Same as company features scoped by `responsible_hr_id` for chat; all recruitment roles share view/evaluate/move/analytics; only OWNER/ADMIN administer.
-
-### Admin features — Implemented
-
-Pending recruiter approve/reject, stats (9 fields), users/offers/activity pagination, impersonation (JWT + audit), company invitation management, audit log.
-
-### AI features — Implemented
-
-Bulk ranking + fallback, per-offer scoring lifecycle, application screening, CV extraction, frontend bio drafting. See [AI architecture](#ai-architecture) for triggers/inputs/outputs.
-
-### Realtime features — Implemented
-
-Recruitment WS (`ready/message/error`, 4401/4403/4404, in-memory fan-out) + 3 s polling fallback. Typing/unread/receipts/attachments: NOT IMPLEMENTED.
-
-### Security features — Implemented
-
-bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require_*` + `can()` + 404-isolation, invite token hashing + single-use + expiry + email-match + rotation, OTP hashing/attempts/cooldown/rollback, CV/logo ownership + type/size/magic-bytes validation, chat receiver derivation + per-message re-auth, input sanitization validators, CORS allowlist, HashiCorp Vault-backed application secrets.
-
----
-
-## Planned / incomplete features
-
-- Interviews: status string only; scheduling/detail/feedback NOT IMPLEMENTED.
-- Notifications are durable in-app records for recruitment and friend-message events; account data operations also use the encrypted retrying email outbox.
-- Public company self-registration; ownership transfer; org deletion: NOT IMPLEMENTED.
-- Password reset and token refresh/logout revocation: NOT IMPLEMENTED. TOTP 2FA with single-use recovery codes is implemented for login and account settings.
-- RLS policies: none in repo (bypassed by design; dashboard state TO-VERIFY).
-- WebSocket chat uses Redis multi-replica fan-out, bounded tickets/rate limits/heartbeats, server acknowledgements, reconnect backoff and persisted-history recovery. Periodic cleanup beyond existing TTLs remains separate operations work.
-- Frontend/backend mismatches M1–M10 (join 410, company PATCH full-payload 422, OAuth key workaround, register RECRUITER rejected, sparse shapes vs rich TS types, unvalidated status strings, legacy `recruiter_id` checks, `updateRequestStatus` admin 403, admin first-page-only, WS token key) — documented, not fixed here.
-
----
-
-## 42 Modules
-
-The chosen set below follows the supplied ft_transcendence subject v21.2. The score is implementation/test-supported; evaluators make the final determination. Detailed evidence, gaps and all 55 official choices are in `audit-reports/MODULE_POINTS.md`.
-
-| Chosen module | Points | Implemented scope | Primary evidence |
-| --- | ---: | --- | --- |
-| Web — frontend and backend frameworks (major) | 2 | Next.js App Router frontend and FastAPI backend | `apps/web/package.json`, `apps/api/app/main.py` |
-| Web — realtime features (major) | 2 | Cross-process Redis fan-out, short-lived socket tickets, acknowledgements, heartbeats, reconnect/backoff, persisted recovery and stage/relationship revocation | `apps/api/app/services/chat_realtime.py`, `apps/api/app/routers/chat.py`, `apps/web/src/hooks/` |
-| Web — basic user interaction (major) | 2 | Candidate profiles, friend requests/approval/removal, persistent approved-friend chat | `apps/api/app/routers/friends.py`, `apps/api/app/routers/chat.py`, `apps/web/src/app/dashboard/friends/page.tsx` |
-| Web — ORM (minor) | 1 | SQLAlchemy async relational models and Alembic migrations | `apps/api/app/database.py`, `apps/api/app/models.py`, `apps/api/alembic/` |
-| Web — server-side rendering (minor) | 1 | Public category routes fetch and filter offer data on the server and emit category SEO metadata before hydration | `apps/web/src/app/offers/[category]/page.tsx`, `apps/web/src/lib/offer-category.ts` |
-| Web — progressive web app (minor) | 1 | Install manifest, 192/512 icons, registered service worker, versioned static cache and offline navigation fallback | `apps/web/public/manifest.webmanifest`, `apps/web/public/sw.js`, `apps/web/src/app/offline/page.tsx` |
-| Web — custom design system (minor) | 1 | Shared palette, typography, icons and more than10 reusable UI components | `apps/web/src/app/globals.css`, `apps/web/src/components/ui/` |
-| Web — advanced search (minor) | 1 | Discover text/field/region/type filters, match/newest sorting and 9-result pagination | `apps/web/src/lib/discover-search.ts`, `apps/web/src/app/dashboard/recommendations/page.tsx`, `apps/web/tests/discover-search.test.mts` |
-| Web — file upload and management (minor) | 1 | Images plus PDF/DOCX; client/server MIME, extension, signature and size validation; progress, secured storage, preview/download and deletion | `apps/web/src/lib/file-validation.ts`, `apps/api/app/routers/candidates.py`, `apps/web/src/app/dashboard/profile/page.tsx` |
-| User management — standard management/authentication (major) | 2 | Editable/displayed profiles, avatar/default, friends, global multi-tab online status and last-seen display | `apps/web/src/components/candidate/candidate-presence.tsx`, `apps/api/app/services/presence.py`, `apps/api/app/routers/friends.py` |
-| User management — advanced permissions (major) | 2 | Platform user lifecycle plus organization roles and role-specific actions | `apps/api/app/core/permissions.py`, `apps/api/app/routers/admin.py`, `apps/api/app/routers/companies.py` |
-| User management — organization system (major) | 2 | Company create/read/update/archive, employee membership lifecycle and organization-scoped actions | `apps/api/app/routers/companies.py`, `apps/api/app/routers/invitations.py`, `apps/web/src/app/company/` |
-| User management — complete 2FA (minor) | 1 | TOTP enrollment/login challenge, recovery codes and disable flow | `apps/api/app/routers/two_factor.py`, `apps/api/tests/test_two_factor.py`, `apps/web/src/app/dashboard/security/page.tsx` |
-| DevOps — health/status and backup/DR (minor) | 1 | Liveness/readiness probes, public status page, scheduled verified encrypted offsite backups and isolated restore procedure | `apps/api/app/health.py`, `apps/web/src/app/status/page.tsx`, `ansible/roles/coditent/tasks/backups.yml`, `docs/operations/backup-restore-rollback.md` |
-| Data — export/import (minor) | 1 | JSON/CSV/XML export, validated JSON profile import and atomic multi-field bulk update | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/web/src/components/security/account-data-controls.tsx` |
-| Data — GDPR features (minor) | 1 | Authenticated readable export, confirmed/cancelable erasure and durable confirmation emails for data operations | `apps/api/app/services/privacy.py`, `apps/api/app/routers/auth.py`, `apps/api/tests/test_account_data_lifecycle.py` |
-| **Completed raw module total** | **22** | Eight raw points above the 14-point minimum | `audit-reports/MODULE_POINTS.md`, `audit-reports/TEST_RESULTS.md` |
-| **Official counted score** | **19 / 19** | The subject counts at most five bonus points above 14 | `audit-reports/MODULE_POINTS.md` |
-
-User and organization deletion are implemented as retention-safe logical deactivation/archive. Present that design and retained-history behavior clearly during evaluation. The repository now contains 22 raw implementation/test-supported points, giving a three-point buffer above the official 19-point counted cap. Demonstrate two-client realtime delivery/reconnect, PWA offline/install behavior, actual object-storage backup/restore, and configured email delivery during evaluation; local checks do not fabricate external-provider success.
-
----
-
-## Security architecture
-
-- **Password hashing:** `passlib[bcrypt]` (`requirements.txt:9-10`); legacy unapproved RECRUITER blocked at login.
-- **Authentication:** HS256 JWT verified + expiry + DB user lookup; Bearer-first + cookie fallback; no frontend ID trust on writes.
-- **Authorization:** `require_*` + `can()` + same-company/same-candidate scoping; 404-isolation convention; chat additionally stage-gated + responsible-HR-bound (`recruitment_chat.py:65-112`).
-- **Company isolation:** every company write checks `str(current_user.company_id) != str(company_id)` → 404; storage paths re-checked (`assert_company_logo_path`, `assert_owns_path`).
-- **Input validation:** Pydantic 422s, `sanitize_input_text` on profile/offer text, UUID parsing, 2000-char chat caps, 5 MB CV / 2 MB logo caps, extension + MIME + magic-bytes checks.
-- **CORS:** explicit origins + credentials (`main.py:29-41`); prod mixed-content avoided via `/api-proxy`.
-- **SQL injection:** SQLAlchemy ORM + bound params throughout (no string-built SQL found in routers).
-- **Secrets:** the launcher reads application credentials from HashiCorp Vault KV v2 using AppRole and injects them through Compose. Missing credentials stop startup. `.env` contains four Vault connection/AppRole settings; teammates and EC2 use the read-only member role.
-- **File validation:** CV (pdf/docx + magic + 5 MB) and logo (png/jpg/webp + magic + 2 MB) both sides; randomized unique paths; path-only DB storage; scoped streams.
-- **Invitation security:** token hashing + UNIQUE + single-use + expiry (7 d / 72 h) + email-match + resend rotation + lazy-expiry.
-- **WS authorization:** JWT from query + full viewer re-check + per-message re-auth; close codes 4401/4403/4404.
-- **Known issues (pre-existing, documented honestly):** B1 offer `toggle` skips `can()` (`offers.py:164`); B2 `GET /chat/with/{uid}` no peer check (`chat.py:74`); B3 `POST /companies` open to any recruiter (`companies.py:70`); B4 `updateRequestStatus` 403s PLATFORM_ADMIN (legacy `ADMIN` check); B5 company PATCH needs full `name` (422 on partial) + audit substring filter (`core/audit.py:31`); B6 `GET /admin/activity` returns `[]` on DB error. Risks: RLS bypassed by design, WS token in URL, no non-auth rate limits verified, CVs stored un-scanned, deploy downtime (compose rebuild).
-- **NOT IMPLEMENTED:** password reset, token refresh/revocation, RLS, E2E encryption, attachment scanning, audit tamper protection.
-
----
-
-## Testing
-
-- **Frameworks:** backend `pytest` + `httpx`; frontend lint, type checks, regression tests and a production build run in CI. The production-build contract uses `NEXT_PUBLIC_API_URL=/api-proxy` and an internal-only `BACKEND_PROXY_URL`.
-- **Suites:**
-  - `test_company_logo.py` — 13 offline logo tests (validation, RBAC, isolation, fallback, storage properties).
-  - `test_company_invitations.py` / `test_employee_invitations.py` — invite/accept/ownership/roles (live; employee suite uses fixed emails — non-idempotent, residue-sensitive).
-  - `test_candidate_onboarding.py`, `test_match_scoring.py`, `test_oauth_popup.py`, `test_recruiter_candidate_data.py`, `test_recruitment_no_duplicates.py` — flow coverage.
-  - `test_cv_upload.py` — offline validators/parsers (no DB/AI/Supabase); `test_cv_auth.py` — Bearer + CV ownership (live).
-  - `test_email_otp.py` — OTP unit + live flows with known-hash rows (no SMTP).
-  - `test_rbac.py`, `test_security.py`, `test_recruitment_chat.py` — live RBAC/isolation/chat matrix (need seeds + `localhost:8001`; known flaky: shared asyncpg event-loop pollution — same reason tasks call `engine.dispose()`).
-- **Run:**
-  ```bash
-  cd apps/api && python -m pytest tests/test_company_logo.py -v   # offline, no DB
-  cd apps/api && python -m pytest tests/ -v                        # live suites need localhost:8001 + Supabase
-  cd apps/web && npm run lint && npm run build
-  ```
-- **Coverage (from code):** auth/OTP/RBAC/isolation/offers/applications-dup/CV/chat-gates/invitations COVERED; screening trigger + recommendations generate PARTIAL; admin happy paths PARTIAL.
-
----
-
-## Common problems
-
-```text
-Symptom: frontend cannot connect to API
-Likely cause: NEXT_PUBLIC_API_URL unset (build-time) or backend down
-Check: apps/web/.env.local, browser network (direct :8001 vs /api-proxy), `docker compose ps`, `GET /health`, then `GET /ready`
-Debug: `curl http://localhost:8001/health` confirms the process is alive; `curl -f http://localhost:8001/ready` verifies PostgreSQL, Redis, and the worker. Rebuild web after changing `NEXT_PUBLIC_*` build arguments.
-```
-
-```text
-Symptom: database connection failure / "Local DATABASE_URL detected"
-Likely cause: local URL markers (@db:, @localhost, @127.0.0.1) rejected by config.py:47-56 + database.py:9-33
-Check: apps/api/.env DATABASE_URL (must be Supabase direct/pooled +asyncpg)
-Debug: alembic upgrade head output; verify Supabase project ref/password/pooler host
-```
-
-```text
-Symptom: CORS errors
-Likely cause: frontend origin not in main.py:31-37 allow_origins
-Check: settings.frontend_url, ports (3000 vs 3001 mismatch: compose sets FRONTEND_URL=http://localhost:3001)
-```
-
-```text
-Symptom: authentication failure / redirect loops
-Likely cause: expired token (60 min, no refresh), wrong cookie name confusion (frontend coditent_token vs backend access_token), middleware role mismatch
-Check: localStorage coditent_token, /auth/me status, middleware.ts roleLogic, clock skew for exp
-```
-
-```text
-Symptom: invalid/expired invitation
-Likely cause: lazy-expiry consumed the token, resend rotated it, or email mismatch on accept-existing
-Check: invite tables (status/expires_at/token_hash), which accept endpoint was used, exact email casing
-```
-
-```text
-Symptom: AI API failure / screening stuck failed
-Likely cause: GEMINI_API_KEY missing/invalid, model name drift, 120 s timeout, CV download miss
-Check: worker logs (screening_job_failed / ai_job_failed), GET screening status, POST .../screen retry, services/screening.py:26-30
-```
-
-```text
-Symptom: recommendation score = 0
-Likely cause: pending placeholder row (GET /recommendations auto-inserts ai_score=0 "Match analysis pending."), NOT an AI judgment
-Check: row status (pending vs completed vs failed), POST /recommendations/score/{offer_id}, job status endpoint; bulk Generate fallback never writes 0
-```
-
-```text
-Symptom: WebSocket connection failure
-Likely cause: missing ?token=, 4401/4403/4404 close (auth/stage/role), single-replica fan-out, proxy WS upgrade
-Check: getRecruitmentWsUrl token, application status (chat-enabled?), responsible_hr assignment, fall back to 3 s polling
-```
-
-```text
-Symptom: Docker health check failure / logo-CV 503 "not configured or bucket missing"
-Likely cause: api unhealthy (migrations failing against Supabase) or SUPABASE_SERVICE_KEY wrong / buckets absent
-Check: docker compose logs api, alembic_version in Supabase, Storage buckets candidate-cvs + company-logos exist and are private
-```
-
----
-
-## Team information — TO-VERIFY
-
-> TO-VERIFY: names/roles below come from the previous README header (`aelasefa, mohammedelmahf, VYMNN47`) and its role sketch. Verify logins, titles, and responsibilities against your actual team before evaluation (`II.1.1`-style rules in some subjects require 4–5 members).
-
-- **aelasefa** — Product Owner / Developer (TO-VERIFY): product vision, backlog, auth/OAuth flow, recommendations.
-- **mohammedelmahf** — Project Manager / Developer (TO-VERIFY): coordination, profile builder, file uploads.
-- **VYMNN47** — Technical Lead / Developer (TO-VERIFY): architecture, Docker, DB schema, UI system.
-
-## Individual contributions — TO-VERIFY
-
-> TO-VERIFY: per-feature owners below repeat the previous README's claims; they could not be verified from code alone (no `git log` authorship analysis performed here — run `git log --format='%an %s' -- apps/api apps/web` to confirm before defending).
-
-- **aelasefa (TO-VERIFY):** OAuth, recommendations, admin approve flow, Docker setup.
-- **mohammedelmahf (TO-VERIFY):** Profile builder, avatar upload, CV auto-fill, file handling.
-- **VYMNN47 (TO-VERIFY):** Landing UI, design system, offer loop, quality fixes.
-- Company logo system (`routers/companies.py` logo endpoints, `services/company_logo.py`, `CompanyLogoSection.tsx`, `test_company_logo.py`): author TO-VERIFY via `git log`.
-
-## Project management — TO-VERIFY
-
-Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by feature (auth, profile, offers, recommendations, admin); communication via Discord/Slack; ≥1 reviewer per PR. Verify against your actual Issues/PRs before evaluation.
-
----
+Some integration suites require configured PostgreSQL, Redis, storage, email, or OAuth services. CI defines the isolated test services and exact commands in `.github/workflows/ci.yml`.
+
+## Claimed modules: verified 23-point set
+
+Major modules are worth two points and minor modules one point. This declaration intentionally does not claim OAuth, advanced permissions, health/status plus backup, accessibility, extra-browser, game, blockchain, AI, or custom modules. Evaluators decide the final score; the subject caps the counted result at 19 even when the raw implementation exceeds it.
+
+| Module | Type | Points | Implementation evidence | Primary author(s) |
+| --- | --- | ---: | --- | --- |
+| Frontend and backend frameworks | Major | 2 | Next.js in `apps/web`; FastAPI in `apps/api/app/main.py` | Ilyas, Ayman Belahsen, Mohammed |
+| Realtime features | Major | 2 | WebSocket tickets, Redis fan-out, acknowledgements, heartbeats, reconnect and persisted recovery | Mohammed, Ayman Belahsen |
+| Basic user interaction | Major | 2 | Profiles, friend lifecycle, presence and persistent approved-friend chat | Mohammed, Ayman Belahsen |
+| ORM | Minor | 1 | Async SQLAlchemy models plus Alembic migrations | Mohammed |
+| Server-side rendering | Minor | 1 | Server-rendered `/offers/[category]` pages and metadata | Ilyas, Ayman Belahsen |
+| Progressive web app | Minor | 1 | Manifest, icons, service worker, cache and offline page | Ayman Belahsen |
+| Custom design system | Minor | 1 | Shared tokens and reusable UI components | Ilyas, Ayman Belahsen |
+| Advanced search | Minor | 1 | Combined text/field/region/type filters, sorting and pagination | Ilyas, Mohammed |
+| File upload and management | Minor | 1 | Images and PDF/DOCX with validation, progress, private storage, preview and deletion | Ayman Belahsen, Mohammed |
+| Standard user management | Major | 2 | Editable profiles, avatars/defaults, friends and cross-tab presence/last seen | Mohammed, Ayman Belahsen |
+| Organization system | Major | 2 | Company create/read/update/archive, membership/invites and scoped organization actions | Mohammed, Ilyas |
+| Complete 2FA | Minor | 1 | TOTP enrollment/challenge, recovery codes, trusted devices and disable flow | Abderrahmane |
+| WAF/ModSecurity plus HashiCorp Vault | Major | 2 | Blocking WAF rules; Vault KV v2/AppRole runtime secret injection | Abderrahmane, Ayman Elasefar |
+| Prometheus and Grafana monitoring | Major | 2 | Exporters, custom dashboard, five alert rules, retention, TLS ingress and authenticated Grafana | Ayman Elasefar |
+| Data export and import | Minor | 1 | JSON/CSV/XML export and validated atomic JSON profile import | Mohammed, Abderrahmane |
+| GDPR-oriented features | Minor | 1 | Reauthenticated readable export, exact deletion confirmation, seven-day cancelable grace period, private-file erasure, anonymization, and durable operation emails | Mohammed, Abderrahmane |
+| **Raw total** |  | **23** |  |  |
+| **Maximum counted by the subject** |  | **19 / 19** | 14 mandatory points plus at most 5 bonus points |  |
+
+### Evaluation demonstrations
+
+1. Start the app from a clean machine with the single launcher and show current Chrome with no JavaScript console warnings or errors.
+2. Use two accounts/browser contexts to demonstrate friends, presence, direct chat, recruitment chat, reconnect, and persisted history.
+3. Install the PWA, reload offline, and show the fallback and cached shell.
+4. Upload, preview/download, replace, and delete an image and a PDF/DOCX.
+5. Show candidate, company-role, and administrator views and organization isolation.
+6. Enable/disable 2FA, sign in with an authenticator, and consume one recovery code.
+7. Send safe SQLi/XSS probes to show ModSecurity blocking, then show application secrets came from Vault and are absent from tracked files/logs.
+8. Open authenticated Grafana, show Prometheus targets, the custom dashboard, and five alert rules.
+9. Export all formats, import a valid profile, schedule deletion, cancel during the grace period, and explain retained anonymized integrity records.
+
+## AI usage
+
+The team used AI assistants for boilerplate suggestions, debugging hypotheses, test-case ideas, CSS refinement, documentation structure, and security/audit review. Every accepted result was read, adapted, peer-reviewed, and tested; team members remain responsible for and must be able to explain it.
+
+CODITENT uses Google Gemini at runtime for CV extraction, recommendation/match context, screening assistance, and biography drafting. AI output is assistance rather than an authorization decision: access control, workflow transitions, and persistence remain deterministic application logic. Provider failures are surfaced or use clearly labeled deterministic fallback behavior where appropriate.
 
 ## Resources
 
-- Next.js https://nextjs.org/docs, FastAPI https://fastapi.tiangolo.com, SQLAlchemy https://docs.sqlalchemy.org, Supabase https://supabase.com/docs, Gemini https://ai.google.dev
-- In-repo: `SUPABASE.md` (setup + storage), `CODITENT_BACKEND_ARCHITECTURE.md` (read-only audit; code is truth on conflicts), `DESIGN.md`, `UX-CONTRACT.md`, `apps/api/WORKFLOW.md`, `apps/web/AGENTS.md`.
+- [Next.js documentation](https://nextjs.org/docs)
+- [FastAPI documentation](https://fastapi.tiangolo.com/)
+- [SQLAlchemy documentation](https://docs.sqlalchemy.org/)
+- [PostgreSQL documentation](https://www.postgresql.org/docs/)
+- [Supabase documentation](https://supabase.com/docs)
+- [Redis documentation](https://redis.io/docs/)
+- [HashiCorp Vault documentation](https://developer.hashicorp.com/vault/docs)
+- [OWASP ModSecurity Core Rule Set](https://coreruleset.org/docs/)
+- [Prometheus documentation](https://prometheus.io/docs/)
+- [Grafana documentation](https://grafana.com/docs/)
 
-## Explanation of AI usage
+## Known limits
 
-- Code generation for boilerplate (Next.js pages, FastAPI routers), CSS polish, prompt engineering for recommendation ranking (`apps/api/app/services/ai.py:14`) — reviewed and tested by peers; no AI-generated code merged without manual review (per previous README; process TO-VERIFY).
-- Runtime AI: Gemini `gemini-3-flash-preview` for ranking/screening/CV extraction + frontend bio drafting (see [AI architecture](#ai-architecture)). Fallback/placeholder paths are deterministic and labeled in code and UI-facing reasoning strings.
-
----
-
-## Known limitations
-
-- `SUPABASE_SERVICE_KEY` must be `sb_secret_...` (service_role) for storage; publishable fails (previous README note; consistent with `app/db.py` admin usage).
-- Gemini model name drift risk (`gemini-3-flash-preview` pinned in 3 backend files + frontend bio REST; a 404 requires a coordinated bump).
-- Legacy `RECRUITER`/`ADMIN` roles readable but deprecated; several compat paths drift (M4/M7/M8 mismatches + B3/B4).
-- No zero-downtime deploys (compose rebuild restarts API; in-flight requests dropped).
-- Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns require application-level validation; deleting a User can cascade applications and messages.
-- `apps/apps/web/` nested copy appears unused — TO-VERIFY, do not rely on it.
-
----
-
-## Security architecture
-
-The CODITENT platform implements multi-layer defense-in-depth security:
-
-1. **Reverse Proxy & WAF (ModSecurity)**: Nginx reverse proxy running OWASP ModSecurity CRS to inspect and block malicious web requests, SQLi, and XSS payloads.
-2. **Security Headers & HSTS**: Enforces `Strict-Transport-Security`, `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Permissions-Policy`.
-3. **HashiCorp Vault Secret Management**: Application credentials are stored in Vault KV v2 and fetched by the launcher with least-privilege AppRoles.
-4. **Two-Factor Authentication (2FA / TOTP)**: `POST /auth/2fa/setup` & `/enable` with 6-digit TOTP validation, QR code rendering, and 8 single-use emergency backup codes. Intercepts logins with `mfa_pending` short-lived JWT tokens.
-5. **GDPR Data Rights**: Compliant `POST /auth/gdpr/export` (personal data JSON portability) and password-authenticated `DELETE /auth/gdpr/delete` (Right to Erasure).
-6. **Container Non-Root Hardening**: Docker applications run under unprivileged non-root users (`appuser`, UID 10001) to prevent container escape and privilege escalation.
-7. **Input Sanitization**: Dynamic HTML Bleach text sanitization stripping script tags and unsafe attributes on user inputs.
-
----
-
-## Developer learning guide
-
-Study in this order (files are exact):
-
-1. Startup: `docker-compose.yml`, `apps/api/app/main.py`, `apps/web/next.config.mjs`, `apps/api/app/config.py`, `.env.example`.
-2. Database: `apps/api/app/models.py`, `apps/api/alembic/versions/` (latest first), `apps/api/app/database.py`, `SUPABASE.md`.
-3. Auth: `apps/api/app/utils/jwt.py`, `apps/api/app/routers/auth.py`, `apps/api/app/dependencies.py`, `apps/web/src/lib/api.ts:18-90`, `apps/web/src/middleware.ts`, `apps/web/src/lib/auth.ts`.
-4. AuthZ: `apps/api/app/core/permissions.py`, `apps/web/src/lib/permissions.ts`, `apps/api/tests/test_rbac.py`, `test_security.py`.
-5. Companies +Invites: `apps/api/app/routers/companies.py`, `apps/api/app/routers/invitations.py`, `apps/api/app/services/company_logo.py`, `apps/web/src/components/company/CompanyLogoSection.tsx`.
-6. Offers: `apps/api/app/routers/offers.py`, `apps/web/src/components/candidate/job-card.tsx`, `job-details.tsx`, `apps/web/src/components/offer-card.tsx`.
-7. Applications + pipeline: `apps/api/app/routers/applications.py`, `apps/api/app/services/screening.py`, `apps/api/app/tasks.py:120-155`.
-8. Recommendations: `apps/api/app/routers/recommendations.py`, `apps/api/app/services/recommendation_jobs.py`, `apps/api/app/services/ai.py`, `apps/api/app/services/match_scoring.py`, `apps/api/app/cache.py`.
-9. Chat: `apps/api/app/services/recruitment_chat.py`, `apps/api/app/routers/chat.py`, `apps/web/src/components/candidate/chat-workspace.tsx`, `apps/web/src/components/company/RecruitmentThread.tsx`.
-10. CV: `apps/api/app/routers/candidates.py`, `apps/api/app/services/cv_storage.py`, `cv_parser.py`, `cv_extraction.py`.
-11. Admin/audit: `apps/api/app/routers/admin.py`, `apps/api/app/routers/audit.py`, `apps/api/app/core/audit.py`, `apps/web/src/app/admin/*`.
-12. Integration + deploy: `apps/web/src/lib/api.ts`, `apps/web/src/lib/types.ts`, `.github/workflows/deploy.yml`, `ansible/`, `nginx/`, `vercel.json`.
-
----
-
-## Questions I should be able to answer
-
-1. How does the frontend communicate with the backend? — Axios (`lib/api.ts`) with Bearer injection + `withCredentials`; prod HTTPS→HTTP goes via `/api-proxy` rewrite (`next.config.mjs:17-32`); backend is FastAPI `:8001`.
-2. How is authentication implemented? — Custom HS256 JWT (`utils/jwt.py`, 60 min), `sub`→UUID→`users` row in `get_current_user`; Bearer-first + `access_token` cookie fallback (cookie only set on SSO).
-3. Where is the current user resolved? — `get_current_user` (`dependencies.py:20-48`); role/company come from the DB row, never token claims.
-4. How does company isolation work? — Same-company checks (`str(current_user.company_id) != str(company_id)` → 404) on every company write/read plus storage path prefix checks.
-5. What prevents Company A from accessing Company B's offer? — Offer PUT/DELETE + member routes scope by `company_id` with 404-isolation (`offers.py:150,182`; logo endpoints same pattern).
-6. How is an application linked to an offer? — `applications.opportunity_id` CASCADE → `offers.id`, UQ `(candidate_id, opportunity_id)`; `company_id` copied from the offer server-side.
-7. How are permissions checked? — `require_*` gate (platform role/membership) + `can(company_role, action)` matrix (`core/permissions.py`); frontend mirror is UX-only.
-8. Who can upload a company logo? — Same-company OWNER/ADMIN only (`edit_company`), enforced in `companies.py:204-289`; others get 403/404.
-9. How does the recommendation score work? — Bulk: Gemini ranks ≤10 of ≤30 filtered offers; failure → heuristic (50+25+20+skills). Per-offer: single Gemini call with strict validation → `completed`/`failed`, never fake scores.
-10. What happens when the AI provider fails? — Bulk → heuristic fallback + job `completed`; single-match/screening → `failed` rows, retryable; CV parse → typed 502/504; no zeros ever written by AI.
-11. Why can a recommendation show score 0? — `0` = pending placeholder auto-inserted by `GET /recommendations` / `get_or_create_pending` (`match_scoring.py:68-74`), meaning "not yet scored".
-12. How does the database connection work? — SQLAlchemy async + `asyncpg`, PgBouncer-safe (`statement_cache_size=0`), URL normalized, local markers rejected; per-request sessions.
-13. How does chat authorization work? — `can_access_recruitment_chat`: candidate must own the application; COMPANY_USER must be the responsible HR (`responsible_hr_id → created_by → recruiter_id`) in the same company with `view_applications`; stage must be chat-enabled; all others denied.
-14. Why was Supabase selected? — Managed Postgres + Storage in one vendor, pooler for prod, zero DB ops; used as hosting + Storage only (no Supabase Auth for app users).
-15. What happens when two users act simultaneously? — UQ constraints + `FOR UPDATE` locks serialize (double-apply → 400; concurrent OTP verifies serialize); concurrent Generates duplicate work, last-write-wins (no stampede lock).
-16. Where do invitation tokens live? — Only `token_hash` (UNIQUE) in raw-SQL tables; plaintext token only in the emailed URL; single-use + expiry + rotation.
-17. How are CVs stored? — Private `candidate-cvs` bucket, path `{uid}/{uuid}_{safe}.{ext}`, service-role key backend-only, `cv_url` stores path; ownership via prefix assert.
-18. How are logos stored? — Same pattern, separate `company-logos` bucket, path `{company_id}/{uuid}.{ext}`, served via public scoped stream (never raw bucket URLs).
-19. What validates uploads? — Extension + MIME + magic bytes + size (CV 5 MB/413; logo 2 MB/400+413 gate), both sides, backend authoritative.
-20. How does the WS stay in sync? — In-memory fan-out + per-message re-auth + `ready/message/error` frames + 4401/4403/4404 closes + 3 s polling fallback; single-replica only.
-21. How are stages moved? — `PATCH /applications/{id}` uses an explicit transition graph, optimistic versions, evidence validation, audit, and notifications.
-22. When does chat unlock? — Crossing into `shortlisted`, `interview`, or `accepted` (`CHAT_ENABLED_STATUSES`); `rejected` locks again.
-23. What does `GET /recommendations` do besides listing? — Inserts `0`-score pending placeholders for unscored active offers (why Discover shows "en attente").
-24. What does offer create/toggle bust? — `recommendations:*` Redis keys (`_bust_recommendation_cache`, `offers.py:54-63`), forcing the next Generate to rescan.
-25. How long do caches/jobs live? — Result cache 900 s (`recommendation_cache_ttl_seconds`), job keys 3600 s; invites 7 d / 72 h; OTP 10 min / 5 attempts / 60 s cooldown.
-27. Can a candidate message any HR? — No: only the responsible HR of an application in a chat-enabled stage; receiver derived server-side.
-28. What can a platform admin do that a company OWNER cannot? — Platform invites, user/offer moderation, stats, impersonation, cross-company reads; admins are denied recruitment chats and employee-invite paths.
-29. What can HIRING_MANAGER do? — View + edit offers + view/evaluate/move + analytics; cannot create/delete offers, edit company, invite, or manage members/subscription.
-30. How does SSO link accounts? — Email match links existing users (+profile backfill); new emails get onboarding cookie → candidate-only completion; never creates company roles.
-31. Where is the Bearer token stored? — `localStorage coditent_token` (`lib/constants.ts`); backend ignores that name and reads `Authorization` header or its own `access_token` cookie.
-32. How are errors surfaced? — `HTTPException` codes (400/401/403/404-isolation/409/410/413/422/429/500/502/503/504) + interceptor logout/redirect + toasts on logo/chat/CV actions.
-33. How is audit done? — `log_audit()` writes `admin_activity_logs` on company/offer/application/invitation writes; failures swallowed; company filter is substring match (B5).
-34. How do Celery workers avoid loop errors? — Fresh event loop + `engine.dispose()` per task (`tasks.py:40-51`); same pattern needed in tests.
-35. What are the 3 Celery tasks? — `recommendations.generate`, `recommendations.score_single`, `applications.screen` (no beat/scheduler).
-36. How is the frontend bio generated? — Frontend-only Next.js route (`app/api/ai/generate-bio/route.ts`) → Gemini REST, ≤500-char trim, quality gate, 1 retry; never touches FastAPI.
-37. What breaks if RLS is enabled? — Nothing today (direct `asyncpg` bypasses PostgREST RLS); enabling without `service_role` bypass or exposing PostgREST directly changes the model — dashboard state TO-VERIFY.
-38. What is `POST /companies/{id}/join`? — Deprecated, always `410 Gone`; membership is invitation-only.
-39. Why does company PATCH need full `name`? — It reuses `CompanyCreate` (`name` required) — partial updates 422 (known issue B5); only whitelisted fields apply.
-40. What remains TO-VERIFY before evaluation? — Team roles/contributions, 42 point claims vs your subject, live `alembic_version`/RLS/bucket policies, `FRONTEND_URL` port (`:3000` vs `:3001`), and the unused `apps/apps/web` copy.
-41. How do I run only the offline tests? — `python -m pytest tests/test_company_logo.py tests/test_cv_upload.py -v` (stubbed modules, no DB/Supabase/network).
-42. What must exist in Supabase before logos/CVs work? — Private buckets `candidate-cvs` + `company-logos` and backend `SUPABASE_URL` + `sb_secret_...` service key; missing → 503 "not configured or bucket missing".
+- Real OAuth, email, Gemini, Supabase Storage, and production TLS require valid external-provider configuration and must be demonstrated with team-owned test accounts.
+- Company deletion is retention-safe archival and user deletion anonymizes records that must remain for recruitment integrity; the UI explains this behavior.
+- The local TLS certificate is self-signed. Production uses the Ansible-managed trusted certificate and HTTPS-only ingress.
+- Backup/restore procedures exist, but this 23-point set does not claim the separate health/status-and-backup module.

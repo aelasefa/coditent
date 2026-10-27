@@ -2,7 +2,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Final
 from uuid import UUID, uuid4
 
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 from app.config import settings
 
@@ -104,7 +105,7 @@ def verify_token(token: str, *, expected_purpose: str | None = None) -> dict:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
     except ExpiredSignatureError as exc:
         raise ValueError("Token expired") from exc
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise ValueError("Invalid token") from exc
 
     purpose = payload.get("purpose")

@@ -48,7 +48,7 @@
 
 - name: Launch or update monitoring stack with Docker Compose
   ansible.builtin.command:
-    cmd: docker compose -f {{ monitoring_compose_file }} up -d
+    cmd: bash scripts/run_monitoring.sh up -d
   args:
     chdir: "{{ app_dir }}"
   register: monitoring_up_output
@@ -79,7 +79,7 @@
 
 - name: Report monitoring container status
   ansible.builtin.command:
-    cmd: "docker compose -f {{ monitoring_compose_file }} ps"
+    cmd: bash scripts/run_monitoring.sh ps
   args:
     chdir: "{{ app_dir }}"
   register: monitoring_ps

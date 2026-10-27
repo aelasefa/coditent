@@ -10,8 +10,9 @@ from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import httpx
+import jwt
 from fastapi import HTTPException, status
-from jose import JWTError, jwt
+from jwt import InvalidTokenError
 
 from app.config import settings
 from app.cache import get_async_redis
@@ -149,7 +150,7 @@ def create_oauth_state(
 def _decode_oauth_state(state_token: str, provider: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(state_token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state") from exc
 
     if payload.get("purpose") != "oauth_state" or payload.get("provider") != provider:

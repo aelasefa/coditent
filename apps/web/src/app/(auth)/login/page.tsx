@@ -41,9 +41,7 @@ function LoginInner() {
       ? data.user.role === "CANDIDATE"
       : data.user.role === "RECRUITER" || data.user.role === "COMPANY_USER";
     if (!roleMatches) {
-      setErrorMessage(activeRole === "candidate"
-        ? "This account is registered as a Recruiter. Use the Recruiter tab to sign in."
-        : "This account is registered as a Candidate. Use the Candidate tab to sign in.");
+      setErrorMessage("Invalid email or password.");
       return;
     }
     if (data.trusted_device_token) saveTrustedDevice(data.trusted_device_token);
@@ -69,9 +67,7 @@ function LoginInner() {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const detail = String(error.response?.data?.detail ?? "").toLowerCase();
-        if (status === 403 && detail.startsWith("this account")) {
-          setErrorMessage(String(error.response?.data?.detail));
-        } else if (status === 400 || status === 401 || detail.includes("invalid")) {
+        if (status === 400 || status === 401 || status === 403 || detail.includes("invalid")) {
           setErrorMessage("Invalid email or password.");
         } else if (!error.response) {
           setErrorMessage("Cannot reach server. Check connection and try again.");

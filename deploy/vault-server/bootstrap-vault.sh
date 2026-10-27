@@ -42,7 +42,7 @@ if [[ "$has_secret" != "yes" ]]; then
 fi
 
 echo "2. Writing coditent-app read-only policy..." >&2
-policy_payload="$(python3 -c 'import json; print(json.dumps({"policy": "path \"secret/data/coditent\" {\n  capabilities = [\"read\"]\n}\n"}))')"
+policy_payload="$(python3 -c 'import json; print(json.dumps({"policy": "path \"secret/data/ft_transcendence\" {\n  capabilities = [\"read\"]\n}\n"}))')"
 vault_api PUT "sys/policies/acl/coditent-app" \
   -H "Content-Type: application/json" \
   -d "$policy_payload" >/dev/null

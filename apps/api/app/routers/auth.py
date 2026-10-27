@@ -1165,7 +1165,11 @@ async def login(
     try:
         ensure_login_account_type(user, data.account_type)
     except AuthenticationRejected as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        logger.warning("login_failed", reason="invalid_credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        ) from exc
 
     if user.role == UserRole.RECRUITER and not user.is_approved:
         logger.warning("login_failed", reason="recruiter_unapproved")

@@ -85,8 +85,8 @@ def test_wrong_tab_does_not_authenticate(login_client, role, tab, mfa):
     user.role = role
     user.is_2fa_enabled = mfa
     response = client.post("/auth/login", json={**payload(tab), "trusted_device_token": "unused"})
-    assert response.status_code == 403
-    assert "This account" in response.json()["detail"]
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid credentials"
     assert "set-cookie" not in response.headers
     assert "token" not in response.json()
     assert "mfa_token" not in response.json()
@@ -149,7 +149,8 @@ def test_valid_trusted_device_cannot_bypass_the_selected_tab(login_client):
         auth_version=0, expires_delta=timedelta(days=30),
     )
     response = client.post("/auth/login", json={**payload("recruiter"), "trusted_device_token": trusted})
-    assert response.status_code == 403
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid credentials"
     assert "set-cookie" not in response.headers
     assert not redis.values
     response = client.post("/auth/login", json={**payload("candidate"), "trusted_device_token": trusted})

@@ -33,11 +33,9 @@ def ensure_login_account_type(user: User, account_type: str | None) -> None:
         return
     if account_type == "recruiter" and role in {"RECRUITER", "COMPANY_USER"}:
         return
-    if role in {"ADMIN", "PLATFORM_ADMIN"}:
-        raise AuthenticationRejected("This account is an administrator. Use the admin sign-in page.")
-    if role == "CANDIDATE":
-        raise AuthenticationRejected("This account is registered as a Candidate. Use the Candidate tab to sign in.")
-    raise AuthenticationRejected("This account is registered as a Recruiter. Use the Recruiter tab to sign in.")
+    # Do not disclose an account's role through the public login endpoint.
+    # A wrong portal/tab must be indistinguishable from invalid credentials.
+    raise AuthenticationRejected("Invalid credentials")
 
 
 class AuthenticationStoreUnavailable(RuntimeError):

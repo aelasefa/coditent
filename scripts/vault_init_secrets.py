@@ -2,7 +2,7 @@
 """Vault Secret Initialisation Script for CODITENT.
 
 This script reads secrets from your local ``.env`` file and writes them
-into HashiCorp Vault KV v2 at ``secret/data/coditent``.
+into HashiCorp Vault KV v2 at ``secret/data/ft_transcendence``.
 
 Run this **once** during initial setup (or whenever you rotate a secret):
 
@@ -11,7 +11,7 @@ Run this **once** during initial setup (or whenever you rotate a secret):
 Requirements
 ------------
 - Vault must be running and reachable at ``VAULT_ADDR``.
-- ``VAULT_TOKEN`` must have write permission on ``secret/data/coditent``.
+- ``VAULT_TOKEN`` must have write permission on ``secret/data/ft_transcendence``.
 - Supply ``VAULT_TOKEN`` as a temporary process environment variable; do not
   save an administrator token in the application's ``.env`` file.
 - ``pip install httpx python-dotenv`` (already in requirements.txt).
@@ -86,6 +86,7 @@ SECRET_KEYS: set[str] = {
     "RESEND_API_KEY",
     "TOTP_ENCRYPTION_KEY",
     "EMAIL_OUTBOX_ENCRYPTION_KEY",
+    "GF_SECURITY_ADMIN_PASSWORD",
 }
 
 
@@ -135,8 +136,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--path",
-        default="coditent",
-        help="Secret path inside the mount (default: coditent)",
+        default="ft_transcendence",
+        help="Secret path inside the mount (default: ft_transcendence)",
     )
     parser.add_argument(
         "--dry-run",

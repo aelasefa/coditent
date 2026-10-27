@@ -90,3 +90,16 @@ def test_launcher_injected_secrets_are_loaded_without_hosted_broker(monkeypatch)
     settings = Settings(_env_file=None)
     assert settings.secret_key == "a" * 48
     assert settings.gemini_api_key == "injected-provider-key"
+
+
+def test_monitoring_requires_a_vault_loaded_admin_password() -> None:
+    repo_root = _repository_root()
+    if repo_root is None:
+        pytest.skip("repository-level monitoring files are not mounted in API container")
+
+    compose = (repo_root / "monitoring" / "compose.yml").read_text()
+    launcher = (repo_root / "scripts" / "run_monitoring.sh").read_text()
+
+    assert "GF_SECURITY_ADMIN_PASSWORD must be loaded from Vault" in compose
+    assert "vault_load_env" in launcher
+    assert "${#grafana_password} < 16" in launcher
