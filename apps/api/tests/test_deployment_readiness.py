@@ -293,7 +293,8 @@ def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
         "https://admin.coditent.app",
     }
     for config in (root_vercel, web_vercel):
-        assert config["env"]["NEXT_PUBLIC_API_URL"] == (
+        assert config["env"]["NEXT_PUBLIC_API_URL"] == "/api-proxy"
+        assert config["env"]["BACKEND_PROXY_URL"] == (
             "https://api.coditent.app/api-proxy"
         )
         assert config["env"]["NEXT_PUBLIC_OAUTH_API_URL"] == (
