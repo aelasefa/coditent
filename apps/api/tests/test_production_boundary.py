@@ -107,3 +107,7 @@ def test_production_compose_and_ingress_are_private_tls_and_waf_bounded() -> Non
     assert "ctl:requestBodyProcessor=JSON" in waf
     assert "SecRequestBodyLimitAction Reject" in waf
     assert "tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE" in waf
+    assert 'SecRule REQUEST_METHOD "@streq PUT"' in waf
+    assert 'SecRule REQUEST_FILENAME "@streq /api-proxy/candidates/profile"' in waf
+    assert "ctl:ruleRemoveTargetById=932105;ARGS:headline" in waf
+    assert "ctl:ruleRemoveTargetById=932105;ARGS:json.headline" in waf

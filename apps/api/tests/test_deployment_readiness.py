@@ -357,6 +357,18 @@ def test_production_automates_trusted_tls_and_redirects_http() -> None:
         in modsecurity_template
     )
     assert '"ctl:ruleEngine=Off"' in modsecurity_template
+    assert 'SecRule REQUEST_METHOD "@streq PUT"' in modsecurity_template
+    assert (
+        'SecRule REQUEST_FILENAME "@streq /api-proxy/candidates/profile"'
+        in modsecurity_template
+    )
+    assert (
+        "ctl:ruleRemoveTargetById=932105;ARGS:headline" in modsecurity_template
+    )
+    assert (
+        "ctl:ruleRemoveTargetById=932105;ARGS:json.headline"
+        in modsecurity_template
+    )
     assert modsecurity_template.index("Include /etc/modsecurity/crs/crs-setup.conf") < (
         modsecurity_template.index("tx.allowed_methods=")
     ) < modsecurity_template.index("Include /usr/share/modsecurity-crs/rules/*.conf")
