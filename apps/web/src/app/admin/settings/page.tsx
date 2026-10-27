@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getMe } from "@/lib/api";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
+import { LogoutAllDevices } from "@/components/security/logout-all-devices";
 
 export default function AdminSettingsPage() {
   const meQ = useQuery({ queryKey: ["me"], queryFn: getMe });
@@ -34,6 +35,7 @@ export default function AdminSettingsPage() {
           <p className="mt-1">Legacy recruiter approvals remain under the recruiters route for pre-migration accounts.</p>
         </section>
         <TwoFactorSecurity />
+        <LogoutAllDevices />
       </div>
     </AdminShell>
   );

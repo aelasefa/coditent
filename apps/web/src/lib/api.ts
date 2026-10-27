@@ -202,6 +202,12 @@ export async function logoutSession(): Promise<void> {
   }
 }
 
+export async function logoutAllDevices(): Promise<void> {
+  await api.post("/auth/logout-all-devices");
+  removeToken();
+  removeTrustedDevice();
+}
+
 export async function adminLogin(payload: {
   email: string;
   password: string;
