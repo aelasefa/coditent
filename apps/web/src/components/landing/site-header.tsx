@@ -8,7 +8,6 @@ import { Logo } from "@/components/ui/logo";
 import { Sheet } from "@/components/ui/sheet";
 import { FloatingNavSurface } from "@/components/navigation/floating-nav-surface";
 import { getMe } from "@/lib/api";
-import { isLoggedIn } from "@/lib/auth";
 import { getAuthenticatedDestination } from "@/lib/auth-redirect";
 import styles from "./landing-page.module.css";
 
@@ -23,7 +22,6 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [entranceReady, setEntranceReady] = useState(false);
-  const [hasStoredSession, setHasStoredSession] = useState<boolean | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuId = useId();
@@ -32,32 +30,19 @@ export function SiteHeader({ variant = "standard" }: { variant?: "standard" | "h
   const meQuery = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
-    enabled: hasStoredSession === true,
     retry: false,
     staleTime: 0,
     refetchOnMount: "always",
   });
-  const currentUser = hasStoredSession && !meQuery.isError ? meQuery.data : undefined;
-  const authPending = hasStoredSession === null || (hasStoredSession && meQuery.isLoading);
+  const currentUser = !meQuery.isError ? meQuery.data : undefined;
+  const authPending = meQuery.isLoading;
   const accountHref = currentUser ? getAuthenticatedDestination(currentUser) : "/login";
-
-  useEffect(() => {
-    const syncSession = () => setHasStoredSession(isLoggedIn());
-    syncSession();
-    window.addEventListener("storage", syncSession);
-    return () => window.removeEventListener("storage", syncSession);
-  }, []);
 
   useEffect(() => {
     if (!entranceEnabled) return;
     const frame = window.requestAnimationFrame(() => setEntranceReady(true));
     return () => window.cancelAnimationFrame(frame);
   }, [entranceEnabled]);
-
-  useEffect(() => {
-    // A 401 response clears the saved token in the API interceptor.
-    if (meQuery.isError && !isLoggedIn()) setHasStoredSession(false);
-  }, [meQuery.isError]);
 
   useEffect(() => {
     if (!floating) return;

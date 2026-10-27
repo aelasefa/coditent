@@ -2,13 +2,17 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_pagination, require_admin
+from app.dependencies import (
+    get_pagination,
+    require_platform_admin,
+    require_recent_platform_admin_mfa,
+)
 from app.models import (
     AdminActivityLog,
     CandidateProfile,
@@ -35,6 +39,7 @@ from app.schemas import (
     UserOut,
 )
 from app.services.authentication import AuthenticationRejected, issue_access_token
+from app.services.auth_cookies import set_access_cookie
 from app.services.offer_eligibility import eligible_offer_predicates
 from app.services.passwords import hash_password
 from app.services.entitlements import EntitlementDenied, entitlement_snapshot
@@ -103,7 +108,7 @@ async def _log_admin_action(
 
 @router.get("/recruiters/pending", response_model=dict[str, list[RecruiterApprovalOut]])
 async def list_pending_recruiters(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, list[RecruiterApprovalOut]]:
     result = await db.execute(
@@ -118,7 +123,7 @@ async def list_pending_recruiters(
 @router.patch("/recruiters/{recruiter_id}/approve", response_model=RecruiterApprovalOut)
 async def approve_recruiter(
     recruiter_id: uuid.UUID,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> RecruiterApprovalOut:
     result = await db.execute(select(User).where(User.id == recruiter_id))
@@ -146,7 +151,7 @@ async def approve_recruiter(
 @router.patch("/recruiters/{recruiter_id}/reject", response_model=RecruiterApprovalOut)
 async def reject_recruiter(
     recruiter_id: uuid.UUID,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> RecruiterApprovalOut:
     result = await db.execute(select(User).where(User.id == recruiter_id))
@@ -172,7 +177,7 @@ async def reject_recruiter(
 
 @router.get("/stats", response_model=AdminStatsOut)
 async def get_admin_stats(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AdminStatsOut:
     total_users = await db.scalar(select(func.count(User.id)))
@@ -206,7 +211,7 @@ async def get_admin_stats(
 
 @router.get("/users", response_model=dict[str, list[UserOut]])
 async def get_admin_users(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[UserOut]]:
@@ -225,7 +230,7 @@ async def get_admin_users(
 )
 async def create_admin_managed_user(
     data: AdminUserCreate,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserOut:
     """Create a candidate without opening a company-membership bypass."""
@@ -261,7 +266,7 @@ async def create_admin_managed_user(
 async def update_admin_managed_user(
     user_id: uuid.UUID,
     data: AdminUserUpdate,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserOut:
     user = await db.scalar(select(User).where(User.id == user_id).with_for_update())
@@ -327,7 +332,7 @@ async def update_admin_managed_user(
 @router.delete("/users/{user_id}", response_model=AdminMutationOut)
 async def deactivate_admin_managed_user(
     user_id: uuid.UUID,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AdminMutationOut:
     if user_id == current_admin.id:
@@ -351,7 +356,7 @@ async def deactivate_admin_managed_user(
 
 @router.get("/companies", response_model=CompanyListOut)
 async def get_admin_companies(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> CompanyListOut:
@@ -376,7 +381,7 @@ async def get_admin_companies(
 @router.delete("/companies/{company_id}", response_model=AdminMutationOut)
 async def archive_company(
     company_id: uuid.UUID,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AdminMutationOut:
     """Soft-delete an organization while retaining recruitment evidence."""
@@ -451,7 +456,7 @@ async def archive_company(
 async def update_company_subscription(
     company_id: uuid.UUID,
     data: CompanySubscriptionUpdate,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CompanySubscriptionOut:
     company = await db.scalar(
@@ -490,7 +495,7 @@ async def update_company_subscription(
 
 @router.get("/offers", response_model=dict[str, list[OfferOut]])
 async def get_admin_offers(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[OfferOut]]:
@@ -504,7 +509,7 @@ async def get_admin_offers(
 
 @router.get("/activity", response_model=dict[str, list[AdminActivityOut]])
 async def get_admin_activity(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[tuple[int, int], Depends(get_pagination)],
 ) -> dict[str, list[AdminActivityOut]]:
@@ -526,7 +531,8 @@ async def get_admin_activity(
 @router.post("/impersonate/{user_id}", response_model=TokenResponse)
 async def impersonate_user(
     user_id: uuid.UUID,
-    current_admin: Annotated[User, Depends(require_admin)],
+    response: Response,
+    current_admin: Annotated[User, Depends(require_recent_platform_admin_mfa)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -565,4 +571,5 @@ async def impersonate_user(
         details=f"Admin impersonated user role={user.role.value}",
     )
 
+    set_access_cookie(response, token)
     return TokenResponse(token=token, user=user_out)

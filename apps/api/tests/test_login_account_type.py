@@ -11,7 +11,7 @@ from app.limiter import limiter
 from app.models import User, UserRole
 from app.routers import auth, two_factor
 from app.services import authentication
-from app.utils.jwt import create_trusted_device_token, verify_mfa_token
+from app.utils.jwt import create_trusted_device_token, verify_access_token, verify_mfa_token
 
 
 class FakeRedis:
@@ -52,6 +52,13 @@ def login_client(monkeypatch):
     db = FakeDB()
     redis = FakeRedis()
     monkeypatch.setattr(authentication, "get_async_redis", lambda: redis)
+    async def trusted_device_not_revoked(_token_id):
+        return False
+    monkeypatch.setattr(
+        authentication,
+        "_durable_trusted_device_revoked",
+        trusted_device_not_revoked,
+    )
     monkeypatch.setattr(auth, "verify_password_and_rehash", lambda password, stored: (password == "correct", None))
     monkeypatch.setattr(two_factor, "consume_second_factor", lambda account, code: "totp" if code == "123456" else None)
     monkeypatch.setattr(limiter, "enabled", False)
@@ -171,3 +178,68 @@ def test_existing_shared_api_clients_remain_compatible(login_client):
     response = client.post("/auth/login", json={"email": "login@example.com", "password": "correct"})
     assert response.status_code == 200
     assert response.json()["user"]["role"] == "CANDIDATE"
+
+
+def test_admin_login_rejects_non_admin_without_role_disclosure(login_client):
+    client, user, redis, db = login_client
+    user.role = UserRole.CANDIDATE
+    response = client.post(
+        "/auth/admin/login",
+        json={"email": user.email, "password": "correct"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid credentials"
+    assert "set-cookie" not in response.headers
+    assert not redis.values
+
+
+def test_admin_login_requires_enrolled_mfa(login_client):
+    client, user, redis, db = login_client
+    user.role = UserRole.PLATFORM_ADMIN
+    user.is_2fa_enabled = False
+    response = client.post(
+        "/auth/admin/login",
+        json={"email": user.email, "password": "correct"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Administrator MFA enrollment is required before sign-in."
+    assert "set-cookie" not in response.headers
+    assert not redis.values
+
+
+def test_admin_login_always_uses_fresh_mfa_and_issues_no_trusted_device(login_client):
+    client, user, redis, db = login_client
+    user.role = UserRole.PLATFORM_ADMIN
+    user.is_2fa_enabled = True
+    response = client.post(
+        "/auth/admin/login",
+        json={"email": user.email, "password": "correct"},
+    )
+    assert response.status_code == 200
+    challenge = response.json()["mfa_token"]
+    assert verify_mfa_token(challenge)["account_type"] == "admin"
+    assert "set-cookie" not in response.headers
+
+    response = client.post(
+        "/auth/2fa/verify",
+        json={"mfa_token": challenge, "code": "123456"},
+    )
+    assert response.status_code == 200
+    token_payload = verify_access_token(response.json()["token"])
+    assert token_payload["amr"] == ["pwd", "otp"]
+    assert isinstance(token_payload["mfa_at"], int)
+    assert response.json()["trusted_device_token"] is None
+    assert "trusted_device=" not in response.headers.get("set-cookie", "")
+
+
+def test_shared_login_cannot_issue_platform_admin_session(login_client):
+    client, user, redis, db = login_client
+    user.role = UserRole.PLATFORM_ADMIN
+    user.is_2fa_enabled = True
+    response = client.post(
+        "/auth/login",
+        json={"email": user.email, "password": "correct"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid credentials"
+    assert "set-cookie" not in response.headers

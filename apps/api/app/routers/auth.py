@@ -29,6 +29,7 @@ from app.schemas import (
     AccountDataImportRequest,
     AccountDeletionCreate,
     AccountDeletionOut,
+    AdminLoginRequest,
     EmailChangeConfirm,
     EmailChangeRequest,
     LoginRequest,
@@ -1137,15 +1138,17 @@ async def resend_verification(
     )
 
 
-@router.post("/login", response_model=TokenResponse | TwoFactorChallengeResponse)
-@limiter.limit("5/minute")
-async def login(
-    data: LoginRequest,
+async def _password_login(
+    *,
+    email_address: str,
+    password: str,
+    account_type: str | None,
+    trusted_device_token: str | None,
     request: Request,
     response: Response,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: AsyncSession,
 ) -> TokenResponse | TwoFactorChallengeResponse:
-    email = data.email.strip().lower()
+    email = email_address.strip().lower()
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -1153,7 +1156,7 @@ async def login(
     replacement_hash: str | None = None
     if user is not None:
         password_verified, replacement_hash = verify_password_and_rehash(
-            data.password,
+            password,
             user.password_hash,
         )
     if user is None or not password_verified:
@@ -1163,7 +1166,7 @@ async def login(
     # Reject the wrong tab before any access cookie, trusted-device bypass,
     # password rehash, or pending MFA challenge can be created.
     try:
-        ensure_login_account_type(user, data.account_type)
+        ensure_login_account_type(user, account_type)
     except AuthenticationRejected as exc:
         logger.warning("login_failed", reason="invalid_credentials")
         raise HTTPException(
@@ -1183,14 +1186,19 @@ async def login(
         await db.commit()
         logger.info("password_hash_upgraded", user_id=str(user.id), algorithm="argon2id")
 
-    trusted_device = data.trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
+    trusted_device = trusted_device_token or request.cookies.get(settings.trusted_device_cookie_name)
     try:
         completion = await complete_authentication(
             user,
             trusted_device_token=trusted_device,
-            account_type=data.account_type,
+            account_type=account_type,
         )
     except AuthenticationRejected as exc:
+        if account_type == "admin" and not user.is_2fa_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Administrator MFA enrollment is required before sign-in.",
+            ) from exc
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active") from exc
     except AuthenticationStoreUnavailable as exc:
         raise HTTPException(
@@ -1217,6 +1225,45 @@ async def login(
     set_access_cookie(response, token)
     logger.info("login_success", user_id=str(user.id), role=user.role.value)
     return TokenResponse(token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/login", response_model=TokenResponse | TwoFactorChallengeResponse)
+@limiter.limit("5/minute")
+async def login(
+    data: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TokenResponse | TwoFactorChallengeResponse:
+    return await _password_login(
+        email_address=str(data.email),
+        password=data.password,
+        account_type=data.account_type,
+        trusted_device_token=data.trusted_device_token,
+        request=request,
+        response=response,
+        db=db,
+    )
+
+
+@router.post("/admin/login", response_model=TokenResponse | TwoFactorChallengeResponse)
+@limiter.limit("3/minute")
+async def admin_login(
+    data: AdminLoginRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TokenResponse | TwoFactorChallengeResponse:
+    """Authenticate platform administrators through an MFA-only flow."""
+    return await _password_login(
+        email_address=str(data.email),
+        password=data.password,
+        account_type="admin",
+        trusted_device_token=None,
+        request=request,
+        response=response,
+        db=db,
+    )
 
 
 @router.post("/logout-all-devices")

@@ -1,5 +1,6 @@
 import uuid
 import secrets
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Query, Request, status
@@ -127,12 +128,33 @@ async def require_authenticated_user(
 
 async def require_platform_admin(
     current_user: Annotated[User, Depends(get_current_user)],
+    payload: Annotated[dict, Depends(get_current_access_payload)],
 ) -> User:
     # Explicitly reject legacy ADMIN even if present in DB (migrated rows should be PLATFORM_ADMIN)
     if current_user.role.value == "ADMIN":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Legacy ADMIN role deprecated — use PLATFORM_ADMIN")
     if current_user.role.value != "PLATFORM_ADMIN":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: platform admin only")
+    if "otp" not in payload.get("amr", []) or not isinstance(payload.get("mfa_at"), (int, float)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator MFA authentication required",
+        )
+    return current_user
+
+
+async def require_recent_platform_admin_mfa(
+    current_user: Annotated[User, Depends(require_platform_admin)],
+    payload: Annotated[dict, Depends(get_current_access_payload)],
+) -> User:
+    """Require a fresh MFA proof for high-impact administrator operations."""
+    mfa_at = payload.get("mfa_at")
+    now = datetime.now(timezone.utc).timestamp()
+    if not isinstance(mfa_at, (int, float)) or now - float(mfa_at) > 10 * 60:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Recent administrator MFA verification required",
+        )
     return current_user
 
 

@@ -5,6 +5,7 @@ or production credentials are used by the fixtures below.
 """
 import importlib.util
 import uuid
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -59,7 +60,15 @@ def support_client():
     app.dependency_overrides[get_db] = db_override
     app.include_router(router)
     limiter.reset()
-    headers = {name: {"Authorization": f"Bearer {create_access_token({'sub': str(user.id)})}"} for name, user in users.items()}
+    headers = {}
+    for name, user in users.items():
+        claims = {"sub": str(user.id)}
+        if user.role == UserRole.PLATFORM_ADMIN:
+            claims.update(
+                amr=["pwd", "otp"],
+                mfa_at=int(datetime.now(timezone.utc).timestamp()),
+            )
+        headers[name] = {"Authorization": f"Bearer {create_access_token(claims)}"}
     with TestClient(app) as client:
         yield client, headers, sessions
     limiter.reset()

@@ -27,11 +27,18 @@ class AuthenticationRejected(ValueError):
 
 def ensure_login_account_type(user: User, account_type: str | None) -> None:
     if account_type is None:
-        return  # Shared login API compatibility, including OAuth/admin flows.
+        # Privileged accounts must use the dedicated admin authentication flow.
+        # This prevents the public/shared login and OAuth flows from issuing an
+        # administrator session without the stronger admin MFA policy.
+        if user.role.value in {"ADMIN", "PLATFORM_ADMIN"}:
+            raise AuthenticationRejected("Invalid credentials")
+        return
     role = user.role.value
     if account_type == "candidate" and role == "CANDIDATE":
         return
     if account_type == "recruiter" and role in {"RECRUITER", "COMPANY_USER"}:
+        return
+    if account_type == "admin" and role == "PLATFORM_ADMIN":
         return
     # Do not disclose an account's role through the public login endpoint.
     # A wrong portal/tab must be indistinguishable from invalid credentials.
@@ -196,6 +203,15 @@ async def complete_authentication(
     """Finish primary authentication without allowing OAuth to bypass local MFA."""
     ensure_account_can_authenticate(user)
     ensure_login_account_type(user, account_type)
+    if account_type == "admin":
+        if not user.is_2fa_enabled:
+            raise AuthenticationRejected("Administrator MFA enrollment required")
+        # Administrative sessions always require a fresh second factor. A
+        # long-lived trusted-device credential must never bypass this step.
+        return AuthenticationCompletion(
+            token=await _issue_mfa_challenge(user, account_type),
+            requires_2fa=True,
+        )
     if user.is_2fa_enabled and not await trusted_device_is_valid(user, trusted_device_token):
         return AuthenticationCompletion(
             token=await _issue_mfa_challenge(user, account_type),

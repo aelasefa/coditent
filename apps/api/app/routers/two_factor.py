@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -284,17 +284,26 @@ async def two_factor_verify_challenge(
     ip_addr = request.client.host if request.client else ""
     await check_and_notify_new_device(user, ua_header, ip_addr)
 
-    final_token = issue_access_token(user)
+    is_admin_login = payload.get("account_type") == "admin"
+    final_token = issue_access_token(
+        user,
+        extra_claims={
+            "amr": ["pwd", "otp"],
+            "mfa_at": int(datetime.now(timezone.utc).timestamp()),
+        },
+    )
     set_access_cookie(response, final_token)
     from app.config import settings
 
-    trusted_device_token = create_trusted_device_token(
-        str(user.id),
-        factor=factor_fingerprint(user),
-        auth_version=user.auth_version,
-        expires_delta=timedelta(days=settings.trusted_device_expire_days),
-    )
-    set_trusted_device_cookie(response, trusted_device_token)
+    trusted_device_token = None
+    if not is_admin_login:
+        trusted_device_token = create_trusted_device_token(
+            str(user.id),
+            factor=factor_fingerprint(user),
+            auth_version=user.auth_version,
+            expires_delta=timedelta(days=settings.trusted_device_expire_days),
+        )
+        set_trusted_device_cookie(response, trusted_device_token)
     logger.info("2fa_login_success", user_id=str(user.id))
     return TokenResponse(
         token=final_token,

@@ -1,7 +1,7 @@
 """Unit coverage for TOTP, recovery codes, and short-lived MFA JWTs."""
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,7 +10,11 @@ from fastapi.security import HTTPAuthorizationCredentials
 import jwt
 
 from app.config import settings
-from app.dependencies import get_current_access_payload
+from app.dependencies import (
+    get_current_access_payload,
+    require_platform_admin,
+    require_recent_platform_admin_mfa,
+)
 from app.models import User, UserRole
 from app.services import authentication
 from app.services.authentication import (
@@ -223,6 +227,33 @@ def test_inactive_account_cannot_complete_authentication(monkeypatch):
     monkeypatch.setattr(authentication, "get_async_redis", lambda: FakeRedis())
     with pytest.raises(AuthenticationRejected, match="not active"):
         asyncio.run(complete_authentication(_user(approved=False)))
+
+
+def test_platform_admin_dependency_requires_mfa_provenance():
+    user = _user(two_factor=True)
+    user.role = UserRole.PLATFORM_ADMIN
+    with pytest.raises(HTTPException) as missing:
+        asyncio.run(require_platform_admin(user, {}))
+    assert missing.value.status_code == 403
+
+    payload = {
+        "amr": ["pwd", "otp"],
+        "mfa_at": int(datetime.now(timezone.utc).timestamp()),
+    }
+    assert asyncio.run(require_platform_admin(user, payload)) is user
+    assert asyncio.run(require_recent_platform_admin_mfa(user, payload)) is user
+
+
+def test_high_impact_admin_action_rejects_stale_mfa():
+    user = _user(two_factor=True)
+    user.role = UserRole.PLATFORM_ADMIN
+    stale = {
+        "amr": ["pwd", "otp"],
+        "mfa_at": int(datetime.now(timezone.utc).timestamp()) - 601,
+    }
+    with pytest.raises(HTTPException) as expired:
+        asyncio.run(require_recent_platform_admin_mfa(user, stale))
+    assert expired.value.status_code == 403
 
 
 def test_totp_accepts_current_code_and_rejects_bad_code():

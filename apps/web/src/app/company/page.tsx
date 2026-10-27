@@ -46,9 +46,7 @@ export default function CompanyDashboard() {
   const offersQ = useQuery({
     queryKey: ["company-offers"],
     queryFn: async () => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("coditent_token") : null;
       const r = await fetch(`${getApiBaseUrl()}/offers/mine`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         credentials: "include",
       }).then((x) => {
         if (!x.ok) throw new Error(`Offers request failed: ${x.status}`);

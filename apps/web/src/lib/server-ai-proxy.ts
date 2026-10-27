@@ -16,9 +16,7 @@ export async function proxyAuthenticatedAI(
 
   const authorization = request.headers.get("authorization");
   const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  const cookieToken =
-    request.cookies.get("access_token")?.value ||
-    request.cookies.get("coditent_token")?.value;
+  const cookieToken = request.cookies.get("access_token")?.value;
   const token = bearer || cookieToken;
   if (!token) return jsonError("Authentication required", 401);
 

@@ -4,7 +4,6 @@ import { resolveAssetUrl } from "@/lib/asset-url";
 import { validateManagedFile, validateManagedFileMetadata } from "@/lib/file-validation";
 
 import { getTrustedDevice, removeToken, removeTrustedDevice } from "@/lib/auth";
-import { AUTH_TOKEN_KEY } from "@/lib/constants";
 import type {
   AdminActivity,
   AdminMutationResult,
@@ -90,10 +89,6 @@ function buildLoginRedirect(pathname: string, search: string): string {
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     const method = (config.method ?? "get").toLowerCase();
     if (!["get", "head", "options"].includes(method)) {
       const csrf = document.cookie
@@ -213,8 +208,8 @@ export async function adminLogin(payload: {
   password: string;
 }): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>(
-    "/auth/login",
-    { ...payload, trusted_device_token: getTrustedDevice() },
+    "/auth/admin/login",
+    payload,
     skipAuthRedirectConfig
   );
   return data;

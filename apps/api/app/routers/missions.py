@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_admin, require_candidate
+from app.dependencies import get_current_user, require_candidate, require_platform_admin
 from app.models import CandidateProfile, MissionAttempt, PracticeMission, User
 from app.schemas import (
     MissionAttemptCreate,
@@ -113,7 +113,7 @@ async def list_missions(
 @router.post("", response_model=PracticeMissionOut, status_code=status.HTTP_201_CREATED)
 async def create_mission(
     data: PracticeMissionCreate,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PracticeMissionOut:
     mission = PracticeMission(
@@ -133,7 +133,7 @@ async def create_mission(
 
 @router.get("/attempts/pending", response_model=MissionReviewQueueOut)
 async def list_pending_attempts(
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MissionReviewQueueOut:
     rows = list(
@@ -247,7 +247,7 @@ async def _refresh_candidate_scores(db: AsyncSession, candidate_id: UUID) -> Non
 async def review_attempt(
     attempt_id: UUID,
     data: MissionAttemptReview,
-    current_admin: Annotated[User, Depends(require_admin)],
+    current_admin: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MissionAttemptOut:
     row = (
