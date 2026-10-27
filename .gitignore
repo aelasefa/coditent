@@ -3,6 +3,14 @@
 # ==========================================
 .env
 .env*
+.eenv*
+!.env.example
+!.env.teammate.example
+!.env.template
+.vault/
+.vault-unseal-keys*
+*unseal-keys*
+sed7el.txt
 .env.local
 .env.development.local
 .env.test.local
@@ -168,10 +176,20 @@ ansible/**/vault.yml
 # 8. Markdown Notes & Documentation
 # ==========================================
 *.md
+!CONSOLE_AUDIT_REPORT.md
 !/README.md
 !audit-reports/MODULE_POINTS.md
+!/CHANGES_LOG.md
 !docs/security-remediation-checklist.md
 !docs/security/
 !docs/security/**
 !docs/operations/ecr-ssm-deployment.md
 !monitoring/README.md
+!docs/operations/frontend-implementation-handoff.md
+!docs/operations/local-project-usage.md
+!docs/operations/aws-ec2-vault-operations.md
+!docs/shared-vault.md
+!deploy/vault-server/README.md
+
+# Supabase CLI local project metadata
+/supabase/.temp/

@@ -181,7 +181,10 @@ def test_compose_uses_readiness_and_healthy_dependencies() -> None:
     assert compose.count("condition: service_healthy") >= 4
     assert compose.count("image: coditent-api:local") == 3
     assert compose.count("context: ./apps/api") == 1
-    assert compose.count("- ./.env") == 3
+    for name in ("api", "worker", "ai-dispatcher"):
+        assert services[name]["environment"]["SECRET_SOURCE"] == "environment"
+        assert services[name]["environment"]["DATABASE_URL"] == "${DATABASE_URL:-}"
+        assert "env_file" not in services[name]
     assert production_compose.count("CODITENT_API_IMAGE") == 3
     assert "volumes: !reset []" in production_compose
     assert production_compose.count("restart: unless-stopped") == 4
@@ -262,11 +265,11 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     expected_google_callback = (
         'GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"'
     )
-    assert production_compose.count(expected_google_callback) == 2
+    assert production_compose.count(expected_google_callback) == 3
     expected_linkedin_callback = (
         'LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
     )
-    assert production_compose.count(expected_linkedin_callback) == 2
+    assert production_compose.count(expected_linkedin_callback) == 3
     assert 'OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"' in production_compose
 
 
@@ -446,6 +449,7 @@ def test_production_runs_only_backend_services_from_ecr() -> None:
     assert "aws ecr get-login-password" in deploy_script
     assert 'docker compose pull "${IMAGE_SERVICES[@]}"' in deploy_script
     assert 'docker compose up -d --no-build' in deploy_script
+    assert "--force-recreate" in deploy_script
     assert "docker compose build" not in deploy_script
     assert "EXPECTED_COMMIT" in deploy_script
     assert "PREVIOUS_IMAGE_FILE" in deploy_script
@@ -460,7 +464,8 @@ def test_application_images_run_as_unprivileged_users() -> None:
     assert "USER 10001:10001" in web_dockerfile
     assert "npm run build" in web_dockerfile
     assert 'CMD ["node", "server.js"]' in web_dockerfile
-    assert compose.count("no-new-privileges:true") >= 3
+    assert compose.count("security_opt:") >= 4
+    assert compose.count("no-new-privileges:true") >= 4
     assert compose.count("cap_drop:") >= 3
 
 
@@ -470,7 +475,24 @@ def test_web_runtime_and_framework_are_on_supported_patched_lines() -> None:
 
     assert web_dockerfile.count("FROM node:22-alpine") == 3
     assert package["engines"]["node"] == ">=22.0.0"
-    assert package["dependencies"]["next"] == "16.4.2"
+    assert package["dependencies"]["next"] == "16.4.3"
     assert package["dependencies"]["react"] == "19.3.0"
     assert package["dependencies"]["react-dom"] == "19.3.0"
     assert package["dependencies"]["axios"] == "1.20.0"
+
+
+def test_ci_import_check_uses_disposable_credentials_and_environment_source() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/deploy.yml").read_text())
+    job = workflow["jobs"]["ci-api"]
+    assert job["env"]["SECRET_SOURCE"] == "environment"
+    assert job["env"]["APP_ENV"] == "test"
+    imports = next(step for step in job["steps"] if step["name"].startswith("Sanity check imports"))
+    assert "localhost:5432/test" in imports["env"]["DATABASE_URL"]
+    assert "secrets." not in json.dumps(imports["env"])
+
+
+def test_vault_preflight_precedes_release_and_ingress_changes() -> None:
+    script = (REPO_ROOT / "scripts/deploy-production-image.sh").read_text()
+    preflight = script.index("vault_load_env --production")
+    assert preflight < script.index('reconcile_nginx_waf\n')
+    assert preflight < script.index('set_image_in_env "$IMAGE_URI"')

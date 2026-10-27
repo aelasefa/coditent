@@ -40,6 +40,18 @@ app.add_middleware(
 
 app.middleware("http")(record_request_metrics)
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(account_recovery.router, prefix="/auth", tags=["Account Recovery"])
 app.include_router(admin.router, tags=["Admin"])
@@ -65,11 +77,20 @@ app.include_router(company_interest.router, tags=["Company Interest"])
 
 @app.on_event("startup")
 async def on_startup():
-    from app.core.vault import vault_client
-    if vault_client.health_check():
-        logger.info("hashicorp_vault_connected")
+    from app.core.runtime_secrets import runtime_secrets_client
+
+    # Eagerly preload all secrets so every request is served from the
+    # in-process cache rather than making per-request HTTP calls.
+    runtime_secrets_client.preload()
+
+    if runtime_secrets_client.enabled and runtime_secrets_client.health_check():
+        secret_count = len(runtime_secrets_client.read_secrets())
+        logger.info("supabase_runtime_secrets_connected", extra={"secrets_loaded": secret_count})
     else:
-        logger.info("hashicorp_vault_offline_using_env_fallback")
+        logger.info(
+            "supabase_runtime_secrets_offline_using_env_fallback",
+            extra={"endpoint": runtime_secrets_client.endpoint or "(not set)"},
+        )
 
 @app.get("/metrics")
 async def metrics() -> Response:

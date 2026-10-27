@@ -121,10 +121,12 @@ Create the root environment file:
 cp .env.example .env
 ```
 
-Fill every required value, then start the complete stack:
+Initialize and seed HashiCorp Vault as described in
+[`docs/shared-vault.md`](docs/shared-vault.md). Put only the four Vault connection
+and AppRole settings in the root `.env`, then start the full stack:
 
 ```bash
-docker compose up --build
+./scripts/run_project.sh
 ```
 
 Local endpoints:
@@ -159,7 +161,7 @@ cd apps/web && npm ci && npm run dev -- --port 3000
 - **Backend:** FastAPI (Python 3.12), SQLAlchemy 2 async (`asyncpg`) + Alembic, `python-jose` (JWT HS256), `passlib[bcrypt]`, `slowapi` (rate limits), `structlog` + `prometheus-client` (observability), Celery + Redis 7 (async jobs), `google-generativeai`, `supabase` (Storage admin only), `pypdf` / `python-docx` (CV text), Resend via stdlib `urllib` (email).
 - **Database:** **Supabase PostgreSQL** — sole persistent store. No local Postgres container, no SQLite, no localhost fallback (rejected at startup in `apps/api/app/database.py:9-33` and `apps/api/app/config.py:47-56`).
 - **Storage:** Supabase Storage, private buckets `candidate-cvs` and `company-logos` (backend service-role key only).
-- **Infra:** Docker Compose (`api`, `worker`, `redis`, `web`, `proxy`, `vault`), host nginx `:80/443`, GitHub Actions CI/CD + Ansible to EC2, Vercel-ready frontend (`vercel.json`, `/api-proxy` rewrite).
+- **Infra:** Docker Compose (`api`, `worker`, `redis`, `web`, `proxy`), HashiCorp Vault KV v2/AppRole for shared secrets, host nginx `:80/443`, GitHub Actions CI/CD + Ansible to EC2, Vercel-ready frontend (`vercel.json`, `/api-proxy` rewrite).
 
 ## Technical-choice justification
 
@@ -199,7 +201,8 @@ flowchart TD
     WS --> Browser
     Routers --> Resend[Resend email - OTP + invites only - services/email.py]
     API --> Metrics[GET /metrics Prometheus + structlog]
-    API --> Vault[HashiCorp Vault - startup secret sync - best-effort]
+    Launcher --> Vault[HashiCorp Vault KV v2 via AppRole]
+    Launcher --> API
 ```
 
 Request lifecycle:
@@ -235,7 +238,7 @@ CODITENT/
 │   │   │   ├── dependencies.py # get_current_user + require_* gates + pagination
 │   │   │   ├── core/permissions.py  # VALID_COMPANY_ROLES + PERMISSIONS matrix + can()
 │   │   │   ├── core/audit.py   # log_audit() → admin_activity_logs
-│   │   │   ├── core/vault.py   # Vault client (startup sync, best-effort)
+│   │   │   ├── core/runtime_secrets.py # Optional legacy broker; bypassed by Vault launcher
 │   │   │   ├── utils/jwt.py    # create/verify HS256 tokens, 60-min default
 │   │   │   ├── utils/sanitizer.py   # input text sanitization for validators
 │   │   │   ├── routers/        # 12 routers (89 route decorators)
@@ -258,7 +261,7 @@ CODITENT/
 │   │   ├── next.config.mjs     # /api-proxy rewrite, image hosts
 │   │   └── package.json        # Next 16.3.8, React 19.3.0, axios, React Query, zod
 │   └── apps/web/               # nested legacy copy — TO-VERIFY (appears unused; do not rely on it)
-├── docker-compose.yml          # api/worker/redis/web/proxy/vault
+├── docker-compose.yml          # api/worker/redis/web/proxy
 ├── nginx/                      # reverse-proxy build
 ├── ansible/                    # EC2 provisioning/deploy/rollback, nginx role
 ├── .github/workflows/deploy.yml# CI (web lint+build, api imports) + CD (Ansible on push to main)
@@ -271,13 +274,13 @@ CODITENT/
 | --------- | -------- | ------------- | --------------------- |
 | `apps/api/app/routers/` | 19 mounted routers | HTTP layer | Mounted by `main.py`; call `dependencies.py`, `core/permissions.py`, `services/*` |
 | `apps/api/app/services/` | AI, screening, CV, logo, email, chat rules, jobs | Reusable business logic + external I/O | Routers + Celery tasks |
-| `apps/api/app/core/` | permissions matrix, audit writer, vault | Centralized policy + side effects | Every write path |
+| `apps/api/app/core/` | permissions matrix, audit writer, runtime secrets | Centralized policy + side effects | Every write path |
 | `apps/api/alembic/` | 42 version files | Schema history for Supabase | `api` container runs `alembic upgrade head` on boot |
 | `apps/api/tests/` | 47 test files | Regression + security coverage | CI import check; manual `pytest` runs |
 | `apps/web/src/app/` | Route groups + pages | User-facing screens per role | Calls `lib/api.ts` helpers |
 | `apps/web/src/components/` | Reusable UI (incl. `ui/avatar.tsx`, `company/CompanyLogoSection.tsx`) | Consistent design system | Pages |
 | `apps/web/src/lib/` | API client, auth, types, permissions mirror | Single frontend↔backend contract | All pages/components |
-| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `docker compose up --build`; push-to-main deploys |
+| `docker-compose.yml` + `nginx/` + `ansible/` | Services, proxy, provisioning | Dev/prod parity + deploys | `./scripts/run_project.sh`; push-to-main deploys |
 
 ---
 
@@ -351,7 +354,7 @@ Components: candidate/chat-workspace.tsx, chat-view.tsx
 - **Services** (`services/`): `ai.py` (ranking + single-match), `screening.py`, `cv_parser.py`, `cv_extraction.py`, `cv_storage.py` (bucket `candidate-cvs`), `company_logo.py` (bucket `company-logos`), `email.py` + `email_verification.py` (Resend via `urllib`), `oauth_service.py`, `recruitment_chat.py` (rules), `recommendation_jobs.py` (cache key + fallback + generation), `match_scoring.py` (per-offer lifecycle), `admin_seed.py`.
 - **Background:** Celery `coditent` app, JSON only (`tasks.py:15-20`) — 3 tasks: `recommendations.generate`, `recommendations.score_single`, `applications.screen`. Each builds a fresh event loop + `engine.dispose()` first (fork-pool loop-binding fix, `tasks.py:40-51`). No beat/scheduler — no periodic jobs; expiry is lazy everywhere.
 - **Realtime:** WS ` /chat/recruitment/{application_id}/ws?token=JWT` (`routers/chat.py:469`), in-memory fan-out (single replica; code comment flags Redis pub/sub need).
-- **Observability:** `structlog` loggers, Prometheus `/metrics` (`main.py:79-81`, `observability.py`), `/protected` auth probe, Vault best-effort secret sync on startup (`main.py:59-70`).
+- **Observability:** `structlog` loggers, Prometheus `/metrics` (`main.py:79-81`, `observability.py`), `/protected` auth probe. The launcher requires an unsealed Vault at startup and injects its secrets into API, worker, and dispatcher containers.
 
 ---
 
@@ -846,9 +849,9 @@ Docker + Compose, Node 22+, Python 3.12, Supabase project, Gemini key, Resend ke
 
 ```bash
 git clone <repo> && cd coditent
-cp .env.example .env && cp apps/api/.env.example apps/api/.env && cp apps/web/.env.example apps/web/.env.local
-# fill real values (DATABASE_URL Supabase + keys)
-docker compose up --build
+cp .env.teammate.example .env
+# Fill the shared Supabase project settings and your unique runtime token.
+./scripts/run_project.sh
 ```
 
 Only commands that work with this repo are shown; there is no `db` service and no seed script (dev data via API: `POST /auth/register`, invitation flows, `POST /offers`).
@@ -966,7 +969,7 @@ Recruitment WS (`ready/message/error`, 4401/4403/4404, in-memory fan-out) + 3 s 
 
 ### Security features — Implemented
 
-bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require_*` + `can()` + 404-isolation, invite token hashing + single-use + expiry + email-match + rotation, OTP hashing/attempts/cooldown/rollback, CV/logo ownership + type/size/magic-bytes validation, chat receiver derivation + per-message re-auth, input sanitization validators, CORS allowlist, env-only secrets.
+bcrypt hashing, JWT verify + expiry + DB row check, dual Bearer/cookie, `require_*` + `can()` + 404-isolation, invite token hashing + single-use + expiry + email-match + rotation, OTP hashing/attempts/cooldown/rollback, CV/logo ownership + type/size/magic-bytes validation, chat receiver derivation + per-message re-auth, input sanitization validators, CORS allowlist, HashiCorp Vault-backed application secrets.
 
 ---
 
@@ -1020,7 +1023,7 @@ User and organization deletion are implemented as retention-safe logical deactiv
 - **Input validation:** Pydantic 422s, `sanitize_input_text` on profile/offer text, UUID parsing, 2000-char chat caps, 5 MB CV / 2 MB logo caps, extension + MIME + magic-bytes checks.
 - **CORS:** explicit origins + credentials (`main.py:29-41`); prod mixed-content avoided via `/api-proxy`.
 - **SQL injection:** SQLAlchemy ORM + bound params throughout (no string-built SQL found in routers).
-- **Secrets:** env-only (`config.py`), `.env` gitignored, service-role key backend-only, Vault best-effort sync; docs use placeholders.
+- **Secrets:** the launcher reads application credentials from HashiCorp Vault KV v2 using AppRole and injects them through Compose. Missing credentials stop startup. `.env` contains four Vault connection/AppRole settings; teammates and EC2 use the read-only member role.
 - **File validation:** CV (pdf/docx + magic + 5 MB) and logo (png/jpg/webp + magic + 2 MB) both sides; randomized unique paths; path-only DB storage; scoped streams.
 - **Invitation security:** token hashing + UNIQUE + single-use + expiry (7 d / 72 h) + email-match + resend rotation + lazy-expiry.
 - **WS authorization:** JWT from query + full viewer re-check + per-message re-auth; close codes 4401/4403/4404.
@@ -1152,6 +1155,20 @@ Previous README claims: tasks via GitHub Issues, weekly sync, work breakdown by 
 - No zero-downtime deploys (compose rebuild restarts API; in-flight requests dropped).
 - Naive datetimes (UTC by convention, not tz-aware); free-text status/role columns require application-level validation; deleting a User can cascade applications and messages.
 - `apps/apps/web/` nested copy appears unused — TO-VERIFY, do not rely on it.
+
+---
+
+## Security architecture
+
+The CODITENT platform implements multi-layer defense-in-depth security:
+
+1. **Reverse Proxy & WAF (ModSecurity)**: Nginx reverse proxy running OWASP ModSecurity CRS to inspect and block malicious web requests, SQLi, and XSS payloads.
+2. **Security Headers & HSTS**: Enforces `Strict-Transport-Security`, `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Permissions-Policy`.
+3. **HashiCorp Vault Secret Management**: Application credentials are stored in Vault KV v2 and fetched by the launcher with least-privilege AppRoles.
+4. **Two-Factor Authentication (2FA / TOTP)**: `POST /auth/2fa/setup` & `/enable` with 6-digit TOTP validation, QR code rendering, and 8 single-use emergency backup codes. Intercepts logins with `mfa_pending` short-lived JWT tokens.
+5. **GDPR Data Rights**: Compliant `POST /auth/gdpr/export` (personal data JSON portability) and password-authenticated `DELETE /auth/gdpr/delete` (Right to Erasure).
+6. **Container Non-Root Hardening**: Docker applications run under unprivileged non-root users (`appuser`, UID 10001) to prevent container escape and privilege escalation.
+7. **Input Sanitization**: Dynamic HTML Bleach text sanitization stripping script tags and unsafe attributes on user inputs.
 
 ---
 

@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;800&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -289,7 +287,7 @@ body {
   min-height: 100%;
   overflow-x: clip;
   background: var(--background);
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -1660,4 +1658,103 @@ body:has(.company-theme){--background:#f8f8f3;--surface:#fffefa;--surface-second
 @media (max-width: 359px) {
   .company-candidate-stage-field label svg { display: none; }
   .candidate-profile-skills .candidate-section-heading-copy p { display: none; }
+}
+
+/* Kept in the global stylesheet because Next includes root not-found boundary
+   styles in ordinary route responses. A CSS module here is preloaded even
+   when the 404 page is not rendered. */
+.notFoundPage {
+  position: relative;
+  display: flex;
+  min-height: 100dvh;
+  overflow: hidden;
+  flex-direction: column;
+  background:
+    linear-gradient(110deg, rgb(248 248 243 / 98%) 0 42%, rgb(237 241 233 / 74%) 100%),
+    var(--background);
+  color: var(--foreground);
+}
+
+.notFoundPage::before {
+  position: absolute;
+  inset: auto auto -14rem -12rem;
+  width: 34rem;
+  height: 34rem;
+  border: 1px solid rgb(25 77 56 / 8%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2.75rem rgb(25 77 56 / 3%), 0 0 0 5.5rem rgb(25 77 56 / 2%);
+  content: "";
+  pointer-events: none;
+}
+
+.notFoundHeader {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 88rem);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 2.7vw, 2.4rem) clamp(1.25rem, 5vw, 4.5rem);
+}
+
+.notFoundLogoLink { display: inline-flex; border-radius: 0.5rem; }
+.notFoundLogoLink:focus-visible,
+.notFoundPrimaryAction:focus-visible,
+.notFoundSecondaryAction:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+
+.notFoundLayout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(100%, 88rem);
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(20rem, 0.82fr) minmax(28rem, 1.18fr);
+  align-items: center;
+  gap: clamp(1rem, 3vw, 4rem);
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 5vw, 4.5rem) clamp(2rem, 5vw, 4.5rem);
+}
+
+.notFoundCopy { max-width: 34rem; padding-block: 2rem; }
+.notFoundEyebrow { margin: 0 0 1.1rem; color: var(--primary); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+.notFoundTitle { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(3.35rem, 6.2vw, 6.75rem); font-weight: 400; letter-spacing: -0.06em; line-height: 0.93; text-wrap: balance; }
+.notFoundTitle span { display: block; color: var(--primary); }
+.notFoundDescription { max-width: 31rem; margin: 1.55rem 0 0; color: var(--foreground-secondary); font-size: clamp(0.95rem, 1.3vw, 1.08rem); line-height: 1.72; }
+.notFoundActions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
+.notFoundPrimaryAction,
+.notFoundSecondaryAction { display: inline-flex; min-height: 3rem; align-items: center; justify-content: center; padding: 0.72rem 1.15rem; border-radius: 0.65rem; font-size: 0.86rem; font-weight: 750; transition: background-color var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard), color var(--duration-normal) var(--ease-standard), transform var(--duration-normal) var(--ease-standard); }
+.notFoundPrimaryAction { border: 1px solid var(--primary); background: var(--primary); color: var(--primary-foreground); }
+.notFoundSecondaryAction { border: 1px solid var(--border-strong); background: rgb(255 254 250 / 68%); color: var(--foreground); }
+.notFoundPrimaryAction:hover,
+.notFoundSecondaryAction:hover { transform: translateY(-2px); }
+.notFoundPrimaryAction:hover { background: var(--primary-hover); }
+.notFoundSecondaryAction:hover { border-color: var(--primary); color: var(--primary); }
+.notFoundArtwork { display: grid; min-width: 0; align-self: stretch; place-items: center; margin-right: clamp(-4.5rem, -5vw, -1.25rem); }
+.notFoundPicture { display: block; width: 100%; }
+.notFoundImage { display: block; width: min(100%, 48rem); height: auto; max-height: min(72dvh, 48rem); margin-inline: auto 0; object-fit: contain; }
+
+@media (max-width: 840px) {
+  .notFoundPage { overflow: visible; }
+  .notFoundLayout { grid-template-columns: 1fr; gap: 0.5rem; padding-bottom: 1.5rem; }
+  .notFoundCopy { max-width: 38rem; padding-block: 1.5rem 0; }
+  .notFoundTitle { font-size: clamp(3.25rem, 12vw, 5.4rem); }
+  .notFoundArtwork { width: min(100%, 39rem); margin: 0 auto; }
+  .notFoundImage { max-height: 28rem; margin-inline: auto; }
+}
+
+@media (max-width: 480px) {
+  .notFoundHeader { padding-bottom: 0.5rem; }
+  .notFoundLayout { padding-inline: 1.1rem; }
+  .notFoundCopy { padding-top: 1rem; }
+  .notFoundTitle { font-size: clamp(3rem, 15vw, 4.35rem); }
+  .notFoundActions { align-items: stretch; flex-direction: column; }
+  .notFoundPrimaryAction,
+  .notFoundSecondaryAction { width: 100%; }
+  .notFoundImage { max-height: 22rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notFoundPrimaryAction,
+  .notFoundSecondaryAction { transition: none; }
+  .notFoundPrimaryAction:hover,
+  .notFoundSecondaryAction:hover { transform: none; }
 }

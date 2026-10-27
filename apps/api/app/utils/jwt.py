@@ -42,7 +42,9 @@ def _new_token(
         "sub": normalized_subject,
         "purpose": purpose,
         "jti": token_id,
-        "iat": int(now.timestamp()),
+        # Preserve sub-second precision so logout-all can distinguish a token
+        # created immediately after the revocation marker.
+        "iat": now.timestamp(),
         "nbf": int(now.timestamp()),
         "exp": int((now + expires_delta).timestamp()),
     }
