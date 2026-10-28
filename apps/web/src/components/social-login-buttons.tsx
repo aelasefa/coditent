@@ -11,6 +11,7 @@ import {
   isOAuthPopupResult,
   OAUTH_POPUP_ACK,
   oauthChannelName,
+  oauthPopupAttemptKey,
   type OAuthPopupResult,
 } from "@/lib/oauth-popup";
 
@@ -86,6 +87,10 @@ export function SocialLoginButtons({
       channelRef.current = null;
     }
 
+    function clearPopupAttempt(attemptId: string) {
+      localStorage.removeItem(oauthPopupAttemptKey(attemptId));
+    }
+
     function acknowledge(attemptId: string) {
       const acknowledgement = { type: OAUTH_POPUP_ACK, attemptId } as const;
       if (popupRef.current) {
@@ -111,6 +116,7 @@ export function SocialLoginButtons({
       clearPopupTimeout();
 
       if (result.type === "CODITENT_OAUTH_ERROR") {
+        clearPopupAttempt(result.attemptId);
         setPopupError(readableOAuthError(result.error));
         popupRef.current = null;
         closeChannel();
@@ -119,6 +125,7 @@ export function SocialLoginButtons({
 
       try {
         const session = await exchangeOAuthHandoff(result.handoffCode);
+        clearPopupAttempt(result.attemptId);
         acknowledge(result.attemptId);
         window.setTimeout(() => {
           popupRef.current = null;
@@ -143,6 +150,7 @@ export function SocialLoginButtons({
           })
         );
       } catch {
+        clearPopupAttempt(result.attemptId);
         acknowledge(result.attemptId);
         popupRef.current = null;
         closeChannel();
@@ -187,6 +195,7 @@ export function SocialLoginButtons({
     ].join(",");
     const attemptId = crypto.randomUUID();
     attemptIdRef.current = attemptId;
+    localStorage.setItem(oauthPopupAttemptKey(attemptId), String(Date.now()));
     channelRef.current?.close();
     if ("BroadcastChannel" in window) {
       const channel = new BroadcastChannel(oauthChannelName(attemptId));
@@ -214,6 +223,7 @@ export function SocialLoginButtons({
     );
 
     if (!popup) {
+      localStorage.removeItem(oauthPopupAttemptKey(attemptId));
       setPopupError("The sign-in popup was blocked. Allow popups for Coditent and try again.");
       channelRef.current?.close();
       channelRef.current = null;
@@ -224,6 +234,7 @@ export function SocialLoginButtons({
     popup.focus();
     timeoutRef.current = window.setTimeout(() => {
       if (!handledRef.current) {
+        localStorage.removeItem(oauthPopupAttemptKey(attemptId));
         setPopupError("Social sign-in took too long. Close the sign-in window and try again.");
         channelRef.current?.close();
         channelRef.current = null;

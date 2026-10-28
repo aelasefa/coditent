@@ -13,7 +13,9 @@ import {
   isOAuthPopupAck,
   OAUTH_POPUP_ERROR,
   OAUTH_POPUP_SUCCESS,
+  isCurrentOAuthPopupAttempt,
   oauthChannelName,
+  oauthPopupAttemptKey,
   type OAuthPopupResult,
 } from "@/lib/oauth-popup";
 import authStyles from "../../../(auth)/login/login-page.module.css";
@@ -77,6 +79,11 @@ export default function SsoCallbackPage() {
     } = callbackParamsRef.current;
     const opener = window.opener as Window | null;
     const isNamedPopup = window.name.startsWith("coditent_oauth_");
+    const popupAttemptKey = attemptId ? oauthPopupAttemptKey(attemptId) : "";
+    const isBoundPopup = Boolean(
+      popupAttemptKey &&
+      isCurrentOAuthPopupAttempt(localStorage.getItem(popupAttemptKey)),
+    );
     setProvider(currentProvider);
 
     // Remove the one-time handoff from browser history immediately after parsing it.
@@ -94,6 +101,7 @@ export default function SsoCallbackPage() {
         window.clearTimeout(responseTimer);
         responseTimer = null;
       }
+      if (popupAttemptKey) localStorage.removeItem(popupAttemptKey);
       setState("success");
       closeTimer = window.setTimeout(() => window.close(), 650);
     }
@@ -160,7 +168,7 @@ export default function SsoCallbackPage() {
     }
 
     if (callbackError) {
-      if (attemptId) {
+      if (attemptId && (isBoundPopup || isNamedPopup || opener)) {
         sendToParent({
           type: OAUTH_POPUP_ERROR,
           attemptId,
@@ -177,7 +185,11 @@ export default function SsoCallbackPage() {
       return cleanup;
     }
 
-    if (!isNamedPopup && !opener) {
+    // Google/Brave may sever window.opener and reset window.name while the
+    // popup crosses origins. The parent stores an attempt-scoped marker on
+    // the Coditent origin so the returning callback is still recognized as
+    // a popup and can complete through BroadcastChannel.
+    if (!isBoundPopup && !isNamedPopup && !opener) {
       void finishStandalone();
       return cleanup;
     }
