@@ -646,12 +646,22 @@ export async function createFriendSocketTicket(peerId: string): Promise<{ ticket
   return data;
 }
 
-export function getFriendWsUrl(peerId: string, ticket: string): string {
+function getWebSocketBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_WS_URL?.trim().replace(/\/$/, "");
+  if (configured) {
+    if (!/^wss?:\/\//.test(configured)) {
+      throw new Error("NEXT_PUBLIC_WS_URL must use ws:// or wss://");
+    }
+    return configured;
+  }
   const base = getApiBaseUrl();
-  const wsBase = base.startsWith("/")
+  return base.startsWith("/")
     ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
     : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
-  return `${wsBase}/chat/friends/${peerId}/ws?ticket=${encodeURIComponent(ticket)}`;
+}
+
+export function getFriendWsUrl(peerId: string, ticket: string): string {
+  return `${getWebSocketBaseUrl()}/chat/friends/${peerId}/ws?ticket=${encodeURIComponent(ticket)}`;
 }
 
 export interface CompanyInvitationPayload {
@@ -1075,11 +1085,7 @@ export async function createRecruitmentSocketTicket(
 }
 
 export function getRecruitmentWsUrl(applicationId: string, ticket: string): string {
-  const base = getApiBaseUrl();
-  const wsBase = base.startsWith("/")
-    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
-    : base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
-  return `${wsBase}/chat/recruitment/${applicationId}/ws?ticket=${encodeURIComponent(ticket)}`;
+  return `${getWebSocketBaseUrl()}/chat/recruitment/${applicationId}/ws?ticket=${encodeURIComponent(ticket)}`;
 }
 
 export async function listNotifications(page = 1, unreadOnly = false): Promise<import("@/lib/types").NotificationPage> {
