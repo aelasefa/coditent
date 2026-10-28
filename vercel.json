@@ -4,6 +4,7 @@
   "env": {
     "BACKEND_PROXY_URL": "https://api.coditent.app/api-proxy",
     "NEXT_PUBLIC_API_URL": "/api-proxy",
+    "NEXT_PUBLIC_WS_URL": "wss://api.coditent.app/api-proxy",
     "NEXT_PUBLIC_OAUTH_API_URL": "https://api.coditent.app/api-proxy"
   }
 }

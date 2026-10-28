@@ -31,6 +31,7 @@ compose_run_services:
 server_name: "api.coditent.app"
 grafana_server_name: "grafana.coditent.app"
 frontend_url: "https://coditent.app"
+next_public_ws_url: "wss://api.coditent.app/api-proxy"
 admin_origin: "https://admin.coditent.app"
 cors_origins: "https://coditent.app,https://www.coditent.app,https://admin.coditent.app"
 # OAuth starts through the public API proxy, which sets a host-bound browser
