@@ -286,7 +286,7 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
         'LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
     )
     assert production_compose.count(expected_linkedin_callback) == 3
-    assert 'OAUTH_BROWSER_COOKIE_PATH: "/api-proxy/auth/sso"' in production_compose
+    assert 'OAUTH_BROWSER_COOKIE_PATH: "/"' in production_compose
 
 
 def test_evaluation_browser_routes_have_no_public_http_fallback() -> None:
