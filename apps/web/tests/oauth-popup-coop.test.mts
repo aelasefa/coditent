@@ -26,3 +26,10 @@ test("OAuth popup attempts survive opener and window-name isolation", () => {
   assert.equal(isCurrentOAuthPopupAttempt("not-a-timestamp", 1000), false);
   assert.equal(isCurrentOAuthPopupAttempt(null, 1000), false);
 });
+
+test("OAuth handoffs cannot establish a standalone browser session", async () => {
+  const callback = await readFile(sources[1], "utf8");
+  assert.doesNotMatch(callback, /finishStandalone/);
+  assert.match(callback, /!isBoundPopup && !isNamedPopup && !opener/);
+  assert.match(callback, /setErrorCode\("sso_parent_unavailable"\)/);
+});

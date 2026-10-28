@@ -228,6 +228,8 @@ async def consume_oauth_attempt(
     state_token: str,
     provider: str,
     browser_id: str | None,
+    *,
+    allow_missing_browser_cookie: bool = False,
 ) -> OAuthAttempt:
     payload = _decode_oauth_state(state_token, provider)
     state_id = str(payload.get("state_id") or "")
@@ -238,16 +240,27 @@ async def consume_oauth_attempt(
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     if not browser_id:
-        logger.warning(
-            "sso_state_rejected", provider=provider, reason="browser_cookie_missing"
+        if not allow_missing_browser_cookie:
+            logger.warning(
+                "sso_state_rejected", provider=provider, reason="browser_cookie_missing"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="invalid_sso_state",
+            )
+        logger.info(
+            "sso_browser_cookie_unavailable",
+            provider=provider,
+            reason="browser_privacy_restriction",
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     if not browser_binding:
         logger.warning(
             "sso_state_rejected", provider=provider, reason="browser_binding_missing"
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
-    if not secrets.compare_digest(browser_binding, _browser_binding(browser_id)):
+    if browser_id and not secrets.compare_digest(
+        browser_binding, _browser_binding(browser_id)
+    ):
         logger.warning(
             "sso_state_rejected", provider=provider, reason="browser_binding_mismatch"
         )

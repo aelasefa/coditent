@@ -172,9 +172,16 @@ def test_oauth_attempt_is_browser_bound_single_use_and_uses_pkce(monkeypatch):
         asyncio.run(
             oauth_service.consume_oauth_attempt(attempt.state, "google", "wrong-browser")
         )
+    with pytest.raises(HTTPException, match="invalid_sso_state"):
+        asyncio.run(
+            oauth_service.consume_oauth_attempt(attempt.state, "google", None)
+        )
     consumed = asyncio.run(
         oauth_service.consume_oauth_attempt(
-            attempt.state, "google", attempt.browser_id
+            attempt.state,
+            "google",
+            None,
+            allow_missing_browser_cookie=True,
         )
     )
     assert consumed.code_verifier == attempt.code_verifier
