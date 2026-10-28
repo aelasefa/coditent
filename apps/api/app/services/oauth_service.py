@@ -232,12 +232,25 @@ async def consume_oauth_attempt(
     payload = _decode_oauth_state(state_token, provider)
     state_id = str(payload.get("state_id") or "")
     browser_binding = str(payload.get("browser") or "")
-    if (
-        not state_id
-        or not browser_id
-        or not browser_binding
-        or not secrets.compare_digest(browser_binding, _browser_binding(browser_id))
-    ):
+    if not state_id:
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="state_id_missing"
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    if not browser_id:
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="browser_cookie_missing"
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    if not browser_binding:
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="browser_binding_missing"
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    if not secrets.compare_digest(browser_binding, _browser_binding(browser_id)):
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="browser_binding_mismatch"
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     try:
         encoded = await get_async_redis().getdel(_oauth_state_key(state_id))
@@ -247,10 +260,16 @@ async def consume_oauth_attempt(
             detail="sso_state_store_unavailable",
         ) from exc
     if not encoded:
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="state_store_entry_missing"
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     try:
         stored = json.loads(encoded)
     except (TypeError, ValueError) as exc:
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="state_store_entry_invalid"
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state") from exc
     expected = {
         "provider": provider,
@@ -259,10 +278,17 @@ async def consume_oauth_attempt(
         "attempt_id": payload["attempt_id"],
     }
     if any(stored.get(key) != value for key, value in expected.items()):
+        logger.warning(
+            "sso_state_rejected", provider=provider,
+            reason="state_store_binding_mismatch",
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     verifier = str(stored.get("code_verifier") or "")
     nonce = str(stored.get("nonce") or "")
     if len(verifier) < 43 or not nonce:
+        logger.warning(
+            "sso_state_rejected", provider=provider, reason="pkce_or_nonce_invalid"
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
     return OAuthAttempt(
         state=state_token,

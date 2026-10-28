@@ -105,11 +105,24 @@ def test_oauth_browser_cookie_uses_configured_public_path(monkeypatch):
 
     response = Response()
     auth_cookies.set_oauth_browser_cookie(response, "browser-id")
-    assert "Path=/api-proxy/auth/sso" in response.headers["set-cookie"]
+    cookies = response.headers.getlist("set-cookie")
+    configured_cookie = next(
+        cookie
+        for cookie in cookies
+        if "browser-id" in cookie and "Path=/api-proxy/auth/sso" in cookie
+    )
+    assert "SameSite=none" in configured_cookie
+    assert any(
+        "Path=/auth/sso" in cookie and "Max-Age=0" in cookie
+        for cookie in cookies
+    )
 
     response = Response()
     auth_cookies.clear_oauth_browser_cookie(response)
-    assert "Path=/api-proxy/auth/sso" in response.headers["set-cookie"]
+    cookies = response.headers.getlist("set-cookie")
+    assert any("Path=/api-proxy/auth/sso" in cookie for cookie in cookies)
+    assert any("Path=/auth/sso" in cookie for cookie in cookies)
+    assert all("SameSite=none" in cookie for cookie in cookies)
 
 
 def test_oauth_state_binds_origin_and_attempt(monkeypatch):
