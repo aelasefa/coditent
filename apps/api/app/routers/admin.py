@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.dependencies import (
     require_recent_platform_admin_mfa,
 )
 from app.models import (
+    AccountDeletionRequest,
     AdminActivityLog,
     CandidateProfile,
     Company,
@@ -24,10 +25,12 @@ from app.models import (
 )
 from app.observability import get_logger
 from app.schemas import (
+    AccountDeletionOut,
     AdminActivityOut,
     AdminMutationOut,
     AdminStatsOut,
     AdminUserCreate,
+    AdminUserOut,
     AdminUserUpdate,
     CompanyListOut,
     CompanyOut,
@@ -35,11 +38,8 @@ from app.schemas import (
     CompanySubscriptionUpdate,
     OfferOut,
     RecruiterApprovalOut,
-    TokenResponse,
     UserOut,
 )
-from app.services.authentication import AuthenticationRejected, issue_access_token
-from app.services.auth_cookies import set_access_cookie
 from app.services.offer_eligibility import eligible_offer_predicates
 from app.services.passwords import hash_password
 from app.services.entitlements import EntitlementDenied, entitlement_snapshot
@@ -209,18 +209,29 @@ async def get_admin_stats(
     )
 
 
-@router.get("/users", response_model=dict[str, list[UserOut]])
+@router.get("/users", response_model=dict[str, list[AdminUserOut]])
 async def get_admin_users(
     _: Annotated[User, Depends(require_platform_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
     pagination: Annotated[tuple[int, int], Depends(get_pagination)],
-) -> dict[str, list[UserOut]]:
+) -> dict[str, list[AdminUserOut]]:
     limit, offset = pagination
     result = await db.execute(
-        select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+        select(User, AccountDeletionRequest)
+        .outerjoin(AccountDeletionRequest, AccountDeletionRequest.user_id == User.id)
+        .order_by(User.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
-    users = result.scalars().all()
-    return {"users": [UserOut.model_validate(user) for user in users]}
+    users = [
+        AdminUserOut(
+            **UserOut.model_validate(user).model_dump(),
+            deletion_status=deletion.status if deletion is not None else None,
+            deletion_execute_after=deletion.execute_after if deletion is not None else None,
+        )
+        for user, deletion in result.all()
+    ]
+    return {"users": users}
 
 
 @router.post(
@@ -352,6 +363,42 @@ async def deactivate_admin_managed_user(
         )
         await db.commit()
     return AdminMutationOut(id=user.id, detail="deactivated", is_active=False)
+
+
+@router.post("/users/{user_id}/cancel-deletion", response_model=AccountDeletionOut)
+async def cancel_admin_managed_user_deletion(
+    user_id: uuid.UUID,
+    current_admin: Annotated[User, Depends(require_recent_platform_admin_mfa)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDeletionOut:
+    """Cancel erasure only while the grace period guarantees data is intact."""
+    user = await db.scalar(select(User).where(User.id == user_id))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    deletion = await db.scalar(
+        select(AccountDeletionRequest)
+        .where(AccountDeletionRequest.user_id == user_id)
+        .with_for_update()
+    )
+    if deletion is None or deletion.status != "scheduled":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Account deletion can only be canceled before processing starts",
+        )
+    deletion.status = "canceled"
+    deletion.canceled_at = datetime.utcnow()
+    deletion.lease_owner = None
+    deletion.lease_expires_at = None
+    _queue_admin_action(
+        db,
+        action="ACCOUNT_DELETION_CANCELED_BY_ADMIN",
+        admin_user=current_admin,
+        target_user=user,
+        details="Scheduled deletion canceled during grace period; account data was not erased",
+    )
+    await db.commit()
+    await db.refresh(deletion)
+    return AccountDeletionOut.model_validate(deletion)
 
 
 @router.get("/companies", response_model=CompanyListOut)
@@ -526,50 +573,3 @@ async def get_admin_activity(
     except SQLAlchemyError:
         await db.rollback()
         return {"activity": []}
-
-
-@router.post("/impersonate/{user_id}", response_model=TokenResponse)
-async def impersonate_user(
-    user_id: uuid.UUID,
-    response: Response,
-    current_admin: Annotated[User, Depends(require_recent_platform_admin_mfa)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> TokenResponse:
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    try:
-        token = issue_access_token(
-            user,
-            extra_claims={
-                "impersonated_by": "admin",
-                "admin_id": str(current_admin.id),
-            },
-        )
-    except AuthenticationRejected as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Target account is not active",
-        ) from exc
-
-    user_out = UserOut(
-        id=user.id,
-        email=user.email,
-        role=user.role.value,
-        is_approved=user.is_approved,
-        is_active=user.is_active,
-        full_name=user.full_name,
-    )
-
-    await _log_admin_action(
-        db,
-        action="IMPERSONATION_STARTED",
-        admin_user=current_admin,
-        target_user=user,
-        details=f"Admin impersonated user role={user.role.value}",
-    )
-
-    set_access_cookie(response, token)
-    return TokenResponse(token=token, user=user_out)

@@ -33,7 +33,9 @@ after `ADMIN_ORIGIN` is enabled.
   login flow.
 - Every admin login prompts for MFA; trusted-device cookies are ignored and no
   new trusted-device cookie is issued for an admin session.
-- Impersonation requires an MFA proof less than ten minutes old.
+- Administrators cannot impersonate or sign in as another account.
+- Canceling a user's scheduled deletion requires an MFA proof less than ten
+  minutes old and is allowed only before deletion processing begins.
 - Browser storage contains no access token or trusted-device credential.
 - Requests to `https://coditent.app/admin` redirect to the protected admin
   hostname only after `ADMIN_ORIGIN` is enabled.

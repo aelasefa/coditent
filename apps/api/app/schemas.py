@@ -343,6 +343,11 @@ class AdminUserUpdate(APIModel):
         return cleaned
 
 
+class AdminUserOut(UserOut):
+    deletion_status: Literal["scheduled", "processing", "retry", "completed", "canceled"] | None = None
+    deletion_execute_after: datetime | None = None
+
+
 class AdminMutationOut(APIModel):
     id: uuid.UUID
     detail: str

@@ -530,6 +530,11 @@ export async function deactivateAdminUser(userId: string): Promise<AdminMutation
   return data;
 }
 
+export async function cancelAdminUserDeletion(userId: string): Promise<import("@/lib/types").AccountDeletionRequest> {
+  const { data } = await api.post<import("@/lib/types").AccountDeletionRequest>(`/admin/users/${userId}/cancel-deletion`);
+  return data;
+}
+
 export async function getAdminCompanies(): Promise<import("@/lib/types").Company[]> {
   const { data } = await api.get<{ companies: import("@/lib/types").Company[] }>("/admin/companies");
   return data.companies;
@@ -563,11 +568,6 @@ export async function rejectRecruiter(recruiterId: string): Promise<User> {
 export async function getAdminActivity(): Promise<AdminActivity[]> {
   const { data } = await api.get<{ activity: AdminActivity[] }>("/admin/activity");
   return data.activity;
-}
-
-export async function impersonateUser(userId: string): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>(`/admin/impersonate/${userId}`);
-  return data;
 }
 
 export async function getCompanies(): Promise<import("@/lib/types").Company[]> {
