@@ -91,8 +91,9 @@ async def test_logout_revocation_survives_empty_and_unavailable_redis(
     # revocation and the endpoint may safely report success.
     monkeypatch.setattr(authentication, "get_async_redis", lambda: _Redis(unavailable=True))
     async with sessions() as logout_db:
-        await authentication.revoke_access_session(payload, logout_db)
-        await authentication.revoke_trusted_device(trusted_device_token, logout_db)
+        await authentication.revoke_logout_credentials(
+            payload, trusted_device_token, logout_db
+        )
 
     async with sessions() as verify:
         durable = await verify.scalar(

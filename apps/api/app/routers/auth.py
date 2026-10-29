@@ -86,8 +86,7 @@ from app.services.authentication import (
     ensure_credential_matches_account,
     ensure_mfa_challenge_active,
     issue_access_token,
-    revoke_access_session,
-    revoke_trusted_device,
+    revoke_logout_credentials,
     trusted_device_is_valid,
 )
 from app.utils.jwt import verify_access_token, verify_mfa_token
@@ -1705,9 +1704,10 @@ async def logout(
 ) -> Response:
     """Revoke the active access session and remembered-device credential."""
     try:
-        await revoke_access_session(payload, db)
-        await revoke_trusted_device(
-            request.cookies.get(settings.trusted_device_cookie_name), db
+        await revoke_logout_credentials(
+            payload,
+            request.cookies.get(settings.trusted_device_cookie_name),
+            db,
         )
     except AuthenticationStoreUnavailable as exc:
         # Do not claim logout while a still-valid bearer session could remain

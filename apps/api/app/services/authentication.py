@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -366,3 +367,105 @@ async def revoke_trusted_device(token: str | None, db: AsyncSession) -> None:
         )
     except RedisError:
         return
+
+
+async def revoke_logout_credentials(
+    payload: dict, trusted_device_token: str | None, db: AsyncSession
+) -> None:
+    """Durably revoke one login and its remembered device in one transaction."""
+    from time import time
+
+    from sqlalchemy import delete
+    from sqlalchemy.dialects.postgresql import insert
+    from sqlalchemy.exc import SQLAlchemyError
+
+    try:
+        session_id = UUID(str(payload.get("sid") or ""))
+        user_id = UUID(str(payload.get("sub") or ""))
+        session_expiry_epoch = int(payload.get("exp") or 0)
+        session_expires_at = datetime.fromtimestamp(
+            session_expiry_epoch, tz=timezone.utc
+        ).replace(tzinfo=None)
+    except (TypeError, ValueError, OverflowError, AttributeError) as exc:
+        raise AuthenticationRejected("Invalid access session") from exc
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if session_expires_at <= now:
+        raise AuthenticationRejected("Access session expired")
+
+    trusted: tuple[UUID, UUID, int, datetime] | None = None
+    if trusted_device_token:
+        try:
+            trusted_payload = verify_trusted_device_token(trusted_device_token)
+            trusted_expiry_epoch = int(trusted_payload.get("exp") or 0)
+            trusted = (
+                UUID(str(trusted_payload["jti"])),
+                UUID(str(trusted_payload["sub"])),
+                trusted_expiry_epoch,
+                datetime.fromtimestamp(
+                    trusted_expiry_epoch, tz=timezone.utc
+                ).replace(tzinfo=None),
+            )
+        except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+            trusted = None
+
+    try:
+        await db.execute(delete(RevokedSession).where(RevokedSession.expires_at <= now))
+        await db.execute(
+            insert(RevokedSession)
+            .values(
+                session_id=session_id,
+                user_id=user_id,
+                expires_at=session_expires_at,
+                revoked_at=now,
+            )
+            .on_conflict_do_nothing(index_elements=[RevokedSession.session_id])
+        )
+        if trusted is not None:
+            token_id, trusted_user_id, _, trusted_expires_at = trusted
+            await db.execute(
+                delete(RevokedTrustedDevice).where(
+                    RevokedTrustedDevice.expires_at <= now
+                )
+            )
+            await db.execute(
+                insert(RevokedTrustedDevice)
+                .values(
+                    token_id=token_id,
+                    user_id=trusted_user_id,
+                    expires_at=trusted_expires_at,
+                    revoked_at=now,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[RevokedTrustedDevice.token_id]
+                )
+            )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise AuthenticationStoreUnavailable("Logout revocation unavailable") from exc
+
+    redis = get_async_redis()
+
+    async def publish(key: str, ttl: int) -> None:
+        try:
+            await redis.set(key, "1", ex=max(1, ttl))
+        except RedisError:
+            # PostgreSQL is authoritative; cache publication is best effort.
+            return
+
+    publications = [
+        publish(
+            _revoked_session_key(str(session_id)),
+            session_expiry_epoch - int(time()),
+        )
+    ]
+    if trusted is not None:
+        token_id, _, trusted_expiry_epoch, _ = trusted
+        publications.append(
+            publish(
+                _revoked_trusted_device_key(str(token_id)),
+                trusted_expiry_epoch - int(time()),
+            )
+        )
+    await asyncio.gather(*publications)

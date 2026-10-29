@@ -9,12 +9,17 @@ export async function logoutAndRedirect({
   redirectTo = "/login",
   endCandidatePresence = false,
 }: LogoutOptions = {}): Promise<void> {
-  const operations: Promise<unknown>[] = [logoutSession()];
-
+  const sessionRevocation = logoutSession();
   if (endCandidatePresence) {
-    operations.push(endPresence(getPresenceConnectionId()));
+    // Presence is advisory and expires automatically. Do not make secure
+    // session revocation or navigation wait for this best-effort cleanup.
+    void endPresence(getPresenceConnectionId()).catch(() => undefined);
   }
-
-  await Promise.allSettled(operations);
+  try {
+    await sessionRevocation;
+  } catch {
+    // logoutSession always clears local credentials. Redirect even when the
+    // server is unavailable so the browser never remains visibly signed in.
+  }
   window.location.replace(redirectTo);
 }
