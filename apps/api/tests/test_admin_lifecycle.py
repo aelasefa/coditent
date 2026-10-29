@@ -1,12 +1,13 @@
 """Deterministic regressions for admin CRUD and retention-safe organization removal."""
 
+from datetime import datetime
 from inspect import unwrap
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
-from app.models import AdminActivityLog, Company, Offer, OfferType, User, UserRole
+from app.models import AccountDeletionRequest, AdminActivityLog, Company, Offer, OfferType, User, UserRole
 from app.routers import admin
 from app.schemas import AdminUserCreate
 from app.services.authentication import AuthenticationRejected, ensure_account_can_authenticate
@@ -65,6 +66,25 @@ class _CreateDatabase:
         return None
 
 
+class _CancelDeletionDatabase:
+    def __init__(self, user: User, deletion: AccountDeletionRequest) -> None:
+        self.values = [user, deletion]
+        self.added: list[object] = []
+        self.commits = 0
+
+    async def scalar(self, *_args, **_kwargs):
+        return self.values.pop(0)
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def refresh(self, _value: object) -> None:
+        return None
+
+
 def _user(*, role: UserRole, company_id=None, company_role=None) -> User:
     return User(
         id=uuid4(),
@@ -85,6 +105,41 @@ def test_deactivated_account_is_rejected_by_shared_authentication_gate() -> None
     user.is_active = False
     with pytest.raises(AuthenticationRejected, match="deactivated"):
         ensure_account_can_authenticate(user)
+
+
+def test_admin_router_exposes_no_impersonation_endpoint() -> None:
+    assert not any("impersonate" in route.path for route in admin.router.routes)
+
+
+@pytest.mark.asyncio
+async def test_admin_can_cancel_scheduled_deletion_without_changing_user_data() -> None:
+    current_admin = _user(role=UserRole.PLATFORM_ADMIN)
+    target = _user(role=UserRole.CANDIDATE)
+    deletion = AccountDeletionRequest(
+        id=uuid4(),
+        user_id=target.id,
+        status="scheduled",
+        execute_after=datetime.utcnow(),
+        next_attempt_at=datetime.utcnow(),
+        requested_at=datetime.utcnow(),
+    )
+    database = _CancelDeletionDatabase(target, deletion)
+
+    result = await unwrap(admin.cancel_admin_managed_user_deletion)(
+        target.id,
+        current_admin,
+        database,  # type: ignore[arg-type]
+    )
+
+    assert result.status == "canceled"
+    assert target.is_active is True
+    assert target.email.endswith("@example.test")
+    assert database.commits == 1
+    assert any(
+        isinstance(item, AdminActivityLog)
+        and item.action == "ACCOUNT_DELETION_CANCELED_BY_ADMIN"
+        for item in database.added
+    )
 
 
 @pytest.mark.asyncio

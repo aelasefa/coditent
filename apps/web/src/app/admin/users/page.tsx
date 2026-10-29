@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { ConfirmDialog } from "@/components/company/ConfirmDialog";
@@ -14,13 +13,12 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import {
+  cancelAdminUserDeletion,
   createAdminUser,
   deactivateAdminUser,
   getAdminUsers,
-  impersonateUser,
   updateAdminUser,
 } from "@/lib/api";
-import { saveToken } from "@/lib/auth";
 import { passwordPolicyError, passwordRequirements } from "@/lib/password-policy";
 import type { User } from "@/lib/types";
 import { FiEdit2, FiPlus, FiSearch, FiUsers } from "react-icons/fi";
@@ -34,7 +32,6 @@ function apiMessage(error: unknown, fallback: string): string {
 }
 
 export default function AdminUsersPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const usersQ = useQuery({ queryKey: ["admin", "users"], queryFn: getAdminUsers });
@@ -44,6 +41,7 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [editing, setEditing] = useState<User | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
+  const [cancelDeletionTarget, setCancelDeletionTarget] = useState<User | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
   const createMut = useMutation({
@@ -75,16 +73,14 @@ export default function AdminUsersPage() {
     },
     onError: (error) => toast(apiMessage(error, "Account could not be deactivated"), { variant: "error" }),
   });
-  const impersonateMut = useMutation({
-    mutationFn: impersonateUser,
-    onSuccess: (data) => {
-      saveToken(data.token);
-      try { localStorage.setItem("user", JSON.stringify(data.user)); } catch { /* storage optional */ }
-      if (data.user.role === "COMPANY_USER") return router.push("/company");
-      if (data.user.role === "RECRUITER") return router.push("/companies");
-      router.push("/dashboard");
+  const cancelDeletionMut = useMutation({
+    mutationFn: cancelAdminUserDeletion,
+    onSuccess: () => {
+      void refresh();
+      setCancelDeletionTarget(null);
+      toast("Account deletion canceled; user data was not erased", { variant: "success" });
     },
-    onError: (error) => toast(apiMessage(error, "Impersonation failed"), { variant: "error" }),
+    onError: (error) => toast(apiMessage(error, "Account deletion could not be canceled"), { variant: "error" }),
   });
 
   const users = useMemo(() => usersQ.data ?? [], [usersQ.data]);
@@ -112,7 +108,7 @@ export default function AdminUsersPage() {
       <div className="space-y-6">
         <PageHeader
           title="Users"
-          subtitle={`${users.length} accounts. Changes and impersonation are audited.`}
+          subtitle={`${users.length} accounts. Pauses, resumptions, and deletion cancellations are audited.`}
           badge={<Button size="sm" onClick={() => { setForm(emptyForm); setCreateOpen(true); }}><FiPlus /> Create candidate</Button>}
         />
 
@@ -137,14 +133,15 @@ export default function AdminUsersPage() {
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-foreground">{user.full_name}</span><span className="block truncate text-xs text-muted-foreground">{user.email}</span></span>
                 <StatusBadge status={user.is_active === false ? "inactive" : "active"} size="sm" />
                 <StatusBadge status={user.role} size="sm" showDot={false} />
+                {user.deletion_status === "scheduled" ? <StatusBadge status="Deletion scheduled" size="sm" showDot={false} /> : null}
                 <Button size="sm" variant="outline" onClick={() => setEditing(user)} aria-label={`Edit ${user.full_name}`}><FiEdit2 /> Edit</Button>
+                {user.deletion_status === "scheduled" ? (
+                  <Button size="sm" variant="outline" onClick={() => setCancelDeletionTarget(user)}>Cancel deletion</Button>
+                ) : null}
                 {user.is_active === false ? (
-                  <Button size="sm" variant="outline" loading={updateMut.isPending} onClick={() => updateMut.mutate({ id: user.id, payload: { is_active: true } })}>Reactivate</Button>
+                  <Button size="sm" variant="outline" loading={updateMut.isPending} onClick={() => updateMut.mutate({ id: user.id, payload: { is_active: true } })}>Resume account</Button>
                 ) : user.role !== "PLATFORM_ADMIN" && user.role !== "ADMIN" ? (
-                  <>
-                    <Button size="sm" variant="outline" loading={impersonateMut.isPending} onClick={() => impersonateMut.mutate(user.id)}>Sign in as user</Button>
-                    <Button size="sm" variant="danger" onClick={() => setDeactivateTarget(user)}>Deactivate</Button>
-                  </>
+                  <Button size="sm" variant="danger" onClick={() => setDeactivateTarget(user)}>Pause account</Button>
                 ) : null}
               </li>
             ))}
@@ -165,7 +162,8 @@ export default function AdminUsersPage() {
         {editing && <div className="space-y-3"><label className="block text-xs font-medium">Full name<input className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-3" value={editing.full_name} onChange={(event) => setEditing({ ...editing, full_name: event.target.value })} maxLength={100} /></label><label className="block text-xs font-medium">Email<input className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-3" type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label></div>}
       </Modal>
 
-      <ConfirmDialog isOpen={!!deactivateTarget} onClose={() => setDeactivateTarget(null)} onConfirm={() => deactivateTarget && deactivateMut.mutate(deactivateTarget.id)} title="Deactivate account?" message="The user will be signed out immediately. Their applications, messages, and audit history are retained." confirmLabel="Deactivate" isLoading={deactivateMut.isPending} />
+      <ConfirmDialog isOpen={!!deactivateTarget} onClose={() => setDeactivateTarget(null)} onConfirm={() => deactivateTarget && deactivateMut.mutate(deactivateTarget.id)} title="Pause account?" message="The user will be signed out immediately. Their applications, messages, and audit history are retained and can be restored by resuming access." confirmLabel="Pause account" isLoading={deactivateMut.isPending} />
+      <ConfirmDialog isOpen={!!cancelDeletionTarget} onClose={() => setCancelDeletionTarget(null)} onConfirm={() => cancelDeletionTarget && cancelDeletionMut.mutate(cancelDeletionTarget.id)} title="Cancel account deletion?" message="This is only allowed during the seven-day grace period, before deletion processing starts. The account and its data will remain unchanged." confirmLabel="Cancel deletion" isLoading={cancelDeletionMut.isPending} />
     </AdminShell>
   );
 }

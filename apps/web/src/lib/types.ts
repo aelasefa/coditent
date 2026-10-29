@@ -11,6 +11,8 @@ export interface User {
   avatar_url?: string | null;
   company_id?: string | null;
   company_role?: CompanyRole | null;
+  deletion_status?: "scheduled" | "processing" | "retry" | "completed" | "canceled" | null;
+  deletion_execute_after?: string | null;
 }
 
 export interface AdminMutationResult {
