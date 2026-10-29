@@ -7,7 +7,7 @@ APP_DIR="${APP_DIR:-/opt/coditent}"
 IMAGE_URI="${1:-}"
 EXPECTED_COMMIT="${2:-}"
 AWS_REGION="${3:-}"
-COMPOSE_SERVICES=(vault redis api worker ai-dispatcher)
+RELEASE_SERVICES=(api worker ai-dispatcher)
 IMAGE_SERVICES=(api worker ai-dispatcher)
 ENV_FILE="$APP_DIR/.env"
 PREVIOUS_IMAGE_FILE="$APP_DIR/.previous-api-image"
@@ -144,7 +144,12 @@ export CODITENT_API_IMAGE="$IMAGE_URI"
 export COMPOSE_FILE="docker-compose.yml:docker-compose.production.yml"
 
 echo "=== Starting production backend services without building ==="
-docker compose up -d --no-build --remove-orphans --force-recreate "${COMPOSE_SERVICES[@]}"
+# Vault uses Shamir sealing and becomes sealed whenever its container restarts.
+# Redis also holds live, ephemeral application state. They are infrastructure,
+# not release services, so a routine application deployment must not recreate
+# either container. vault_load_env above already verifies/starts Vault, and the
+# release services require the existing healthy Redis instance.
+docker compose up -d --no-build --no-deps --remove-orphans --force-recreate "${RELEASE_SERVICES[@]}"
 
 echo "=== Waiting for application readiness ==="
 for attempt in {1..30}; do
@@ -168,7 +173,7 @@ if [[ -s "$PREVIOUS_IMAGE_FILE" ]]; then
     echo "=== Restoring the previous API image ===" >&2
     set_image_in_env "$PREVIOUS_IMAGE"
     export CODITENT_API_IMAGE="$PREVIOUS_IMAGE"
-    docker compose up -d --no-build --remove-orphans --force-recreate "${COMPOSE_SERVICES[@]}" || true
+    docker compose up -d --no-build --no-deps --remove-orphans --force-recreate "${RELEASE_SERVICES[@]}" || true
   fi
 fi
 
