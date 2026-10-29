@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Logo } from "@/components/ui/logo";
-import { exchangeOAuthHandoff, getMe, verifyTwoFactor } from "@/lib/api";
+import { verifyTwoFactor } from "@/lib/api";
 import { saveToken, saveTrustedDevice } from "@/lib/auth";
 import { getPostAuthDestination } from "@/lib/candidate-onboarding";
 import {
@@ -135,38 +135,6 @@ export default function SsoCallbackPage() {
       return sent;
     }
 
-    async function finishStandalone() {
-      if (!handoffCode) {
-        setErrorCode(callbackError ?? "invalid_sso_callback");
-        setState("error");
-        return;
-      }
-      try {
-        const session = await exchangeOAuthHandoff(handoffCode);
-        if (!active) return;
-        if ("require_2fa" in session) {
-          setMfaChallenge({
-            token: session.mfa_token,
-            isNewRegistration: Boolean(session.is_new_registration),
-          });
-          setState("mfa");
-          return;
-        }
-        saveToken(session.token);
-        const user = await getMe();
-        localStorage.setItem("user", JSON.stringify(user));
-        router.replace(
-          await getPostAuthDestination(queryClient, user, {
-            isNewRegistration: session.is_new_registration,
-          })
-        );
-      } catch {
-        if (!active) return;
-        setErrorCode("sso_session_missing");
-        setState("error");
-      }
-    }
-
     if (callbackError) {
       if (attemptId && (isBoundPopup || isNamedPopup || opener)) {
         sendToParent({
@@ -181,7 +149,8 @@ export default function SsoCallbackPage() {
     }
 
     if (!handoffCode || !attemptId) {
-      void finishStandalone();
+      setErrorCode("invalid_sso_callback");
+      setState("error");
       return cleanup;
     }
 
@@ -190,7 +159,12 @@ export default function SsoCallbackPage() {
     // the Coditent origin so the returning callback is still recognized as
     // a popup and can complete through BroadcastChannel.
     if (!isBoundPopup && !isNamedPopup && !opener) {
-      void finishStandalone();
+      // The browser may withhold the API's short-lived binding cookie on a
+      // cross-site OAuth return. The one-time handoff is therefore accepted
+      // only by the original Coditent popup flow, whose parent owns the
+      // matching attempt marker and BroadcastChannel.
+      setErrorCode("sso_parent_unavailable");
+      setState("error");
       return cleanup;
     }
 

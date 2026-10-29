@@ -594,6 +594,9 @@ async def sso_callback(
                     state,
                     oauth_provider.name,
                     request.cookies.get(settings.oauth_browser_cookie_name),
+                    allow_missing_browser_cookie=(
+                        "text/html" in request.headers.get("accept", "").lower()
+                    ),
                 )
                 popup_origin = oauth_attempt.popup_origin
                 attempt_id = oauth_attempt.attempt_id
@@ -618,6 +621,9 @@ async def sso_callback(
             state,
             oauth_provider.name,
             request.cookies.get(settings.oauth_browser_cookie_name),
+            allow_missing_browser_cookie=(
+                "text/html" in request.headers.get("accept", "").lower()
+            ),
         )
         popup_origin, attempt_id = oauth_attempt.popup_origin, oauth_attempt.attempt_id
         request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))

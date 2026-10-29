@@ -654,6 +654,16 @@ function getWebSocketBaseUrl(): string {
     }
     return configured;
   }
+
+  // Vercel does not proxy WebSocket upgrades. Keep production chat sockets on
+  // the API ingress even when the public build-time variable is unavailable.
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "coditent.app" || window.location.hostname === "www.coditent.app")
+  ) {
+    return "wss://api.coditent.app/api-proxy";
+  }
+
   const base = getApiBaseUrl();
   return base.startsWith("/")
     ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${base}`
