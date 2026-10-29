@@ -32,7 +32,7 @@ function loadLogoutFlow(api: object, replace: (path: string) => void) {
   }) => Promise<void>;
 }
 
-test("candidate logout revokes the session and ends presence concurrently", async () => {
+test("candidate logout waits for session revocation but not advisory presence", async () => {
   const calls: string[] = [];
   const redirects: string[] = [];
   let finishLogout!: () => void;
@@ -53,11 +53,9 @@ test("candidate logout revokes the session and ends presence concurrently", asyn
   assert.deepEqual(calls, ["logout", "connection", "presence:presence-id"]);
   assert.deepEqual(redirects, []);
   finishLogout();
-  await Promise.resolve();
-  assert.deepEqual(redirects, []);
-  finishPresence();
   await operation;
   assert.deepEqual(redirects, ["/login"]);
+  finishPresence();
 });
 
 test("logout redirects after failures and skips candidate presence when unused", async () => {
