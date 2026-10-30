@@ -79,7 +79,7 @@ export function CandidateDetail({
   chatUnlocked: boolean;
   onStage: (
     status: string,
-    interview?: { scheduledAt: string; notes?: string }
+    interview?: { scheduledAt?: string; notes?: string; action?: "schedule" | "reschedule" | "cancel" }
   ) => void;
   onReject: () => void;
 }) {
@@ -364,6 +364,16 @@ export function CandidateDetail({
                       </div>
                     </div>
                   </div>
+                  {canMoveStage ? (
+                    <div className="rounded-xl border border-border bg-surface p-4">
+                      <p className="text-xs font-bold text-foreground">Change interview</p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+                        <input type="datetime-local" value={interviewAt} onChange={(event) => setInterviewAt(event.target.value)} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" aria-label="New interview date and time" />
+                        <button type="button" disabled={stagePending || !interviewAt} onClick={() => onStage("interview", { scheduledAt: new Date(interviewAt).toISOString(), notes: interviewNotes || app.interview_notes || undefined, action: "reschedule" })} className="rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">Reschedule</button>
+                        <button type="button" disabled={stagePending} onClick={() => onStage("interview", { action: "cancel" })} className="rounded-lg border border-danger/30 px-3 text-xs font-semibold text-danger disabled:opacity-50">Cancel interview</button>
+                      </div>
+                    </div>
+                  ) : null}
                   {canMoveStage ? (
                     <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); feedbackMut.mutate(); }}>
                       <div className="grid gap-3 sm:grid-cols-2">

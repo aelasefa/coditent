@@ -349,6 +349,7 @@ def _message_out(msg: ChatMessage, sender: User | None) -> ChatMessageOut:
         read_at=msg.read_at,
         sender=UserOut.model_validate(sender) if sender else None,
         application_id=msg.application_id,
+        message_kind=msg.message_kind,
     )
 
 
@@ -638,6 +639,10 @@ async def combined_inbox(
                 ),
                 unread_count=int(item.get("unread_count") or 0),
                 can_message=bool(item.get("chat_enabled")),
+                company_id=item.get("company_id"),
+                company_name=item.get("company_name"),
+                company_logo_url=item.get("company_logo_url"),
+                offer_title=item.get("offer_title"),
             )
         )
     conversations.sort(

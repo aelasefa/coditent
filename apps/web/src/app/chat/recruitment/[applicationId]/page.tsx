@@ -190,10 +190,10 @@ export default function RecruitmentChatPage({ params }: { params: Promise<{ appl
       } : null}
     >
         <ChatHeader
-          title={ctx?.peer?.full_name ?? peerRole}
+          title={ctx?.company_name ?? "Company"}
           subtitle={ctx?.offer_title}
           context={ctx ? `${ctx.company_name ?? "Company"} · ${stageLabel(ctx.status)}` : undefined}
-          avatarSrc={ctx?.peer?.avatar_url ?? companyLogo}
+          avatarSrc={companyLogo}
           status={ctx ? `${peerRole} · ${recruitmentLive ? "Live" : "Auto-refresh"} · private recruitment conversation` : undefined}
           backHref={backHref}
         />

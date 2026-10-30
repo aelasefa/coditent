@@ -38,10 +38,12 @@ export function mapCombinedInbox(items: ConversationSummary[]): InboxItem[] {
   return items.map((item): InboxItem => ({
     href: item.href,
     kind: item.conversation_type === "FRIEND" ? "friend" : "recruitment",
-    name: item.peer?.full_name ?? (item.conversation_type === "FRIEND" ? "Friend" : item.badge),
-    avatar: item.peer?.avatar_url,
-    context: item.context,
-    detail: item.detail,
+    name: item.conversation_type === "RECRUITMENT" ? (item.company_name || "Company") : (item.peer?.full_name ?? "Friend"),
+    avatar: item.conversation_type === "RECRUITMENT"
+      ? (item.company_id && item.company_logo_url ? `${process.env.NEXT_PUBLIC_API_URL || "/api-proxy"}/companies/${item.company_id}/logo` : undefined)
+      : item.peer?.avatar_url,
+    context: item.conversation_type === "RECRUITMENT" ? (item.offer_title || item.context) : item.context,
+    detail: item.conversation_type === "RECRUITMENT" && item.status ? `${item.status.replaceAll("_", " ")} stage` : item.detail,
     preview: item.last_message || "No messages yet",
     date: item.last_at,
     stage: item.status ?? undefined,

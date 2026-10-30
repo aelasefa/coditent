@@ -55,11 +55,12 @@ export function MessageList({
   return (
     <div role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions text" className="space-y-1 overflow-y-auto p-4">
       {messages.map((m, index) => {
+        const systemMessage = Boolean(m.message_kind && m.message_kind !== "human");
         const day = dayLabel(m.created_at);
         const showDay = day && day !== lastDay;
         const sending = m.delivery_status === "sending";
         const failed = m.delivery_status === "failed";
-        const mine = sending || failed || (myId ? m.sender_id === myId : false);
+        const mine = !systemMessage && (sending || failed || (myId ? m.sender_id === myId : false));
         const grouped = !showDay && lastSender === m.sender_id;
         const showDeliveryState = mine && (sending || failed || index === latestOutgoingIndex);
         lastDay = day;
@@ -69,12 +70,12 @@ export function MessageList({
             {showDay ? (
               <p suppressHydrationWarning className="py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{day}</p>
             ) : null}
-            <div className={cn("flex", mine ? "justify-end" : "justify-start", grouped ? "mt-0.5" : "mt-2")}>
+            <div className={cn("flex", systemMessage ? "justify-center" : mine ? "justify-end" : "justify-start", grouped ? "mt-0.5" : "mt-2")}>
               <div className="flex max-w-[80%] flex-col items-end">
                 <div
                   className={cn(
                     "w-fit rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                    mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground",
+                    systemMessage ? "max-w-lg border border-primary/20 bg-primary/5 text-foreground shadow-sm" : mine ? "bg-primary text-primary-foreground" : "self-start bg-surface-secondary text-foreground",
                     failed && "opacity-80 ring-1 ring-danger/40",
                   )}
                 >

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -13,7 +13,7 @@ from app.core.audit import log_audit
 from app.core.permissions import can
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Application, CVAsset, CandidateProfile, Company, InterviewFeedback, Offer, User
+from app.models import Application, ChatMessage, CVAsset, CandidateProfile, Company, InterviewFeedback, Offer, User
 from app.schemas import (
     ApplicationCreate,
     ApplicationCreatedOut,
@@ -43,6 +43,29 @@ from app.services.recruitment_chat import (
 )
 
 router = APIRouter()
+
+
+def _interview_message(company_name: str, job_title: str, data: ApplicationStatusUpdate) -> tuple[str, str]:
+    action = data.interview_action
+    heading = {"schedule": "Interview Scheduled", "reschedule": "Interview Rescheduled", "cancel": "Interview Canceled"}[action]
+    if action == "cancel":
+        return "interview_canceled", f"{heading}\n\n{company_name} canceled the interview for {job_title}."
+    scheduled = data.interview_scheduled_at
+    assert scheduled is not None
+    shown = scheduled.replace(tzinfo=timezone.utc)
+    tz_name = data.interview_timezone or "UTC"
+    try:
+        from zoneinfo import ZoneInfo
+        shown = shown.astimezone(ZoneInfo(tz_name))
+    except (KeyError, ValueError):
+        tz_name = "UTC"
+    details = [heading, "", f"{company_name} has invited you to an interview for {job_title}.", "", f"Date: {shown.strftime('%B %-d, %Y')}", f"Time: {shown.strftime('%-I:%M %p')} ({tz_name})"]
+    if data.interview_meeting_link:
+        details.append(f"Meeting: {data.interview_meeting_link}")
+    elif data.interview_location:
+        details.append(f"Location: {data.interview_location}")
+    details.extend(["", "Please be ready at the scheduled time."])
+    return f"interview_{'rescheduled' if action == 'reschedule' else 'scheduled'}", "\n".join(details)
 
 
 def _missing_application_profile_fields(
@@ -355,7 +378,6 @@ async def download_application_cv(
             raise HTTPException(status_code=404, detail="Application not found")
     elif current_user.role.value != "PLATFORM_ADMIN":
         raise HTTPException(status_code=403, detail="Forbidden")
-
     try:
         cv_asset = await get_application_cv_asset(db, app)
     except CVAssetOwnershipError as exc:
@@ -574,11 +596,17 @@ async def update_application_status(
     if current_user.role.value == "COMPANY_USER":
         if not can(current_user.company_role, "move_recruitment_stage"):
             raise HTTPException(status_code=403, detail="Forbidden")
+        if new_status == "interview" and current_user.company_role not in {"OWNER", "HR", "RECRUITER"}:
+            raise HTTPException(status_code=403, detail="Only an owner, HR member, or recruiter can manage interviews")
         offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
         if not offer or offer.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Application not found")
     elif current_user.role.value != "PLATFORM_ADMIN":
         raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        offer = (await db.execute(select(Offer).where(Offer.id == app.opportunity_id))).scalar_one_or_none()
+        if offer is None:
+            raise HTTPException(status_code=404, detail="Application not found")
 
     if app.stage_version != data.expected_version:
         raise HTTPException(
@@ -589,7 +617,8 @@ async def update_application_status(
                 "current_version": app.stage_version,
             },
         )
-    if new_status == app.status:
+    interview_update = new_status == app.status == "interview" and data.interview_action in {"reschedule", "cancel"}
+    if new_status == app.status and not interview_update:
         return ApplicationStatusOut(
             id=app.id,
             status=app.status,
@@ -597,38 +626,51 @@ async def update_application_status(
             chat_enabled=is_chat_enabled_for_status(app.status),
         )
     allowed = _ALLOWED_STAGE_TRANSITIONS.get(app.status, frozenset())
-    if new_status not in allowed:
+    if not interview_update and new_status not in allowed:
         raise HTTPException(
             status_code=409,
             detail=f"Transition from {app.status} to {new_status} is not allowed",
         )
-    await _validate_stage_evidence(db, app, data)
+    if data.interview_action != "cancel":
+        await _validate_stage_evidence(db, app, data)
 
     was_enabled = is_chat_enabled_for_status(app.status)
     app.status = new_status
     app.stage_version += 1
     app.status_changed_at = datetime.utcnow()
+    system_message: ChatMessage | None = None
     if new_status == "interview":
-        app.interview_scheduled_at = data.interview_scheduled_at
+        if data.interview_action != "cancel":
+            app.interview_scheduled_at = data.interview_scheduled_at
         app.interview_notes = data.interview_notes
+        app.interview_timezone = data.interview_timezone
+        app.interview_meeting_link = data.interview_meeting_link
+        app.interview_location = data.interview_location
+        app.interview_status = "canceled" if data.interview_action == "cancel" else "scheduled"
+        company = (await db.execute(select(Company).where(Company.id == offer.company_id))).scalar_one_or_none()
+        kind, content = _interview_message(company.name if company else offer.company, offer.title, data)
+        system_message = ChatMessage(sender_id=current_user.id, receiver_id=app.candidate_id, application_id=app.id, content=content, message_kind=kind, event_key=f"interview:{app.id}:{data.interview_action}:{app.stage_version}")
+        db.add(system_message)
     label = new_status.replace("_", " ").title()
     await create_notification(
         db,
         user_id=app.candidate_id,
         category="interview" if new_status == "interview" else "application",
-        title="Interview scheduled" if new_status == "interview" else "Application updated",
+        title=("Interview canceled" if data.interview_action == "cancel" else "Interview rescheduled" if data.interview_action == "reschedule" else "Interview scheduled") if new_status == "interview" else "Application updated",
         body=(
             f"Your application moved to {label}."
             if new_status != "interview"
-            else f"Your application moved to {label}. Open it to review the scheduled time."
+            else f"{company.name if company else offer.company} updated your interview for {offer.title}. Open the recruitment conversation for details."
         ),
-        action_url="/dashboard/applications",
+        action_url=f"/chat/recruitment/{app.id}" if new_status == "interview" else "/dashboard/applications",
         resource_type="application",
         resource_id=app.id,
         dedupe_key=f"application-stage:{app.id}:{app.stage_version}",
     )
     await db.commit()
     await db.refresh(app)
+    if system_message is not None:
+        await db.refresh(system_message)
     action = (
         "CANDIDATE_SHORTLISTED"
         if new_status == "shortlisted"
@@ -655,7 +697,10 @@ async def update_application_status(
             resource_id=app.id,
             details=new_status,
         )
-    from app.routers.chat import broadcast_recruitment_state
+    from app.routers.chat import _broadcast_recruitment_message, _message_out, broadcast_recruitment_state
+
+    if system_message is not None:
+        await _broadcast_recruitment_message(str(app.id), _message_out(system_message, current_user))
 
     await broadcast_recruitment_state(
         str(app.id),
