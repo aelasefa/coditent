@@ -74,14 +74,14 @@ def test_company_invite_sender_includes_inline_art():
 @pytest.mark.asyncio
 async def test_immediate_delivery_exception_keeps_committed_invitation_successful():
     db = SimpleNamespace(rollback=AsyncMock())
-    delivery = SimpleNamespace(id=uuid.uuid4())
+    delivery_id = uuid.uuid4()
 
     with patch.object(
         invitations,
         "deliver_email_job",
         AsyncMock(side_effect=RuntimeError("provider unavailable")),
     ):
-        sent, status, error = await invitations._attempt_queued_delivery(db, delivery)
+        sent, status, error = await invitations._attempt_queued_delivery(db, delivery_id)
 
     assert sent is False
     assert status == "retry"
@@ -92,14 +92,14 @@ async def test_immediate_delivery_exception_keeps_committed_invitation_successfu
 @pytest.mark.asyncio
 async def test_unexpected_delivery_status_is_normalized_to_retry():
     db = SimpleNamespace(rollback=AsyncMock())
-    delivery = SimpleNamespace(id=uuid.uuid4())
+    delivery_id = uuid.uuid4()
 
     with patch.object(
         invitations,
         "deliver_email_job",
         AsyncMock(return_value="missing"),
     ):
-        sent, status, error = await invitations._attempt_queued_delivery(db, delivery)
+        sent, status, error = await invitations._attempt_queued_delivery(db, delivery_id)
 
     assert sent is False
     assert status == "retry"

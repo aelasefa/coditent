@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 
@@ -89,6 +90,22 @@ def _quoted_table_list(tables: tuple[str, ...]) -> str:
     return ", ".join(f'public."{table}"' for table in tables)
 
 
+def _existing_data_api_roles() -> tuple[str, ...]:
+    """Return Supabase Data API roles present in the current database.
+
+    Production Supabase provides both roles. CI uses plain PostgreSQL, where
+    neither role exists; privilege statements naming absent roles fail the
+    entire transactional migration.
+    """
+    rows = op.get_bind().execute(
+        sa.text(
+            "SELECT rolname FROM pg_roles "
+            "WHERE rolname IN ('anon', 'authenticated') ORDER BY rolname"
+        )
+    )
+    return tuple(str(role) for role in rows.scalars())
+
+
 def upgrade() -> None:
     for table in APPLICATION_TABLES:
         op.execute(f'ALTER TABLE public."{table}" ENABLE ROW LEVEL SECURITY')
@@ -97,16 +114,22 @@ def upgrade() -> None:
     # API roles. RLS is the row boundary; revoking grants is defense in depth
     # and makes the intended server-only data path explicit.
     tables = _quoted_table_list(APPLICATION_TABLES)
-    op.execute(f"REVOKE ALL PRIVILEGES ON TABLE {tables} FROM anon, authenticated")
-    op.execute("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated")
-    op.execute(
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
-        "REVOKE ALL PRIVILEGES ON TABLES FROM anon, authenticated"
-    )
-    op.execute(
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
-        "REVOKE ALL PRIVILEGES ON SEQUENCES FROM anon, authenticated"
-    )
+    data_api_roles = _existing_data_api_roles()
+    if data_api_roles:
+        roles = ", ".join(data_api_roles)
+        op.execute(f"REVOKE ALL PRIVILEGES ON TABLE {tables} FROM {roles}")
+        op.execute(
+            "REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public "
+            f"FROM {roles}"
+        )
+        op.execute(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+            f"REVOKE ALL PRIVILEGES ON TABLES FROM {roles}"
+        )
+        op.execute(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+            f"REVOKE ALL PRIVILEGES ON SEQUENCES FROM {roles}"
+        )
 
     for index in DUPLICATE_INDEXES:
         op.execute(f'DROP INDEX IF EXISTS public."{index}"')
@@ -132,19 +155,25 @@ def downgrade() -> None:
     )
     op.execute("CREATE INDEX ix_companies_name ON public.companies (name)")
 
-    op.execute(
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
-        "GRANT ALL PRIVILEGES ON TABLES TO anon, authenticated"
-    )
-    op.execute(
-        "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
-        "GRANT ALL PRIVILEGES ON SEQUENCES TO anon, authenticated"
-    )
-    op.execute(
-        "GRANT ALL PRIVILEGES ON TABLE "
-        f"{_quoted_table_list(APPLICATION_TABLES)} TO anon, authenticated"
-    )
-    op.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated")
+    data_api_roles = _existing_data_api_roles()
+    if data_api_roles:
+        roles = ", ".join(data_api_roles)
+        op.execute(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+            f"GRANT ALL PRIVILEGES ON TABLES TO {roles}"
+        )
+        op.execute(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+            f"GRANT ALL PRIVILEGES ON SEQUENCES TO {roles}"
+        )
+        op.execute(
+            "GRANT ALL PRIVILEGES ON TABLE "
+            f"{_quoted_table_list(APPLICATION_TABLES)} TO {roles}"
+        )
+        op.execute(
+            "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public "
+            f"TO {roles}"
+        )
 
     for table in PREVIOUSLY_UNPROTECTED_TABLES:
         op.execute(f'ALTER TABLE public."{table}" DISABLE ROW LEVEL SECURITY')

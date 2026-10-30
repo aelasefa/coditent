@@ -300,21 +300,21 @@ async def _queue_employee_invite_email(
 
 async def _attempt_queued_delivery(
     db: AsyncSession,
-    delivery: EmailDelivery | None,
+    delivery_id: UUID | None,
 ) -> tuple[bool, str, str | None]:
-    if delivery is None:
+    if delivery_id is None:
         return False, "failed", (
             "Email delivery is not configured. Copy the invitation link and share it securely."
         )
     try:
-        delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+        delivery_status = await deliver_email_job(db, delivery_id, worker_id="api-immediate")
     except Exception:
         # The invitation and its durable outbox intent have already committed.
         # A provider/worker failure must not make the client retry the domain
         # operation and create confusing duplicate or superseded invitations.
         logger.exception(
             "Immediate invitation email delivery failed",
-            extra={"delivery_id": str(delivery.id)},
+            extra={"delivery_id": str(delivery_id)},
         )
         await db.rollback()
         return False, "retry", (
@@ -324,7 +324,7 @@ async def _attempt_queued_delivery(
     if delivery_status not in {"pending", "processing", "retry", "sent", "failed"}:
         logger.error(
             "Invitation email delivery returned an unexpected status",
-            extra={"delivery_id": str(delivery.id), "delivery_status": delivery_status},
+            extra={"delivery_id": str(delivery_id), "delivery_status": delivery_status},
         )
         return False, "retry", (
             "The invitation was created, but email delivery is not yet confirmed. "
@@ -385,6 +385,7 @@ async def invite_company(
             detail="Active invitation already exists for this email",
         ) from exc
     delivery: EmailDelivery | None = None
+    delivery_id: UUID | None = None
     delivery_configuration_error = False
     try:
         delivery = await _queue_company_invite_email(
@@ -395,6 +396,9 @@ async def invite_company(
             token=token,
             expires_at=expires_at,
         )
+        # Keep the scalar id before any later commit/rollback can expire the
+        # ORM instance. Outbox workers may claim this row concurrently.
+        delivery_id = delivery.id
     except EmailOutboxUnavailable:
         delivery_configuration_error = True
     if interest_request is not None:
@@ -404,7 +408,7 @@ async def invite_company(
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_CREATED", actor=current_user, resource_type="company_invitation", details=email)
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
-    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery_id)
     if delivery_configuration_error:
         delivery_status = "failed"
     out: dict = {
@@ -412,7 +416,7 @@ async def invite_company(
         "invitation_id": inv_id,
         "invitation_url": invite_url,
         "email_sent": email_sent,
-        "delivery_id": delivery.id if delivery else None,
+        "delivery_id": delivery_id,
         "delivery_status": delivery_status,
     }
     if email_error:
@@ -500,6 +504,7 @@ async def resend_company_invitation(
         {"id": str(invitation_id), "now": now},
     )
     delivery: EmailDelivery | None = None
+    delivery_id: UUID | None = None
     try:
         delivery = await _queue_company_invite_email(
             db,
@@ -509,19 +514,20 @@ async def resend_company_invitation(
             token=token,
             expires_at=expires_at,
         )
+        delivery_id = delivery.id
     except EmailOutboxUnavailable:
         pass
     await db.commit()
     await log_audit(db, action="COMPANY_INVITATION_RESENT", actor=current_user, resource_type="company_invitation", resource_id=invitation_id)
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
-    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery_id)
     return {
         "detail": "resent",
         "invitation_id": str(invitation_id),
         "invitation_url": invite_url,
         "email_sent": email_sent,
         "email_error": email_error,
-        "delivery_id": delivery.id if delivery else None,
+        "delivery_id": delivery_id,
         "delivery_status": delivery_status,
     }
 
@@ -648,6 +654,7 @@ async def invite_employee(
             detail="Active invitation already exists for this email",
         ) from exc
     delivery: EmailDelivery | None = None
+    delivery_id: UUID | None = None
     try:
         delivery = await _queue_employee_invite_email(
             db,
@@ -658,11 +665,12 @@ async def invite_employee(
             token=token,
             expires_at=expires_at,
         )
+        delivery_id = delivery.id
     except EmailOutboxUnavailable:
         pass
     await db.commit()
     await log_audit(db, action="EMPLOYEE_INVITED", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", details=f"{email}:{role}")
-    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery_id)
     invitation_url = f"{settings.frontend_url.rstrip('/')}/invite/employee?token={token}"
     return {
         "detail": "invited",
@@ -670,7 +678,7 @@ async def invite_employee(
         "invitation_url": invitation_url,
         "email_sent": email_sent,
         "email_error": email_error,
-        "delivery_id": delivery.id if delivery else None,
+        "delivery_id": delivery_id,
         "delivery_status": delivery_status,
     }
 
@@ -759,6 +767,7 @@ async def resend_employee_invitation(
     company = comp.scalar_one_or_none()
     company_name = company.name if company else "Your company"
     delivery: EmailDelivery | None = None
+    delivery_id: UUID | None = None
     try:
         delivery = await _queue_employee_invite_email(
             db,
@@ -769,10 +778,11 @@ async def resend_employee_invitation(
             token=new_token,
             expires_at=expires_at,
         )
+        delivery_id = delivery.id
     except EmailOutboxUnavailable:
         pass
     await db.commit()
-    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
+    email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery_id)
     await log_audit(db, action="EMPLOYEE_INVITATION_RESENT", actor=current_user, company_id=current_user.company_id, resource_type="employee_invitation", resource_id=UUID(new_id), details=f"{row['email']}:{row['role']}")
     invitation_url = f"{settings.frontend_url.rstrip('/')}/invite/employee?token={new_token}"
     return {
@@ -781,7 +791,7 @@ async def resend_employee_invitation(
         "invitation_url": invitation_url,
         "email_sent": email_sent,
         "email_error": email_error,
-        "delivery_id": delivery.id if delivery else None,
+        "delivery_id": delivery_id,
         "delivery_status": delivery_status,
     }
 
