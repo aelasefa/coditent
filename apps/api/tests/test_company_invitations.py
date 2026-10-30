@@ -4,7 +4,8 @@ import hashlib
 import os
 import uuid
 from datetime import datetime
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -68,6 +69,42 @@ def test_company_invite_sender_includes_inline_art():
     args, kwargs = send_email.call_args
     assert args[0] == "owner@example.com"
     assert kwargs["attachments"][0]["content_id"] == "coditent-company-invite-art"
+
+
+@pytest.mark.asyncio
+async def test_immediate_delivery_exception_keeps_committed_invitation_successful():
+    db = SimpleNamespace(rollback=AsyncMock())
+    delivery = SimpleNamespace(id=uuid.uuid4())
+
+    with patch.object(
+        invitations,
+        "deliver_email_job",
+        AsyncMock(side_effect=RuntimeError("provider unavailable")),
+    ):
+        sent, status, error = await invitations._attempt_queued_delivery(db, delivery)
+
+    assert sent is False
+    assert status == "retry"
+    assert "created" in str(error)
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_delivery_status_is_normalized_to_retry():
+    db = SimpleNamespace(rollback=AsyncMock())
+    delivery = SimpleNamespace(id=uuid.uuid4())
+
+    with patch.object(
+        invitations,
+        "deliver_email_job",
+        AsyncMock(return_value="missing"),
+    ):
+        sent, status, error = await invitations._attempt_queued_delivery(db, delivery)
+
+    assert sent is False
+    assert status == "retry"
+    assert "not yet confirmed" in str(error)
+    db.rollback.assert_not_awaited()
 
 
 async def _admin():

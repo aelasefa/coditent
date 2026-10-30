@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import html as html_module
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -37,6 +38,7 @@ from app.services.email_outbox import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
@@ -304,7 +306,30 @@ async def _attempt_queued_delivery(
         return False, "failed", (
             "Email delivery is not configured. Copy the invitation link and share it securely."
         )
-    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    try:
+        delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    except Exception:
+        # The invitation and its durable outbox intent have already committed.
+        # A provider/worker failure must not make the client retry the domain
+        # operation and create confusing duplicate or superseded invitations.
+        logger.exception(
+            "Immediate invitation email delivery failed",
+            extra={"delivery_id": str(delivery.id)},
+        )
+        await db.rollback()
+        return False, "retry", (
+            "The invitation was created, but immediate email delivery failed. "
+            "Delivery will retry automatically; copy the invitation link if needed."
+        )
+    if delivery_status not in {"pending", "processing", "retry", "sent", "failed"}:
+        logger.error(
+            "Invitation email delivery returned an unexpected status",
+            extra={"delivery_id": str(delivery.id), "delivery_status": delivery_status},
+        )
+        return False, "retry", (
+            "The invitation was created, but email delivery is not yet confirmed. "
+            "Delivery will retry automatically; copy the invitation link if needed."
+        )
     if delivery_status == "failed":
         return False, delivery_status, (
             "The email provider could not deliver this invitation. Copy the invitation link and share it securely."
