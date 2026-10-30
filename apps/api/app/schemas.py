@@ -731,7 +731,7 @@ class CompanyCreate(APIModel):
 
     name: str = Field(min_length=2, max_length=120)
     region: str | None = Field(default=None, max_length=100)
-    description: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=10_000)
     industry: str | None = Field(default=None, max_length=120)
     location: str | None = Field(default=None, max_length=160)
     website: str | None = Field(default=None, max_length=500)
@@ -745,7 +745,7 @@ class CompanyUpdate(APIModel):
 
     name: str | None = Field(default=None, min_length=2, max_length=120)
     region: str | None = Field(default=None, max_length=100)
-    description: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=10_000)
     industry: str | None = Field(default=None, max_length=120)
     location: str | None = Field(default=None, max_length=160)
     website: str | None = Field(default=None, max_length=500)

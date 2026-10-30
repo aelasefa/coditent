@@ -253,7 +253,7 @@ export default function SettingsPage() {
                             </Select>
                             <Input label="Website" type="url" value={form.website ?? ""} onChange={(e) => setForm({ ...form, website: e.target.value })} disabled={!canEditCompany} placeholder="https://example.com" error={websiteError} />
                           </div>
-                          <Textarea label="Company description" rows={4} value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} helper="Share what your company does and what makes it a strong place to work." />
+                          <Textarea label="Company description" rows={4} value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={!canEditCompany} maxLength={10_000} showCount helper="Share what your company does and what makes it a strong place to work." />
                         </section>
 
                         <section className="space-y-4 border-t border-border-subtle p-5 sm:p-6" aria-labelledby="company-location-heading">

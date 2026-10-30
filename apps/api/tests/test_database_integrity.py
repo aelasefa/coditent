@@ -115,6 +115,14 @@ def test_patch_schemas_reject_null_for_required_database_fields() -> None:
         CompanyUpdate(name=None)
 
 
+def test_company_description_supports_detailed_profiles_up_to_ten_thousand_characters() -> None:
+    description = "x" * 10_000
+    assert CompanyUpdate(description=description).description == description
+
+    with pytest.raises(ValidationError):
+        CompanyUpdate(description="x" * 10_001)
+
+
 @pytest.mark.asyncio
 async def test_deleting_offer_cascades_saved_recommendations(sessions) -> None:
     suffix = uuid.uuid4().hex
