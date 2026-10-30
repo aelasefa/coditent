@@ -590,18 +590,48 @@ async def test_hr_can_create_offer_and_move_stage(client, flow):
     """The HR role must be able to run the recruitment workflow end to end."""
     payload = {
         "title": "HR-created role",
-        "company": flow["company"].name,
+        # Compatibility input must never override authenticated organization scope.
+        "company": "Spoofed Company",
         "region": "Casablanca",
         "field": "Informatique",
         "type": "JOB",
         "description": "Created by HR directly.",
         "requirements": "HR workflow validation here.",
+        "work_mode": "hybrid",
+        "salary_min": 10_000,
+        "salary_max": 15_000,
     }
+    invalid = await client.post(
+        "/offers",
+        json={**payload, "salaryRange": "10k-15k", "equity": "1%"},
+        headers=auth(flow["hr"]),
+    )
+    assert invalid.status_code == 422
+    invalid_locations = {tuple(item["loc"]) for item in invalid.json()["detail"]}
+    assert ("body", "salaryRange") in invalid_locations
+    assert ("body", "equity") in invalid_locations
+
     r = await client.post("/offers", json=payload, headers=auth(flow["hr"]))
     assert r.status_code == 200, r.text
     assert r.json()["responsible_hr_id"] == str(flow["hr"].id)
+    assert r.json()["company"] == flow["company"].name
+    assert r.json()["company_id"] == str(flow["company"].id)
+    assert r.json()["work_mode"] == "hybrid"
+    assert r.json()["salary_min"] == 10_000
+    assert r.json()["salary_max"] == 15_000
     offer_id = r.json()["id"]
     try:
+        updated = await client.patch(
+            f"/offers/{offer_id}",
+            json={"work_mode": "remote", "salary_min": 12_000, "salary_max": 18_000},
+            headers=auth(flow["hr"]),
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["company_id"] == str(flow["company"].id)
+        assert updated.json()["work_mode"] == "remote"
+        assert updated.json()["salary_min"] == 12_000
+        assert updated.json()["salary_max"] == 18_000
+
         version = flow["application"].stage_version
         for stage in ("under_review", "shortlisted"):
             r = await client.patch(

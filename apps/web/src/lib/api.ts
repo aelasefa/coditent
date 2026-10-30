@@ -20,6 +20,7 @@ import type {
   TwoFactorStatus,
   User,
 } from "@/lib/types";
+import type { CreateOfferPayload, UpdateOfferPayload } from "@/lib/offer-payload";
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
@@ -402,25 +403,13 @@ export async function getOffers(): Promise<Offer[]> {
   return data.offers;
 }
 
-export async function createOffer(payload: {
-  title: string;
-  company: string;
-  region: string;
-  field: string;
-  type: "JOB" | "INTERNSHIP";
-  description: string;
-  requirements: string;
-  location?: string | null;
-  work_mode?: "remote" | "hybrid" | "on-site" | null;
-  required_skills?: string | null;
-  required_experience?: string | null;
-  education_requirements?: string | null;
-  salary_min?: number | null;
-  salary_max?: number | null;
-  deadline?: string | null;
-  opportunity_status?: "draft" | "active";
-}): Promise<Offer> {
+export async function createOffer(payload: CreateOfferPayload): Promise<Offer> {
   const { data } = await api.post<Offer>("/offers", payload);
+  return data;
+}
+
+export async function updateOffer(offerId: string, payload: UpdateOfferPayload): Promise<Offer> {
+  const { data } = await api.patch<Offer>(`/offers/${offerId}`, payload);
   return data;
 }
 
