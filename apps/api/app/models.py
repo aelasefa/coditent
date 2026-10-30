@@ -95,7 +95,6 @@ class User(Base):
             "('OWNER', 'ADMIN', 'HR', 'RECRUITER', 'HIRING_MANAGER')",
             name="ck_users_company_role",
         ),
-        Index("ix_users_email", "email"),
         Index("ix_users_role", "role"),
         Index("ix_users_is_active", "is_active"),
     )
@@ -652,7 +651,6 @@ class Friendship(Base):
         ),
         Index("ix_friendships_requester_status", "requester_id", "status"),
         Index("ix_friendships_addressee_status", "addressee_id", "status"),
-        Index("ix_friendships_pair", "pair_low_id", "pair_high_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -687,7 +685,6 @@ class Company(Base):
             "subscription_status IN ('trialing', 'active', 'past_due', 'canceled')",
             name="ck_companies_subscription_status",
         ),
-        Index("ix_companies_name", "name"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -723,7 +720,6 @@ class CompanyInvitation(Base):
             name="ck_company_invitations_status",
         ),
         Index("ix_company_invitations_email", "email"),
-        Index("ix_company_invitations_token_hash", "token_hash", unique=True),
         Index(
             "uq_company_invitations_pending_email",
             text("lower(email)"),
@@ -793,7 +789,6 @@ class EmployeeInvitation(Base):
             name="ck_employee_invitations_role",
         ),
         Index("ix_employee_invitations_email", "email"),
-        Index("ix_employee_invitations_token_hash", "token_hash", unique=True),
         Index(
             "uq_employee_invitations_pending_company_email",
             "company_id",
@@ -825,7 +820,6 @@ class PendingRegistration(Base):
     __tablename__ = "pending_registrations"
     __table_args__ = (
         CheckConstraint("otp_attempts >= 0", name="ck_pending_registrations_otp_attempts"),
-        Index("ix_pending_registrations_email", "email", unique=True),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
