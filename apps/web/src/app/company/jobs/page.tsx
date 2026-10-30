@@ -15,10 +15,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { createOffer, getMe, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, setResponsibleHr, offerLogoSrc } from "@/lib/api";
+import { createOffer, updateOffer, getMe, getCompany, toggleOffer, api, getApiBaseUrl, getCompanyMembers, getApplications, setResponsibleHr, offerLogoSrc } from "@/lib/api";
 import { Avatar } from "@/components/ui/avatar";
 import { can, hasCompanyRole } from "@/lib/permissions";
 import type { Offer } from "@/lib/types";
+import {
+  buildCreateOfferPayload,
+  buildUpdateOfferPayload,
+  extractDescriptionDetails,
+  formatSalaryRange,
+  type JobFormState,
+} from "@/lib/offer-payload";
 import { FiArrowRight, FiBriefcase, FiEdit2, FiPause, FiPlay, FiPlus, FiSearch, FiTrash2, FiUsers } from "react-icons/fi";
 
 function getErrorMessage(err: unknown): string {
@@ -31,28 +38,37 @@ function getErrorMessage(err: unknown): string {
   return "Request failed";
 }
 
-const EMPTY_FORM = {
+const EMPTY_FORM: JobFormState = {
   title: "",
-  company: "",
   region: "Remote",
   field: "Software Engineering",
-  type: "JOB" as "JOB" | "INTERNSHIP",
+  type: "JOB",
   description: "",
   requirements: "",
-  salaryRange: "",
+  salaryMin: "",
+  salaryMax: "",
   equity: "",
+  workMode: "remote",
+  legacyCompensation: "",
 };
 
-function compensationDetails(description: string): { salary?: string; equity?: string } {
-  const salary = description.match(/^Compensation:\s*(.+)$/m)?.[1];
-  const equity = description.match(/^Equity:\s*(.+)$/m)?.[1];
-  return { salary, equity };
+function compensationDetails(offer: Offer): { salary: string; equity: string } {
+  const details = extractDescriptionDetails(offer.description);
+  return {
+    salary: formatSalaryRange(offer.salary_min, offer.salary_max) || details.legacyCompensation,
+    equity: details.equity,
+  };
 }
 
 export default function CompanyJobsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: me, isLoading: meLoading } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const { data: company } = useQuery({
+    queryKey: ["company-profile", me?.company_id],
+    queryFn: () => getCompany(me!.company_id as string),
+    enabled: !!me?.company_id,
+  });
 
   const canCreate = can(me ?? null, "create_offers");
   const canEdit = can(me ?? null, "edit_offers");
@@ -117,12 +133,10 @@ export default function CompanyJobsPage() {
   const createMut = useMutation({
     mutationFn: () => {
       if (!form.title.trim() || form.title.trim().length < 2) throw new Error("Job title must be at least 2 characters");
-      if (!form.company.trim() || form.company.trim().length < 2) throw new Error("Company name must be at least 2 characters");
       if (!form.region.trim() || !form.field.trim()) throw new Error("Region and field are required");
       if (!form.description.trim() || form.description.trim().length < 10) throw new Error("Description must be at least 10 characters");
       if (!form.requirements.trim() || form.requirements.trim().length < 10) throw new Error("Requirements must be at least 10 characters");
-      const compensation = [form.salaryRange.trim() && `Compensation: ${form.salaryRange.trim()}`, form.equity.trim() && `Equity: ${form.equity.trim()}`].filter(Boolean).join("\n");
-      return createOffer({ ...form, description: `${form.description.trim()}${compensation ? `\n\n${compensation}` : ""}` });
+      return createOffer(buildCreateOfferPayload(form));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-offers"] });
@@ -135,7 +149,7 @@ export default function CompanyJobsPage() {
   const editMut = useMutation({
     mutationFn: async () => {
       if (!editTarget) return;
-      await api.put(`/offers/${editTarget.id}`, editForm);
+      await updateOffer(editTarget.id, buildUpdateOfferPayload(editForm));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["company-offers"] });
@@ -162,9 +176,22 @@ export default function CompanyJobsPage() {
   });
 
   const openEdit = (o: Offer) => {
+    const details = extractDescriptionDetails(o.description);
     setEditTarget(o);
     setResponsibleHrId(o.responsible_hr_id ?? "");
-    setEditForm({ title: o.title, company: o.company, region: o.region, field: o.field, type: o.type, description: o.description, requirements: o.requirements, salaryRange: "", equity: "" });
+    setEditForm({
+      title: o.title,
+      region: o.region,
+      field: o.field,
+      type: o.type,
+      description: details.description,
+      requirements: o.requirements,
+      salaryMin: o.salary_min?.toString() ?? "",
+      salaryMax: o.salary_max?.toString() ?? "",
+      equity: details.equity,
+      workMode: o.work_mode === "remote" || o.work_mode === "hybrid" || o.work_mode === "on-site" ? o.work_mode : "",
+      legacyCompensation: details.legacyCompensation,
+    });
   };
 
   const filtered = useMemo(() => {
@@ -191,20 +218,28 @@ export default function CompanyJobsPage() {
         <h3 className="text-sm font-semibold text-foreground">Basics</h3>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           <Input label="Job title" value={value.title} onChange={(e) => set({ ...value, title: e.target.value })} required />
-          <Input label="Company" value={value.company} onChange={(e) => set({ ...value, company: e.target.value })} required />
+          <Input label="Company" value={company?.name ?? ""} disabled readOnly helper="Jobs are always created for your authenticated company." />
           <Input label="Region" value={value.region} onChange={(e) => set({ ...value, region: e.target.value })} required />
           <Input label="Field" value={value.field} onChange={(e) => set({ ...value, field: e.target.value })} required />
           <Select label="Type" value={value.type} onChange={(e) => set({ ...value, type: e.target.value as "JOB" | "INTERNSHIP" })}>
             <option value="JOB">Full-time job</option>
             <option value="INTERNSHIP">Internship</option>
           </Select>
+          <Select label="Work mode" value={value.workMode} onChange={(e) => set({ ...value, workMode: e.target.value as JobFormState["workMode"] })}>
+            <option value="">Not specified</option>
+            <option value="remote">Remote</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="on-site">On-site</option>
+          </Select>
         </div>
       </section>
       <section aria-label="Compensation">
         <h3 className="text-sm font-semibold text-foreground">Compensation <span className="font-normal text-muted-foreground">(optional)</span></h3>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
-          <Input label="Salary range" value={value.salaryRange} onChange={(e) => set({ ...value, salaryRange: e.target.value })} placeholder="$200k – $350k / yr" />
+          <Input label="Minimum salary" type="number" min={0} max={1_000_000_000} step={1} value={value.salaryMin} onChange={(e) => set({ ...value, salaryMin: e.target.value })} placeholder="200000" />
+          <Input label="Maximum salary" type="number" min={0} max={1_000_000_000} step={1} value={value.salaryMax} onChange={(e) => set({ ...value, salaryMax: e.target.value })} placeholder="350000" />
           <Input label="Equity" value={value.equity} onChange={(e) => set({ ...value, equity: e.target.value })} placeholder="Equity + Fund Economics" />
+          {value.legacyCompensation ? <Input label="Legacy compensation note" value={value.legacyCompensation} onChange={(e) => set({ ...value, legacyCompensation: e.target.value })} helper="Preserved from this job's original free-form salary." /> : null}
         </div>
       </section>
       <section aria-label="Description">
@@ -308,8 +343,8 @@ export default function CompanyJobsPage() {
                       <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                         {o.company} · {o.region} · {o.field} · {o.type === "JOB" ? "Job" : "Internship"}
                       </p>
-                      {(compensationDetails(o.description).salary || compensationDetails(o.description).equity) && (
-                        <p className="mt-1 text-xs font-medium text-primary">{[compensationDetails(o.description).salary, compensationDetails(o.description).equity].filter(Boolean).join(" · ")}</p>
+                      {(compensationDetails(o).salary || compensationDetails(o).equity) && (
+                        <p className="mt-1 text-xs font-medium text-primary">{[compensationDetails(o).salary, compensationDetails(o).equity].filter(Boolean).join(" · ")}</p>
                       )}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {appsByOffer.get(o.id) ?? 0} applicants
