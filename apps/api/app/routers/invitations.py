@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import html as html_module
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -37,6 +38,7 @@ from app.services.email_outbox import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
@@ -259,7 +261,10 @@ async def _queue_company_invite_email(
     return await enqueue_email_delivery(
         db,
         kind="company_invitation",
-        dedupe_key=f"company-invitation:{invitation_id}",
+        # A resend rotates the invitation token while retaining the stable
+        # invitation id used by the admin UI. Include the token generation in
+        # the delivery identity so the outbox creates a fresh email intent.
+        dedupe_key=f"company-invitation:{invitation_id}:{_hash(token)[:16]}",
         resource_type="company_invitation",
         resource_id=invitation_id,
         to_email=email,
@@ -301,7 +306,30 @@ async def _attempt_queued_delivery(
         return False, "failed", (
             "Email delivery is not configured. Copy the invitation link and share it securely."
         )
-    delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    try:
+        delivery_status = await deliver_email_job(db, delivery.id, worker_id="api-immediate")
+    except Exception:
+        # The invitation and its durable outbox intent have already committed.
+        # A provider/worker failure must not make the client retry the domain
+        # operation and create confusing duplicate or superseded invitations.
+        logger.exception(
+            "Immediate invitation email delivery failed",
+            extra={"delivery_id": str(delivery.id)},
+        )
+        await db.rollback()
+        return False, "retry", (
+            "The invitation was created, but immediate email delivery failed. "
+            "Delivery will retry automatically; copy the invitation link if needed."
+        )
+    if delivery_status not in {"pending", "processing", "retry", "sent", "failed"}:
+        logger.error(
+            "Invitation email delivery returned an unexpected status",
+            extra={"delivery_id": str(delivery.id), "delivery_status": delivery_status},
+        )
+        return False, "retry", (
+            "The invitation was created, but email delivery is not yet confirmed. "
+            "Delivery will retry automatically; copy the invitation link if needed."
+        )
     if delivery_status == "failed":
         return False, delivery_status, (
             "The email provider could not deliver this invitation. Copy the invitation link and share it securely."
@@ -441,20 +469,41 @@ async def resend_company_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
     if row["status"] not in ("pending", "expired"):
         raise HTTPException(status_code=400, detail="Only pending or expired invitations can be resent")
-    await db.execute(text("UPDATE company_invitations SET status='revoked', revoked_at=:now WHERE id=:id"), {"now": datetime.utcnow(), "id": str(invitation_id)})
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=COMPANY_INVITE_EXPIRY_DAYS)
-    new_uuid = uuid4()
-    new_id = str(new_uuid)
+    now = datetime.utcnow()
+    # Keep the resource id stable so a card rendered before this request can
+    # safely resend again. Rotating the hash invalidates every older link.
     await db.execute(
-        text("INSERT INTO company_invitations (id, email, company_name, contact_name, contact_role, token_hash, status, invited_by, expires_at, created_at) VALUES (:id, :email, :name, :cname, :crole, :hash, 'pending', :by, :exp, :now)"),
-        {"id": new_id, "email": row["email"], "name": row["company_name"], "cname": row["contact_name"], "crole": row["contact_role"], "hash": _hash(token), "by": str(current_user.id), "exp": expires_at, "now": datetime.utcnow()},
+        text(
+            "UPDATE company_invitations "
+            "SET token_hash=:hash, status='pending', invited_by=:by, "
+            "expires_at=:exp, created_at=:now, accepted_at=NULL, "
+            "revoked_at=NULL, company_id=NULL WHERE id=:id"
+        ),
+        {
+            "id": str(invitation_id),
+            "hash": _hash(token),
+            "by": str(current_user.id),
+            "exp": expires_at,
+            "now": now,
+        },
+    )
+    await db.execute(
+        text(
+            "UPDATE email_deliveries SET status='failed', "
+            "last_error_code='INVITATION_SUPERSEDED', updated_at=:now, "
+            "lease_owner=NULL, lease_until=NULL "
+            "WHERE resource_type='company_invitation' AND resource_id=:id "
+            "AND status IN ('pending', 'processing', 'retry')"
+        ),
+        {"id": str(invitation_id), "now": now},
     )
     delivery: EmailDelivery | None = None
     try:
         delivery = await _queue_company_invite_email(
             db,
-            invitation_id=new_uuid,
+            invitation_id=invitation_id,
             email=row["email"],
             company_name=row["company_name"],
             token=token,
@@ -463,12 +512,12 @@ async def resend_company_invitation(
     except EmailOutboxUnavailable:
         pass
     await db.commit()
-    await log_audit(db, action="COMPANY_INVITATION_RESENT", actor=current_user, resource_type="company_invitation", resource_id=UUID(new_id))
+    await log_audit(db, action="COMPANY_INVITATION_RESENT", actor=current_user, resource_type="company_invitation", resource_id=invitation_id)
     invite_url = f"{settings.frontend_url.rstrip('/')}/company/invite/accept?token={token}"
     email_sent, delivery_status, email_error = await _attempt_queued_delivery(db, delivery)
     return {
         "detail": "resent",
-        "invitation_id": new_id,
+        "invitation_id": str(invitation_id),
         "invitation_url": invite_url,
         "email_sent": email_sent,
         "email_error": email_error,

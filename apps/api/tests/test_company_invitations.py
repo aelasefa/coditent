@@ -4,7 +4,8 @@ import hashlib
 import os
 import uuid
 from datetime import datetime
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -70,6 +71,42 @@ def test_company_invite_sender_includes_inline_art():
     assert kwargs["attachments"][0]["content_id"] == "coditent-company-invite-art"
 
 
+@pytest.mark.asyncio
+async def test_immediate_delivery_exception_keeps_committed_invitation_successful():
+    db = SimpleNamespace(rollback=AsyncMock())
+    delivery = SimpleNamespace(id=uuid.uuid4())
+
+    with patch.object(
+        invitations,
+        "deliver_email_job",
+        AsyncMock(side_effect=RuntimeError("provider unavailable")),
+    ):
+        sent, status, error = await invitations._attempt_queued_delivery(db, delivery)
+
+    assert sent is False
+    assert status == "retry"
+    assert "created" in str(error)
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_delivery_status_is_normalized_to_retry():
+    db = SimpleNamespace(rollback=AsyncMock())
+    delivery = SimpleNamespace(id=uuid.uuid4())
+
+    with patch.object(
+        invitations,
+        "deliver_email_job",
+        AsyncMock(return_value="missing"),
+    ):
+        sent, status, error = await invitations._attempt_queued_delivery(db, delivery)
+
+    assert sent is False
+    assert status == "retry"
+    assert "not yet confirmed" in str(error)
+    db.rollback.assert_not_awaited()
+
+
 async def _admin():
     await engine.dispose()
     async with AsyncSessionLocal() as db:
@@ -94,6 +131,42 @@ async def test_admin_can_invite_company():
         assert body["invitation_id"]
         assert "/company/invite/accept?token=" in body["invitation_url"]
         assert "email_sent" in body
+
+
+@pytest.mark.asyncio
+async def test_admin_can_resend_company_invitation_repeatedly_with_stable_id():
+    admin = await _admin()
+    email = f"resend-{uuid.uuid4().hex[:6]}@example.com"
+    headers = {"Authorization": f"Bearer {tok_for(admin)}"}
+    async with httpx.AsyncClient(base_url=BASE) as c:
+        created = await c.post(
+            "/invites/company/invite",
+            json={"email": email, "company_name": "Stable Resend Co"},
+            headers=headers,
+        )
+        assert created.status_code == 200, created.text
+        invitation_id = created.json()["invitation_id"]
+
+        first = await c.post(
+            f"/invites/company/invitations/{invitation_id}/resend",
+            headers=headers,
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["invitation_id"] == invitation_id
+
+        second = await c.post(
+            f"/invites/company/invitations/{invitation_id}/resend",
+            headers=headers,
+        )
+        assert second.status_code == 200, second.text
+        assert second.json()["invitation_id"] == invitation_id
+
+        current = await c.get(
+            f"/invites/company/invitations/{invitation_id}",
+            headers=headers,
+        )
+        assert current.status_code == 200, current.text
+        assert current.json()["invitation"]["status"] == "pending"
 
 
 @pytest.mark.asyncio

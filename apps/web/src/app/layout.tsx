@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   description:
     "Discover relevant jobs and internships, prove skills through practical evaluations, and connect with recruiters. Companies publish roles, review candidates and hire.",
   applicationName: "CODITENT",
-  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -42,6 +41,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
+      <head>
+        <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials" />
+      </head>
       <body className="min-h-full bg-background text-foreground">
         <QueryProvider>
           <ToastProvider>
