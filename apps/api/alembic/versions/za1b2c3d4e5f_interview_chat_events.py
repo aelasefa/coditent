@@ -1,13 +1,13 @@
 """add retry-safe interview chat events
 
 Revision ID: za1b2c3d4e5f
-Revises: z1a2b3c4d5e6
+Revises: ai1b2c3d4e5f
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "za1b2c3d4e5f"
-down_revision = "z1a2b3c4d5e6"
+down_revision = "ai1b2c3d4e5f"
 branch_labels = None
 depends_on = None
 
