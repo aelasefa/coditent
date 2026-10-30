@@ -97,6 +97,42 @@ async def test_admin_can_invite_company():
 
 
 @pytest.mark.asyncio
+async def test_admin_can_resend_company_invitation_repeatedly_with_stable_id():
+    admin = await _admin()
+    email = f"resend-{uuid.uuid4().hex[:6]}@example.com"
+    headers = {"Authorization": f"Bearer {tok_for(admin)}"}
+    async with httpx.AsyncClient(base_url=BASE) as c:
+        created = await c.post(
+            "/invites/company/invite",
+            json={"email": email, "company_name": "Stable Resend Co"},
+            headers=headers,
+        )
+        assert created.status_code == 200, created.text
+        invitation_id = created.json()["invitation_id"]
+
+        first = await c.post(
+            f"/invites/company/invitations/{invitation_id}/resend",
+            headers=headers,
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["invitation_id"] == invitation_id
+
+        second = await c.post(
+            f"/invites/company/invitations/{invitation_id}/resend",
+            headers=headers,
+        )
+        assert second.status_code == 200, second.text
+        assert second.json()["invitation_id"] == invitation_id
+
+        current = await c.get(
+            f"/invites/company/invitations/{invitation_id}",
+            headers=headers,
+        )
+        assert current.status_code == 200, current.text
+        assert current.json()["invitation"]["status"] == "pending"
+
+
+@pytest.mark.asyncio
 async def test_non_admin_cannot_invite_company():
     email = f"tmp-cand-{uuid.uuid4().hex[:6]}@example.com"
     async with httpx.AsyncClient(base_url=BASE) as c:
