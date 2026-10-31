@@ -831,8 +831,8 @@ export async function listFriends(sort: "name" | "recent" = "name"): Promise<{ f
   return data;
 }
 
-export async function searchPeople(query: string, offset = 0): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
-  const { data } = await api.get("/friends/search", { params: { q: query, limit: 20, offset } });
+export async function searchPeople(query: string, offset = 0, signal?: AbortSignal): Promise<{ friends: import("@/lib/types").FriendItem[]; total: number }> {
+  const { data } = await api.get("/friends/search", { params: { q: query, limit: 20, offset }, signal });
   return data;
 }
 
