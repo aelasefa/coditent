@@ -336,6 +336,24 @@ def test_oauth_identity_requires_verified_email_stable_subject_and_known_issuer(
             oauth_service._parse_identity_payload(provider, invalid)
 
 
+def test_linkedin_authorization_binds_nonce_without_unsupported_pkce():
+    provider = oauth_service.OAuthProvider(
+        name="linkedin", client_id="client-id", client_secret="secret",
+        authorization_url="https://www.linkedin.com/oauth/v2/authorization",
+        token_url="https://www.linkedin.com/oauth/v2/accessToken",
+        userinfo_url="https://api.linkedin.com/v2/userinfo",
+        scopes=("openid", "profile", "email"), issuer="https://www.linkedin.com",
+    )
+    url = oauth_service.build_oauth_authorize_url(
+        provider, "https://coditent.app/api-proxy/auth/sso/linkedin/callback",
+        "signed-state", code_verifier="verifier", nonce="attempt-nonce",
+    )
+    params = parse_qs(urlparse(url).query)
+    assert params["nonce"] == ["attempt-nonce"]
+    assert params["state"] == ["signed-state"]
+    assert "code_challenge" not in params
+
+
 def test_handoff_is_single_use(monkeypatch):
     redis = FakeRedis()
     monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)

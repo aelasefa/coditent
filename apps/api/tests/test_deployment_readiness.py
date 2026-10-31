@@ -275,7 +275,7 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
         in production_vars
     )
     assert (
-        'linkedin_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+        'linkedin_redirect_uri: "https://coditent.app/api-proxy/auth/sso/linkedin/callback"'
         in production_vars
     )
     expected_google_callback = (
@@ -283,7 +283,7 @@ def test_oauth_start_and_callback_share_a_public_origin() -> None:
     )
     assert production_compose.count(expected_google_callback) == 3
     expected_linkedin_callback = (
-        'LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"'
+        'LINKEDIN_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/linkedin/callback"'
     )
     assert production_compose.count(expected_linkedin_callback) == 3
     assert 'OAUTH_BROWSER_COOKIE_PATH: "/"' in production_compose
