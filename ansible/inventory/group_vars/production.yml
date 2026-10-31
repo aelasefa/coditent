@@ -36,7 +36,7 @@ admin_origin: "https://admin.coditent.app"
 cors_origins: "https://coditent.app,https://www.coditent.app,https://admin.coditent.app"
 # OAuth starts through the public API proxy, which sets a host-bound browser
 # cookie used to validate the callback. Keep the callback on that same origin.
-google_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/google/callback"
+google_redirect_uri: "https://coditent.app/api-proxy/auth/sso/google/callback"
 linkedin_redirect_uri: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"
 resend_from_email: "notifications@coditent.app"
 letsencrypt_email: "notifications@coditent.app"
