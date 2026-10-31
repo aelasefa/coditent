@@ -15,15 +15,15 @@ services:
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
       CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
       ACCESS_TOKEN_COOKIE_SECURE: "true"
-      # Scope the short-lived, HttpOnly OAuth binding to the API host root.
+      # Scope the short-lived, HttpOnly OAuth binding to the public host root.
       # The public /api-proxy prefix is removed before FastAPI sees requests,
       # and path-scoped cookies have proven unreliable across provider popup
       # redirects and reverse-proxy rewrites.
       OAUTH_BROWSER_COOKIE_PATH: "/"
       # This public callback must stay on the same origin as OAuth start so
       # the host-bound state cookie survives the Google round trip.
-      GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"
-      LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"
+      GOOGLE_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/google/callback"
+      LINKEDIN_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/linkedin/callback"
 
   worker:
     image: "${CODITENT_API_IMAGE:?Set the immutable ECR API image URI}"
@@ -33,8 +33,8 @@ services:
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
       CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
       ACCESS_TOKEN_COOKIE_SECURE: "true"
-      GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"
-      LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"
+      GOOGLE_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/google/callback"
+      LINKEDIN_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/linkedin/callback"
 
   ai-dispatcher:
     image: "${CODITENT_API_IMAGE:?Set the immutable ECR API image URI}"
@@ -44,8 +44,8 @@ services:
       FRONTEND_URL: "${FRONTEND_URL:?Set the canonical HTTPS frontend origin}"
       CORS_ORIGINS: "${CORS_ORIGINS:?Set explicit HTTPS browser origins}"
       ACCESS_TOKEN_COOKIE_SECURE: "true"
-      GOOGLE_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/google/callback"
-      LINKEDIN_REDIRECT_URI: "https://api.coditent.app/api-proxy/auth/sso/linkedin/callback"
+      GOOGLE_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/google/callback"
+      LINKEDIN_REDIRECT_URI: "https://coditent.app/api-proxy/auth/sso/linkedin/callback"
 
 networks:
   default:
