@@ -907,6 +907,8 @@ class ChatMessage(Base):
     # which makes duplicates impossible by construction.
     application_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_kind: Mapped[str] = mapped_column(String(32), default="human", nullable=False)
+    event_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -961,6 +963,10 @@ class Application(Base):
     stage_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     interview_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     interview_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interview_timezone: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    interview_meeting_link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    interview_location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    interview_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     status_changed_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

@@ -554,6 +554,10 @@ class ApplicationStatusUpdate(APIModel):
     expected_version: int = Field(ge=1)
     interview_scheduled_at: datetime | None = None
     interview_notes: str | None = Field(default=None, max_length=2000)
+    interview_timezone: str | None = Field(default=None, max_length=100)
+    interview_meeting_link: str | None = Field(default=None, max_length=2048)
+    interview_location: str | None = Field(default=None, max_length=500)
+    interview_action: Literal["schedule", "reschedule", "cancel"] = "schedule"
 
     @field_validator("interview_scheduled_at")
     @classmethod
@@ -1160,6 +1164,7 @@ class ChatMessageOut(APIModel):
     read_at: datetime | None = None
     sender: UserOut | None = None
     application_id: uuid.UUID | None = None
+    message_kind: Literal["human", "interview_scheduled", "interview_rescheduled", "interview_canceled"] = "human"
 
 
 class FriendChatContext(APIModel):
@@ -1202,6 +1207,10 @@ class ConversationSummaryOut(APIModel):
     last_at: datetime | None = None
     unread_count: int = 0
     can_message: bool = True
+    company_id: uuid.UUID | None = None
+    company_name: str | None = None
+    company_logo_url: str | None = None
+    offer_title: str | None = None
 
 
 class ConversationInboxOut(APIModel):

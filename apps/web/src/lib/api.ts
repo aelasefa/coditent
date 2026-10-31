@@ -995,15 +995,19 @@ export async function updateApplicationStatus(
   id: string,
   status: string,
   expectedVersion: number,
-  interview?: { scheduledAt: string; notes?: string }
+  interview?: { scheduledAt?: string; notes?: string; timezone?: string; meetingLink?: string; location?: string; action?: "schedule" | "reschedule" | "cancel" }
 ): Promise<{ id: string; status: string; stage_version: number; chat_enabled: boolean }> {
   const { data } = await api.patch(`/applications/${id}`, {
     status,
     expected_version: expectedVersion,
     ...(interview
       ? {
-          interview_scheduled_at: interview.scheduledAt,
+          interview_scheduled_at: interview.scheduledAt || null,
           interview_notes: interview.notes || null,
+          interview_timezone: interview.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          interview_meeting_link: interview.meetingLink || null,
+          interview_location: interview.location || null,
+          interview_action: interview.action || "schedule",
         }
       : {}),
   });

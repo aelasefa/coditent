@@ -259,6 +259,7 @@ export interface ChatMessage {
   read_at?: string | null;
   sender?: User;
   application_id?: string | null;
+  message_kind?: "human" | "interview_scheduled" | "interview_rescheduled" | "interview_canceled";
   /** Client-only state used while an optimistic message is being confirmed. */
   delivery_status?: "sending" | "failed";
 }
@@ -415,6 +416,10 @@ export interface ConversationSummary {
   last_at?: string | null;
   unread_count: number;
   can_message: boolean;
+  company_id?: string | null;
+  company_name?: string | null;
+  company_logo_url?: string | null;
+  offer_title?: string | null;
 }
 
 export interface MissionAttempt {
