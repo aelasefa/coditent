@@ -1188,7 +1188,7 @@ class ChatMessageOut(APIModel):
     read_at: datetime | None = None
     sender: UserOut | None = None
     application_id: uuid.UUID | None = None
-    message_kind: Literal["human", "interview_scheduled", "interview_rescheduled", "interview_canceled"] = "human"
+    message_kind: Literal["human", "application_stage_updated", "interview_scheduled", "interview_rescheduled", "interview_canceled"] = "human"
 
 
 class FriendChatContext(APIModel):

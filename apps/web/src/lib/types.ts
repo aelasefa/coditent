@@ -259,7 +259,7 @@ export interface ChatMessage {
   read_at?: string | null;
   sender?: User;
   application_id?: string | null;
-  message_kind?: "human" | "interview_scheduled" | "interview_rescheduled" | "interview_canceled";
+  message_kind?: "human" | "application_stage_updated" | "interview_scheduled" | "interview_rescheduled" | "interview_canceled";
   /** Client-only state used while an optimistic message is being confirmed. */
   delivery_status?: "sending" | "failed";
 }

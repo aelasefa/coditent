@@ -68,6 +68,24 @@ def _interview_message(company_name: str, job_title: str, data: ApplicationStatu
     return f"interview_{'rescheduled' if action == 'reschedule' else 'scheduled'}", "\n".join(details)
 
 
+def _stage_message(company_name: str, job_title: str, status: str) -> tuple[str, str]:
+    labels = {
+        "under_review": "Under Review",
+        "shortlisted": "Shortlisted",
+        "accepted": "Accepted",
+        "rejected": "Not Selected",
+    }
+    label = labels.get(status, status.replace("_", " ").title())
+    content = "\n".join([
+        "Application Update",
+        "",
+        f"{company_name} updated your application for {job_title}.",
+        "",
+        f"Status: {label}",
+    ])
+    return "application_stage_updated", content
+
+
 def _missing_application_profile_fields(
     user: User, profile: CandidateProfile | None
 ) -> list[str]:
@@ -639,6 +657,8 @@ async def update_application_status(
     app.stage_version += 1
     app.status_changed_at = datetime.utcnow()
     system_message: ChatMessage | None = None
+    company = (await db.execute(select(Company).where(Company.id == offer.company_id))).scalar_one_or_none()
+    company_name = company.name if company else offer.company
     if new_status == "interview":
         if data.interview_action != "cancel":
             app.interview_scheduled_at = data.interview_scheduled_at
@@ -647,10 +667,12 @@ async def update_application_status(
         app.interview_meeting_link = data.interview_meeting_link
         app.interview_location = data.interview_location
         app.interview_status = "canceled" if data.interview_action == "cancel" else "scheduled"
-        company = (await db.execute(select(Company).where(Company.id == offer.company_id))).scalar_one_or_none()
-        kind, content = _interview_message(company.name if company else offer.company, offer.title, data)
+        kind, content = _interview_message(company_name, offer.title, data)
         system_message = ChatMessage(sender_id=current_user.id, receiver_id=app.candidate_id, application_id=app.id, content=content, message_kind=kind, event_key=f"interview:{app.id}:{data.interview_action}:{app.stage_version}")
-        db.add(system_message)
+    else:
+        kind, content = _stage_message(company_name, offer.title, new_status)
+        system_message = ChatMessage(sender_id=current_user.id, receiver_id=app.candidate_id, application_id=app.id, content=content, message_kind=kind, event_key=f"application-stage:{app.id}:{new_status}:{app.stage_version}")
+    db.add(system_message)
     label = new_status.replace("_", " ").title()
     await create_notification(
         db,
@@ -660,7 +682,7 @@ async def update_application_status(
         body=(
             f"Your application moved to {label}."
             if new_status != "interview"
-            else f"{company.name if company else offer.company} updated your interview for {offer.title}. Open the recruitment conversation for details."
+            else f"{company_name} updated your interview for {offer.title}. Open the recruitment conversation for details."
         ),
         action_url=f"/chat/recruitment/{app.id}" if new_status == "interview" else "/dashboard/applications",
         resource_type="application",
