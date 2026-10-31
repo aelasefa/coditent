@@ -10,6 +10,27 @@ import { useChatProfilePanel } from "./chat-workspace";
 import type { ChatMessage } from "@/lib/types";
 import styles from "./chat-workspace.module.css";
 
+const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
+
+function MessageContent({ content }: { content: string }) {
+  const parts = content.split(URL_PATTERN);
+  return (
+    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+      {parts.map((part, index) => part.match(/^https?:\/\//i) ? (
+        <a
+          key={`${part}-${index}`}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold text-primary underline underline-offset-2"
+        >
+          {content.includes(`Meeting: ${part}`) ? "Join meeting" : part}
+        </a>
+      ) : part)}
+    </p>
+  );
+}
+
 function dayLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -79,7 +100,7 @@ export function MessageList({
                     failed && "opacity-80 ring-1 ring-danger/40",
                   )}
                 >
-                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.content}</p>
+                  <MessageContent content={m.content} />
                   <p suppressHydrationWarning className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
                     {timeLabel(m.created_at)}
                   </p>

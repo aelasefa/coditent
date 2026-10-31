@@ -74,7 +74,7 @@ function PipelineContent() {
       id: string;
       status: string;
       expectedVersion: number;
-      interview?: { scheduledAt?: string; notes?: string; action?: "schedule" | "reschedule" | "cancel" };
+      interview?: { scheduledAt?: string; notes?: string; meetingLink?: string; location?: string; action?: "schedule" | "reschedule" | "cancel" };
     }) => updateApplicationStatus(id, status, expectedVersion, interview),
     onSuccess: (res, vars) => {
       qc.invalidateQueries({ queryKey: ["applications"] });

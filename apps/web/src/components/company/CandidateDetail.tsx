@@ -79,7 +79,7 @@ export function CandidateDetail({
   chatUnlocked: boolean;
   onStage: (
     status: string,
-    interview?: { scheduledAt?: string; notes?: string; action?: "schedule" | "reschedule" | "cancel" }
+    interview?: { scheduledAt?: string; notes?: string; meetingLink?: string; location?: string; action?: "schedule" | "reschedule" | "cancel" }
   ) => void;
   onReject: () => void;
 }) {
@@ -284,7 +284,11 @@ export function CandidateDetail({
                   loading={stagePending}
                   onClick={() => onStage("interview", {
                     scheduledAt: new Date(interviewAt).toISOString(),
-                    notes: interviewNotes,
+                    ...(interviewNotes.trim()
+                      ? /^https?:\/\//i.test(interviewNotes.trim())
+                        ? { meetingLink: interviewNotes.trim() }
+                        : { location: interviewNotes.trim() }
+                      : {}),
                   })}
                 >
                   <FiCalendar className="h-3.5 w-3.5" />
