@@ -1,6 +1,7 @@
 export const OAUTH_POPUP_SUCCESS = "CODITENT_OAUTH_SUCCESS";
 export const OAUTH_POPUP_ERROR = "CODITENT_OAUTH_ERROR";
 export const OAUTH_POPUP_ACK = "CODITENT_OAUTH_ACK";
+export const OAUTH_LINK_SUCCESS = "CODITENT_OAUTH_LINK_SUCCESS";
 const OAUTH_POPUP_ATTEMPT_PREFIX = "coditent:oauth:popup:";
 const OAUTH_POPUP_ATTEMPT_MAX_AGE_MS = 10 * 60 * 1000;
 
@@ -15,6 +16,11 @@ export type OAuthPopupResult =
       type: typeof OAUTH_POPUP_ERROR;
       attemptId: string;
       error: string;
+    }
+  | {
+      type: typeof OAUTH_LINK_SUCCESS;
+      attemptId: string;
+      provider: string;
     };
 
 export type OAuthPopupAck = { type: typeof OAUTH_POPUP_ACK; attemptId: string };
@@ -51,6 +57,10 @@ export function isOAuthPopupResult(value: unknown): value is OAuthPopupResult {
       message.handoffCode.length >= 20 &&
       typeof message.isNewRegistration === "boolean"
     );
+  }
+
+  if (message.type === OAUTH_LINK_SUCCESS) {
+    return typeof message.provider === "string" && message.provider.length > 0;
   }
 
   return message.type === OAUTH_POPUP_ERROR && typeof message.error === "string";

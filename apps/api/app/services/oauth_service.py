@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import secrets
 import hashlib
 import json
@@ -12,6 +13,9 @@ from urllib.parse import urlencode, urlparse
 import httpx
 import jwt
 from fastapi import HTTPException, status
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2 import id_token as google_id_token
 from jwt import InvalidTokenError
 
 from app.config import settings
@@ -57,6 +61,15 @@ class OAuthAttempt:
     nonce: str
     popup_origin: str
     attempt_id: str
+    purpose: str = "oauth_login"
+    link_user_id: str | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class OAuthTokenSet:
+    access_token: str
+    id_token: str | None = None
 
 
 def get_oauth_provider(provider: str) -> OAuthProvider:
@@ -130,12 +143,14 @@ def create_oauth_state(
     *,
     browser_id: str | None = None,
     state_id: str | None = None,
+    operation: str = "oauth_login",
 ) -> str:
     validated_origin = validate_popup_origin(popup_origin)
     if not attempt_id or len(attempt_id) > 120:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_attempt")
     state_payload = {
         "purpose": "oauth_state",
+        "operation": operation,
         "provider": provider,
         "csrf": secrets.token_urlsafe(24),
         "popup_origin": validated_origin,
@@ -177,7 +192,15 @@ async def create_oauth_attempt(
     popup_origin: str,
     attempt_id: str,
     browser_id: str | None,
+    *,
+    purpose: str = "oauth_login",
+    link_user_id: str | None = None,
+    session_id: str | None = None,
 ) -> OAuthAttempt:
+    if purpose not in {"oauth_login", "oauth_link"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_purpose")
+    if purpose == "oauth_link" and (not link_user_id or not session_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_link_intent")
     resolved_browser_id = browser_id or secrets.token_urlsafe(32)
     state_id = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
@@ -188,6 +211,7 @@ async def create_oauth_attempt(
         attempt_id,
         browser_id=resolved_browser_id,
         state_id=state_id,
+        operation=purpose,
     )
     payload = {
         "provider": provider,
@@ -196,6 +220,9 @@ async def create_oauth_attempt(
         "nonce": nonce,
         "popup_origin": validate_popup_origin(popup_origin),
         "attempt_id": attempt_id,
+        "purpose": purpose,
+        "link_user_id": link_user_id,
+        "session_id": session_id,
     }
     try:
         stored = await get_async_redis().set(
@@ -221,6 +248,9 @@ async def create_oauth_attempt(
         nonce=nonce,
         popup_origin=str(payload["popup_origin"]),
         attempt_id=attempt_id,
+        purpose=purpose,
+        link_user_id=link_user_id,
+        session_id=session_id,
     )
 
 
@@ -296,6 +326,10 @@ async def consume_oauth_attempt(
             reason="state_store_binding_mismatch",
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_state")
+    signed_purpose = str(payload.get("operation") or "oauth_login")
+    stored_purpose = str(stored.get("purpose") or "oauth_login")
+    if signed_purpose != stored_purpose or stored_purpose not in {"oauth_login", "oauth_link"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_sso_purpose")
     verifier = str(stored.get("code_verifier") or "")
     nonce = str(stored.get("nonce") or "")
     if len(verifier) < 43 or not nonce:
@@ -310,6 +344,9 @@ async def consume_oauth_attempt(
         nonce=nonce,
         popup_origin=str(payload["popup_origin"]),
         attempt_id=str(payload["attempt_id"]),
+        purpose=stored_purpose,
+        link_user_id=str(stored.get("link_user_id") or "") or None,
+        session_id=str(stored.get("session_id") or "") or None,
     )
 
 
@@ -379,7 +416,7 @@ def build_oauth_authorize_url(
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         query_params["code_challenge"] = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
         query_params["code_challenge_method"] = "S256"
-    if nonce and provider.name != "linkedin":
+    if nonce:
         query_params["nonce"] = nonce
 
     if provider.name == "google":
@@ -403,7 +440,7 @@ async def exchange_code_for_access_token(
     redirect_uri: str,
     *,
     code_verifier: str,
-) -> str:
+) -> OAuthTokenSet:
     payload: dict[str, Any] = {
         "grant_type": "authorization_code",
         "code": code,
@@ -464,7 +501,13 @@ async def exchange_code_for_access_token(
     if not access_token:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_token_missing")
 
-    return access_token
+    raw_id_token = token_payload.get("id_token")
+    if provider.name == "google" and not raw_id_token:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_id_token_missing")
+    return OAuthTokenSet(
+        access_token=str(access_token),
+        id_token=str(raw_id_token) if raw_id_token else None,
+    )
 
 
 def _name_from_email(email: str) -> str:
@@ -535,3 +578,51 @@ async def fetch_user_identity(provider: OAuthProvider, access_token: str) -> OAu
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="sso_profile_parse_failed") from exc
 
     return _parse_identity_payload(provider, profile_payload)
+
+
+async def verify_google_id_token(
+    provider: OAuthProvider,
+    raw_id_token: str | None,
+    *,
+    expected_nonce: str,
+) -> OAuthIdentity:
+    """Validate Google's signed OIDC token and the attempt-bound nonce."""
+    if provider.name != "google" or not raw_id_token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_id_token_missing")
+    try:
+        claims = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
+            raw_id_token,
+            GoogleAuthRequest(),
+            provider.client_id,
+        )
+    except (GoogleAuthError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_id_token_invalid") from exc
+
+    issuer = str(claims.get("iss") or "").rstrip("/")
+    if issuer not in {"accounts.google.com", "https://accounts.google.com"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_issuer_invalid")
+    if not secrets.compare_digest(str(claims.get("nonce") or ""), expected_nonce):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sso_nonce_invalid")
+    # Google documents both issuer spellings. Normalize only after the signed,
+    # non-empty issuer has been validated above; never invent a missing claim.
+    normalized_claims = dict(claims)
+    normalized_claims["iss"] = provider.issuer
+    return _parse_identity_payload(provider, normalized_claims)
+
+
+async def verify_linkedin_id_token(provider: OAuthProvider, raw_id_token: str | None, *, expected_nonce: str) -> OAuthIdentity:
+    if not raw_id_token:
+        raise HTTPException(status_code=400, detail="sso_id_token_missing")
+    def verify() -> dict:
+        client = jwt.PyJWKClient("https://www.linkedin.com/oauth/openid/jwks", timeout=10)
+        key = client.get_signing_key_from_jwt(raw_id_token)
+        return jwt.decode(raw_id_token, key.key, algorithms=["RS256"], audience=provider.client_id,
+                          issuer=provider.issuer, options={"require": ["exp", "iat", "iss", "aud", "sub", "nonce"]})
+    try:
+        claims = await asyncio.to_thread(verify)
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="sso_id_token_invalid") from exc
+    if not secrets.compare_digest(str(claims.get("nonce") or ""), expected_nonce):
+        raise HTTPException(status_code=400, detail="sso_nonce_invalid")
+    return _parse_identity_payload(provider, claims)

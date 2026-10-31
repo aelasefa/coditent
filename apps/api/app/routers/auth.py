@@ -32,13 +32,18 @@ from app.schemas import (
     AdminLoginRequest,
     EmailChangeConfirm,
     EmailChangeRequest,
+    LinkedIdentitiesOut,
+    LinkedIdentityOut,
     LoginRequest,
+    OAuthIdentityActionRequest,
+    OAuthLinkStartOut,
     OAuthHandoffExchangeRequest,
     OAuthHandoffExchangeResponse,
     PasswordChangeRequest,
     RegisterRequest,
     RegistrationStarted,
     ResendVerificationRequest,
+    SensitiveAccountRequest,
     TokenResponse,
     TwoFactorChallengeResponse,
     UserMeOut,
@@ -63,6 +68,7 @@ from app.services.email_outbox import (
     enqueue_email_delivery,
 )
 from app.services.oauth_service import (
+    OAuthAttempt,
     OAuthIdentity,
     build_oauth_authorize_url,
     create_oauth_attempt,
@@ -73,6 +79,8 @@ from app.services.oauth_service import (
     fetch_user_identity,
     get_oauth_provider,
     resolve_redirect_uri,
+    verify_google_id_token,
+    verify_linkedin_id_token,
 )
 from app.services.passwords import hash_password, verify_password, verify_password_and_rehash
 from app.services.authentication import (
@@ -259,6 +267,31 @@ async def _queue_data_operation_confirmation(
     )
 
 
+async def _queue_identity_security_notice(
+    db: AsyncSession,
+    *,
+    user: User,
+    operation: str,
+    detail: str,
+) -> None:
+    """Best-effort durable security notice; the identity change stays atomic."""
+    try:
+        await _queue_data_operation_confirmation(
+            db,
+            user=user,
+            operation=operation,
+            detail=detail,
+        )
+        await db.commit()
+    except EmailOutboxUnavailable:
+        await db.rollback()
+        logger.warning(
+            "oauth_identity_notice_unavailable",
+            user_id=str(user.id),
+            operation=operation,
+        )
+
+
 def _legacy_candidate_profile(user_id) -> CandidateProfile:
     return CandidateProfile(
         user_id=user_id,
@@ -320,6 +353,7 @@ async def _create_sso_candidate(
     user = User(
         email=identity.email,
         password_hash=hash_password(secrets.token_urlsafe(32)),
+        password_login_enabled=False,
         role=UserRole.CANDIDATE,
         is_approved=True,
         is_active=True,
@@ -340,10 +374,10 @@ async def _create_sso_candidate(
     return user
 
 
-async def _optional_authenticated_cookie_user(
+async def _authenticated_cookie_context(
     request: Request,
     db: AsyncSession,
-) -> User | None:
+) -> tuple[User, dict] | None:
     token = (request.cookies.get(settings.access_token_cookie_name) or "").strip()
     if not token:
         return None
@@ -358,9 +392,7 @@ async def _optional_authenticated_cookie_user(
         ) from exc
     except (AuthenticationRejected, ValueError, TypeError, KeyError):
         return None
-    user = (
-        await db.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = await db.scalar(select(User).where(User.id == user_id))
     if user is None:
         return None
     try:
@@ -368,7 +400,86 @@ async def _optional_authenticated_cookie_user(
         ensure_credential_matches_account(payload, user)
     except AuthenticationRejected:
         return None
-    return user
+    return user, payload
+
+
+async def _complete_oauth_link(
+    db: AsyncSession,
+    request: Request,
+    attempt: OAuthAttempt,
+    identity: OAuthIdentity,
+) -> User:
+    context = await _authenticated_cookie_context(request, db)
+    if context is None or not attempt.link_user_id or not attempt.session_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="sso_link_session_invalid")
+    session_user, payload = context
+    if (
+        str(session_user.id) != attempt.link_user_id
+        or str(payload.get("sid") or "") != attempt.session_id
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="sso_link_session_mismatch")
+    if session_user.email.strip().lower() != identity.email.strip().lower():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="sso_link_email_mismatch")
+
+    locked_user = await db.scalar(
+        select(User).where(User.id == session_user.id).with_for_update()
+    )
+    if locked_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="sso_link_session_invalid")
+    linked_subject = await db.scalar(
+        select(OAuthAccount).where(
+            OAuthAccount.provider == identity.provider,
+            OAuthAccount.subject == identity.oauth_id,
+        )
+    )
+    if linked_subject is not None:
+        if linked_subject.user_id == locked_user.id:
+            return locked_user
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="sso_identity_already_linked")
+    existing_provider = await db.scalar(
+        select(OAuthAccount).where(
+            OAuthAccount.user_id == locked_user.id,
+            OAuthAccount.provider == identity.provider,
+        )
+    )
+    if existing_provider is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="sso_provider_already_linked")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        OAuthAccount(
+            user_id=locked_user.id,
+            provider=identity.provider,
+            subject=identity.oauth_id,
+            issuer=identity.issuer,
+            email_at_link=identity.email,
+            created_at=now,
+            last_login_at=None,
+        )
+    )
+    if not locked_user.oauth_provider:
+        locked_user.oauth_provider = identity.provider
+        locked_user.oauth_id = identity.oauth_id
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="sso_identity_already_linked") from exc
+    await log_audit(
+        db,
+        action="OAUTH_IDENTITY_LINKED",
+        actor=locked_user,
+        company_id=locked_user.company_id,
+        resource_type="oauth_account",
+        details=f"provider={identity.provider}",
+    )
+    await _queue_identity_security_notice(
+        db,
+        user=locked_user,
+        operation="identity-link",
+        detail=f"{identity.provider.title()} was connected as a sign-in method for your Coditent account.",
+    )
+    return locked_user
 
 
 def _legacy_oauth_link_matches(user: User, identity: OAuthIdentity) -> bool:
@@ -387,8 +498,7 @@ async def _resolve_oauth_user(
     """Resolve a stable provider subject without email-based account takeover.
 
     A verified provider email may create a new candidate account. It never
-    silently links to an existing local account: that requires a valid current
-    local session for the same user. The only compatibility exception is an
+    silently links to an existing local account. The only compatibility exception is an
     exact provider + subject already recorded by the legacy schema, after
     which the subject is stored under the hardened uniqueness constraints.
     """
@@ -426,12 +536,10 @@ async def _resolve_oauth_user(
         # the user row. Recover that link only when the immutable provider
         # subject matches exactly; a matching email alone is never sufficient.
         if not _legacy_oauth_link_matches(existing, identity):
-            authenticated = await _optional_authenticated_cookie_user(request, db)
-            if authenticated is None or authenticated.id != existing.id:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="sso_link_confirmation_required",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="sso_link_confirmation_required",
+            )
         user = existing
         await _sync_existing_sso_user(db, user, identity, commit=False)
 
@@ -532,12 +640,170 @@ def _build_sso_error_response(
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+def _build_sso_link_response(
+    request: Request,
+    popup_origin: str,
+    attempt_id: str,
+    provider: str,
+) -> Response:
+    if "text/html" in request.headers.get("accept", "").lower():
+        callback_url = f"{popup_origin}/auth/sso/callback?{urlencode({'linked': provider, 'attempt': attempt_id, 'provider': provider})}"
+        return RedirectResponse(url=callback_url, status_code=status.HTTP_302_FOUND)
+    return JSONResponse({"detail": "OAuth identity connected.", "provider": provider})
+
+
 @router.get("/sso/providers")
 async def sso_providers() -> dict[str, bool]:
     return {
         "google": bool(settings.google_client_id and settings.google_client_secret),
         "linkedin": bool(settings.linkedin_client_id and settings.linkedin_client_secret),
     }
+
+
+@router.get("/account/identities", response_model=LinkedIdentitiesOut)
+async def get_linked_identities(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LinkedIdentitiesOut:
+    linked = (
+        await db.execute(
+            select(OAuthAccount).where(OAuthAccount.user_id == current_user.id)
+        )
+    ).scalars().all()
+    by_provider = {account.provider: account for account in linked}
+    return LinkedIdentitiesOut(
+        identities=[
+            LinkedIdentityOut(
+                provider=provider,
+                email=account.email_at_link if account else None,
+                connected=account is not None,
+                linked_at=account.created_at if account else None,
+            )
+            for provider in ("google", "linkedin")
+            for account in (by_provider.get(provider),)
+        ],
+        password_enabled=current_user.password_login_enabled,
+    )
+
+
+@router.post(
+    "/account/identities/{provider}/link/start",
+    response_model=OAuthLinkStartOut,
+)
+@limiter.limit("5/hour")
+async def start_google_identity_link(
+    provider: str,
+    data: OAuthIdentityActionRequest,
+    request: Request,
+    response: Response,
+    current_user: Annotated[User, Depends(get_current_user)],
+    payload: Annotated[dict, Depends(get_current_access_payload)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OAuthLinkStartOut:
+    if provider not in {"google", "linkedin"}:
+        raise HTTPException(status_code=404, detail="sso_provider_not_supported")
+    if not current_user.password_login_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Set a local password through account recovery before changing connected login methods.",
+        )
+    verified_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    existing = await db.scalar(
+        select(OAuthAccount).where(
+            OAuthAccount.user_id == verified_user.id,
+            OAuthAccount.provider == provider,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="sso_provider_already_linked")
+    session_id = str(payload.get("sid") or "")
+    if not session_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="sso_link_session_invalid")
+    oauth_provider = get_oauth_provider(provider)
+    request_redirect_uri = str(request.url_for("sso_callback", provider=provider))
+    redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
+    oauth_attempt = await create_oauth_attempt(
+        provider,
+        data.popup_origin or settings.frontend_url,
+        data.attempt_id or secrets.token_urlsafe(24),
+        request.cookies.get(settings.oauth_browser_cookie_name),
+        purpose="oauth_link",
+        link_user_id=str(verified_user.id),
+        session_id=session_id,
+    )
+    # Persist TOTP replay protection / recovery-code consumption performed by
+    # fresh verification before returning an OAuth intent.
+    await db.commit()
+    authorization_url = build_oauth_authorize_url(
+        oauth_provider,
+        redirect_uri,
+        oauth_attempt.state,
+        code_verifier=oauth_attempt.code_verifier,
+        nonce=oauth_attempt.nonce,
+    )
+    set_oauth_browser_cookie(response, oauth_attempt.browser_id)
+    logger.info("sso_link_start", provider=provider, user_id=str(verified_user.id))
+    return OAuthLinkStartOut(
+        authorization_url=authorization_url,
+        attempt_id=oauth_attempt.attempt_id,
+    )
+
+
+@router.post("/account/identities/{provider}/disconnect")
+@limiter.limit("5/hour")
+async def disconnect_google_identity(
+    provider: str,
+    data: SensitiveAccountRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    if not current_user.password_login_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot disconnect the last usable login method. Set a local password first.",
+        )
+    locked_user = await _verify_sensitive_action(
+        db, current_user, data.current_password, data.two_factor_code
+    )
+    if not locked_user.password_login_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot disconnect the last usable login method. Set a local password first.",
+        )
+    identity = await db.scalar(
+        select(OAuthAccount)
+        .where(
+            OAuthAccount.user_id == locked_user.id,
+            OAuthAccount.provider == provider,
+        )
+        .with_for_update()
+    )
+    if identity is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sso_identity_not_linked")
+    await db.delete(identity)
+    if (locked_user.oauth_provider or "").lower() == provider:
+        locked_user.oauth_provider = None
+        locked_user.oauth_id = None
+    await db.commit()
+    await log_audit(
+        db,
+        action="OAUTH_IDENTITY_DISCONNECTED",
+        actor=locked_user,
+        company_id=locked_user.company_id,
+        resource_type="oauth_account",
+        details=f"provider={provider}",
+    )
+    await _queue_identity_security_notice(
+        db,
+        user=locked_user,
+        operation="identity-disconnect",
+        detail=f"{provider.title()} was disconnected as a sign-in method for your Coditent account.",
+    )
+    logger.info("sso_disconnect_success", provider=provider, user_id=str(locked_user.id))
+    return {"detail": f"{provider.title()} account disconnected."}
 
 
 @router.get("/sso/{provider}/start")
@@ -627,13 +893,35 @@ async def sso_callback(
         popup_origin, attempt_id = oauth_attempt.popup_origin, oauth_attempt.attempt_id
         request_redirect_uri = str(request.url_for("sso_callback", provider=oauth_provider.name))
         redirect_uri = resolve_redirect_uri(oauth_provider, request_redirect_uri)
-        provider_access_token = await exchange_code_for_access_token(
+        provider_tokens = await exchange_code_for_access_token(
             oauth_provider,
             code,
             redirect_uri,
             code_verifier=oauth_attempt.code_verifier,
         )
-        identity = await fetch_user_identity(oauth_provider, provider_access_token)
+        if oauth_provider.name == "google":
+            identity = await verify_google_id_token(
+                oauth_provider,
+                provider_tokens.id_token,
+                expected_nonce=oauth_attempt.nonce,
+            )
+        elif oauth_attempt.purpose == "oauth_link" and oauth_provider.name == "linkedin":
+            identity = await verify_linkedin_id_token(
+                oauth_provider, provider_tokens.id_token, expected_nonce=oauth_attempt.nonce,
+            )
+        else:
+            identity = await fetch_user_identity(oauth_provider, provider_tokens.access_token)
+        if oauth_attempt.purpose == "oauth_link":
+            user = await _complete_oauth_link(db, request, oauth_attempt, identity)
+            response = _build_sso_link_response(
+                request,
+                oauth_attempt.popup_origin,
+                oauth_attempt.attempt_id,
+                oauth_provider.name,
+            )
+            clear_oauth_browser_cookie(response)
+            logger.info("sso_link_success", provider=oauth_provider.name, user_id=str(user.id))
+            return response
         user, is_new_registration = await _resolve_oauth_user(db, request, identity)
     except HTTPException as exc:
         logger.warning(
@@ -1164,6 +1452,9 @@ async def _password_login(
             password,
             user.password_hash,
         )
+    # Legacy OAuth rows may also belong to users who set a real password.
+    # Keep password verification backward compatible; the explicit flag is
+    # used only for lockout-sensitive identity-management decisions.
     if user is None or not password_verified:
         logger.warning("login_failed", reason="invalid_credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -1689,6 +1980,7 @@ async def change_account_password(
     if verify_password(data.new_password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different from the current password.")
     current_user.password_hash = hash_password(data.new_password)
+    current_user.password_login_enabled = True
     current_user.auth_version += 1
     await db.commit()
     clear_auth_cookies(response)

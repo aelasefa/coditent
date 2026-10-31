@@ -16,9 +16,10 @@ from app.routers.auth import (
     _build_sso_response,
     _create_sso_candidate,
     _legacy_oauth_link_matches,
+    _resolve_oauth_user,
     exchange_oauth_handoff,
 )
-from app.schemas import OAuthHandoffExchangeRequest, RegisterRequest
+from app.schemas import OAuthHandoffExchangeRequest, OAuthIdentityActionRequest, RegisterRequest
 from app.services import auth_cookies, authentication, oauth_service
 from app.services.authentication import complete_authentication, factor_fingerprint
 from app.services.oauth_service import OAuthIdentity
@@ -67,6 +68,18 @@ class ExistingUserDb:
         self.user = user
 
     async def execute(self, _query):
+        return SimpleNamespace(scalar_one_or_none=lambda: self.user)
+
+
+class OAuthEmailCollisionDb:
+    def __init__(self, user: User):
+        self.user = user
+        self.calls = 0
+
+    async def execute(self, _query):
+        self.calls += 1
+        if self.calls == 1:
+            return SimpleNamespace(first=lambda: None)
         return SimpleNamespace(scalar_one_or_none=lambda: self.user)
 
 
@@ -190,6 +203,94 @@ def test_oauth_attempt_is_browser_bound_single_use_and_uses_pkce(monkeypatch):
             oauth_service.consume_oauth_attempt(
                 attempt.state, "google", attempt.browser_id
             )
+        )
+
+
+def test_oauth_link_attempt_preserves_server_side_user_and_session_binding(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(oauth_service, "get_async_redis", lambda: redis)
+    monkeypatch.setattr(oauth_service.settings, "frontend_url", "http://localhost:3001")
+    attempt = asyncio.run(
+        oauth_service.create_oauth_attempt(
+            "google",
+            "http://localhost:3001",
+            "link-attempt",
+            None,
+            purpose="oauth_link",
+            link_user_id="user-123",
+            session_id="session-456",
+        )
+    )
+    consumed = asyncio.run(
+        oauth_service.consume_oauth_attempt(attempt.state, "google", attempt.browser_id)
+    )
+    assert consumed.purpose == "oauth_link"
+    assert consumed.link_user_id == "user-123"
+    assert consumed.session_id == "session-456"
+    with pytest.raises(HTTPException, match="invalid_sso_state"):
+        asyncio.run(oauth_service.consume_oauth_attempt(attempt.state, "google", attempt.browser_id))
+
+
+def test_google_id_token_requires_matching_nonce(monkeypatch):
+    provider = oauth_service.OAuthProvider(
+        name="google",
+        client_id="client-id",
+        client_secret="secret",
+        authorization_url="https://accounts.google.com/auth",
+        token_url="https://oauth2.googleapis.com/token",
+        userinfo_url="https://www.googleapis.com/oauth2/v3/userinfo",
+        scopes=("openid", "email"),
+        issuer="https://accounts.google.com",
+    )
+    monkeypatch.setattr(
+        oauth_service.google_id_token,
+        "verify_oauth2_token",
+        lambda *_args, **_kwargs: {
+            "iss": "https://accounts.google.com",
+            "sub": "stable-subject",
+            "email": "user@example.com",
+            "email_verified": True,
+            "nonce": "correct-nonce",
+        },
+    )
+    identity = asyncio.run(
+        oauth_service.verify_google_id_token(provider, "signed-token", expected_nonce="correct-nonce")
+    )
+    assert identity.oauth_id == "stable-subject"
+    with pytest.raises(HTTPException, match="sso_nonce_invalid"):
+        asyncio.run(
+            oauth_service.verify_google_id_token(provider, "signed-token", expected_nonce="wrong-nonce")
+        )
+
+
+def test_normal_google_login_never_implicitly_links_email_collision():
+    user = User(
+        id=uuid.uuid4(),
+        email="existing@example.com",
+        password_hash="real-password-hash",
+        password_login_enabled=True,
+        role=UserRole.CANDIDATE,
+        is_approved=True,
+        full_name="Existing User",
+    )
+    identity = OAuthIdentity(
+        email=user.email,
+        full_name=user.full_name,
+        oauth_id="new-google-subject",
+        avatar_url=None,
+        provider="google",
+        issuer="https://accounts.google.com",
+        email_verified=True,
+    )
+    with pytest.raises(HTTPException, match="sso_link_confirmation_required"):
+        asyncio.run(_resolve_oauth_user(OAuthEmailCollisionDb(user), _html_request(), identity))
+
+
+def test_identity_action_payload_forbids_untrusted_fields():
+    with pytest.raises(ValidationError):
+        OAuthIdentityActionRequest(
+            current_password="password",
+            target_user_id=str(uuid.uuid4()),
         )
 
 
@@ -451,6 +552,7 @@ def test_new_sso_identity_is_always_created_as_candidate():
     assert user.is_approved is True
     assert user.company_id is None
     assert user.company_role is None
+    assert user.password_login_enabled is False
     profiles = [value for value in db.added if isinstance(value, CandidateProfile)]
     assert len(profiles) == 1
     assert profiles[0].user_id == user.id

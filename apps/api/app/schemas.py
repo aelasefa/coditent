@@ -162,8 +162,32 @@ class AccountNameUpdate(APIModel):
 
 
 class SensitiveAccountRequest(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
     current_password: str = Field(min_length=1, max_length=128)
     two_factor_code: str | None = Field(default=None, min_length=6, max_length=20)
+
+
+class OAuthIdentityActionRequest(SensitiveAccountRequest):
+    popup_origin: str | None = Field(default=None, max_length=300)
+    attempt_id: str | None = Field(default=None, min_length=8, max_length=120)
+
+
+class LinkedIdentityOut(APIModel):
+    provider: str
+    email: str | None = None
+    connected: bool
+    linked_at: datetime | None = None
+
+
+class LinkedIdentitiesOut(APIModel):
+    identities: list[LinkedIdentityOut]
+    password_enabled: bool
+
+
+class OAuthLinkStartOut(APIModel):
+    authorization_url: str
+    attempt_id: str
 
 
 class EmailChangeRequest(SensitiveAccountRequest):

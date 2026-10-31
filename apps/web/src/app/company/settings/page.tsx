@@ -20,6 +20,7 @@ import { FiBriefcase, FiCheck, FiCreditCard, FiMail, FiMapPin, FiShield } from "
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 import { LogoutAllDevices } from "@/components/security/logout-all-devices";
 import { AccountDataControls } from "@/components/security/account-data-controls";
+import { ConnectedAccounts } from "@/components/security/connected-accounts";
 
 // Mirrors apps/api/app/core/permissions.py via lib/permissions.ts. Backend remains authority.
 const MATRIX: Array<{ capability: string; roles: string[] }> = [
@@ -429,7 +430,7 @@ export default function SettingsPage() {
             {
               id: "security",
               label: "Security",
-              content: <div className="space-y-5"><TwoFactorSecurity /><LogoutAllDevices /><AccountDataControls /></div>,
+              content: <div className="space-y-5"><ConnectedAccounts /><TwoFactorSecurity /><LogoutAllDevices /><AccountDataControls /></div>,
             },
           ]}
         />

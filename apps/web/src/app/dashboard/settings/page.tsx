@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TwoFactorSecurity } from "@/components/security/two-factor-security";
 import { LogoutAllDevices } from "@/components/security/logout-all-devices";
 import { AccountDataControls } from "@/components/security/account-data-controls";
+import { ConnectedAccounts } from "@/components/security/connected-accounts";
 import { PageContainer, PageHeader } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,6 +126,7 @@ export default function CandidateSettingsPage() {
           <Button type="submit" loading={busy === "password"}>Change password</Button>
         </form>
 
+        <ConnectedAccounts />
         <TwoFactorSecurity />
         <LogoutAllDevices />
         <AccountDataControls />
