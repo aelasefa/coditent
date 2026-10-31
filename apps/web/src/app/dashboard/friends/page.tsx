@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FiCheck, FiMessageCircle, FiSearch, FiUserPlus, FiUsers, FiX } from "react-icons/fi";
 import { PageContainer } from "@/components/shell/page-container";
@@ -41,6 +41,13 @@ export default function FriendsPage() {
   const [search, setSearch] = useState("");
   const [profileId, setProfileId] = useState<string | null>(null);
   const normalizedSearch = search.trim();
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    void queryClient.cancelQueries({ queryKey: ["friend-search"] });
+    const timer = window.setTimeout(() => setDebouncedSearch(normalizedSearch), 350);
+    return () => window.clearTimeout(timer);
+  }, [normalizedSearch, queryClient]);
+  const searchReady = normalizedSearch.length >= 2 && normalizedSearch === debouncedSearch;
   const friends = useQuery({
     queryKey: ["friends", sort],
     queryFn: () => listFriends(sort),
@@ -51,10 +58,10 @@ export default function FriendsPage() {
   const sent = useQuery({ queryKey: ["friend-requests", "sent"], queryFn: listSentFriendRequests });
   const blocked = useQuery({ queryKey: ["friends", "blocked"], queryFn: listBlockedCandidates });
   const people = useQuery({
-    queryKey: ["friend-search", normalizedSearch],
-    queryFn: () => searchPeople(normalizedSearch),
-    enabled: normalizedSearch.length >= 2,
-    refetchInterval: normalizedSearch.length >= 2 ? 10_000 : false,
+    queryKey: ["friend-search", debouncedSearch],
+    queryFn: ({ signal }) => searchPeople(debouncedSearch, 0, signal),
+    enabled: searchReady,
+    refetchInterval: searchReady ? 10_000 : false,
     refetchOnWindowFocus: true,
   });
   const profile = useQuery({
@@ -155,11 +162,11 @@ export default function FriendsPage() {
         <section className="rounded-2xl border border-border bg-surface p-5">
           <div className="flex items-center gap-2"><FiSearch aria-hidden className="text-muted-foreground" /><h2 className="font-bold text-foreground">Find candidates</h2></div>
           <Input className="mt-3" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search candidates by name or email" helper="Enter at least two characters." />
-          {people.isFetching ? <p className="mt-3 text-sm text-muted-foreground">Searching…</p> : null}
-          {people.isError ? <p role="alert" className="mt-3 text-sm text-danger">Search failed. Try again.</p> : null}
-          {normalizedSearch.length >= 2 && people.data?.friends.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No candidates match this search.</p> : null}
+          {normalizedSearch.length >= 2 && (!searchReady || people.isFetching) ? <p className="mt-3 text-sm text-muted-foreground">Searching…</p> : null}
+          {searchReady && people.isError ? <p role="alert" className="mt-3 text-sm text-danger">Search failed. Try again.</p> : null}
+          {searchReady && people.data?.friends.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No candidates match this search.</p> : null}
           <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-            {(people.data?.friends ?? []).map((person) => {
+            {(searchReady ? people.data?.friends ?? [] : []).map((person) => {
               const request = incomingByCandidate.get(person.id);
               const action = friendActionFor(person.relationship_state, Boolean(request));
               return (
