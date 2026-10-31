@@ -577,7 +577,9 @@ fastapi==0.162.0 \
 google-auth==2.62.0 \
     --hash=sha256:0bef0ce54bdf9ce226c5d66e4264413bd918141c31bbe49fb52eac882f513d69 \
     --hash=sha256:4ff4319aeb4ad128409759d397a9fcafad126d0031d241cc0dd6b9a00b43e3f3
-    # via google-genai
+    # via
+    #   -r requirements.in
+    #   google-genai
 google-genai==2.26.0 \
     --hash=sha256:77bb207d535fc84934b42f95db35267df40fea7244b824e91daf2e7940358db3 \
     --hash=sha256:a9d963900d12c6dee8fb730c87c64d06b8a29c1e3d649137d4b89560c3424776

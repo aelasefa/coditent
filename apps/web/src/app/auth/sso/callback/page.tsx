@@ -13,6 +13,7 @@ import {
   isOAuthPopupAck,
   OAUTH_POPUP_ERROR,
   OAUTH_POPUP_SUCCESS,
+  OAUTH_LINK_SUCCESS,
   isCurrentOAuthPopupAttempt,
   oauthChannelName,
   oauthPopupAttemptKey,
@@ -35,7 +36,13 @@ const errorMessages: Record<string, string> = {
   google_token_exchange_failed: "Google could not validate this sign-in code. Start a new sign-in attempt.",
   sso_invalid_code: "This sign-in code expired or was already used.",
   sso_token_exchange_failed: "The sign-in provider is temporarily unavailable.",
-  sso_link_confirmation_required: "This email already has a Coditent account. Sign in with your existing password first before connecting this social account.",
+  sso_link_confirmation_required: "This email already has a Coditent account. Sign in using your existing login method, then open Account Settings → Connected Accounts to connect Google.",
+  sso_link_email_mismatch: "Choose the Google account with the same verified email as your Coditent account.",
+  sso_identity_already_linked: "That Google account is already connected to another Coditent account.",
+  sso_link_session_invalid: "Your Coditent session changed or expired. Sign in and start again.",
+  sso_link_session_mismatch: "This connection attempt does not belong to the current Coditent session.",
+  sso_nonce_invalid: "The Google response could not be matched to this connection attempt.",
+  sso_id_token_invalid: "Google returned an identity response that could not be verified.",
 };
 
 export default function SsoCallbackPage() {
@@ -47,6 +54,7 @@ export default function SsoCallbackPage() {
     callbackError: string | null;
     provider: string | null;
     isNewRegistration: boolean;
+    linkedProvider: string | null;
   } | null>(null);
   const [state, setState] = useState<CallbackState>("loading");
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -68,6 +76,7 @@ export default function SsoCallbackPage() {
         callbackError: query.get("error"),
         provider: query.get("provider"),
         isNewRegistration: query.get("registration") === "new",
+        linkedProvider: query.get("linked"),
       };
     }
     const {
@@ -76,6 +85,7 @@ export default function SsoCallbackPage() {
       callbackError,
       provider: currentProvider,
       isNewRegistration,
+      linkedProvider,
     } = callbackParamsRef.current;
     const opener = window.opener as Window | null;
     const isNamedPopup = window.name.startsWith("coditent_oauth_");
@@ -145,6 +155,28 @@ export default function SsoCallbackPage() {
       }
       setErrorCode(callbackError);
       setState("error");
+      return cleanup;
+    }
+
+    if (linkedProvider && attemptId) {
+      if (!isBoundPopup && !isNamedPopup && !opener) {
+        setErrorCode("sso_parent_unavailable");
+        setState("error");
+        return cleanup;
+      }
+      window.addEventListener("message", handleAcknowledgement);
+      const sent = sendToParent({
+        type: OAUTH_LINK_SUCCESS,
+        attemptId,
+        provider: linkedProvider,
+      });
+      setState(sent ? "success" : "error");
+      if (!sent) setErrorCode("sso_parent_unavailable");
+      else responseTimer = window.setTimeout(() => {
+        if (!active) return;
+        setErrorCode("sso_parent_unavailable");
+        setState("error");
+      }, 10_000);
       return cleanup;
     }
 

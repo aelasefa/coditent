@@ -305,6 +305,44 @@ export async function changeAccountPassword(payload: {
   return data;
 }
 
+export interface LinkedIdentity {
+  provider: string;
+  email: string | null;
+  connected: boolean;
+  linked_at: string | null;
+}
+
+export interface LinkedIdentities {
+  identities: LinkedIdentity[];
+  password_enabled: boolean;
+}
+
+export interface IdentityVerificationPayload {
+  current_password: string;
+  two_factor_code?: string;
+}
+
+export async function getLinkedIdentities(): Promise<LinkedIdentities> {
+  const { data } = await api.get<LinkedIdentities>("/auth/account/identities");
+  return data;
+}
+
+export async function startGoogleIdentityLink(
+  payload: IdentityVerificationPayload & { popup_origin: string; attempt_id: string },
+  provider: "google" | "linkedin" = "google",
+): Promise<{ authorization_url: string; attempt_id: string }> {
+  const { data } = await api.post(`/auth/account/identities/${provider}/link/start`, payload);
+  return data;
+}
+
+export async function disconnectGoogleIdentity(
+  payload: IdentityVerificationPayload,
+  provider: "google" | "linkedin" = "google",
+): Promise<{ detail: string }> {
+  const { data } = await api.post(`/auth/account/identities/${provider}/disconnect`, payload);
+  return data;
+}
+
 export async function getProfile(): Promise<Profile> {
   const { data } = await api.get<Profile>("/candidates/profile");
   return data;

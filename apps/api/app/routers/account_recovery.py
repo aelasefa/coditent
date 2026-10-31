@@ -140,6 +140,7 @@ async def confirm_password_recovery(
         )
 
     user.password_hash = hash_password(data.new_password)
+    user.password_login_enabled = True
     user.auth_version = int(user.auth_version or 0) + 1
     recovery.used_at = now
     await db.execute(

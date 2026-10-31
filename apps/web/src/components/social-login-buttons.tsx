@@ -122,6 +122,11 @@ export function SocialLoginButtons({
         closeChannel();
         return;
       }
+      if (result.type === "CODITENT_OAUTH_LINK_SUCCESS") {
+        acknowledge(result.attemptId);
+        setPopupError("This Google connection result belongs to Account Settings. Please retry from there.");
+        return;
+      }
 
       try {
         const session = await exchangeOAuthHandoff(result.handoffCode);
